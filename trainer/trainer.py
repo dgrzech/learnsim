@@ -38,7 +38,6 @@ class Trainer(BaseTrainer):
         utils
         """
 
-        self.no_samples = 3.0
         self.sampler = Sampler(self.device)
         self.grid = generate_grid([128, 128, 128])
 
@@ -75,7 +74,7 @@ class Trainer(BaseTrainer):
             self.optimizer.zero_grad()
             loss = 0.0
 
-            for _ in range(int(self.no_samples)):
+            for _ in range(self.no_samples):
                 v_sample = self.sampler.sample_qv(v, sigma_voxel_v, u_v)
                 warp_field = integrate_vect(v_sample)
 
@@ -85,7 +84,7 @@ class Trainer(BaseTrainer):
                 im_out = self.model(im1, im2_warped)
                 loss += self.criterion(im_out)
 
-            loss /= self.no_samples
+            loss /= float(self.no_samples)
             loss += self.criterion(None, v, sigma_voxel_v, u_v, self.model.diff_op)
 
             loss.backward()
@@ -111,7 +110,7 @@ class Trainer(BaseTrainer):
             loss = 0.0
 
             # first term
-            for _ in range(int(self.no_samples)):
+            for _ in range(self.no_samples):
                 v_sample = self.sampler.sample_qv(v, sigma_voxel_v, u_v)
                 warp_field = integrate_vect(v_sample)
 
@@ -122,7 +121,7 @@ class Trainer(BaseTrainer):
                 loss += self.criterion(im_out)
 
             # second term
-            for _ in range(int(self.no_samples)):
+            for _ in range(self.no_samples):
                 loss_aux = 0.0
 
                 v_sample = self.sampler.sample_qv(v, sigma_voxel_v, u_v)
@@ -131,7 +130,7 @@ class Trainer(BaseTrainer):
                 im2_warped = F.grid_sample(im2, warp_field + self.grid)
                 im2_warped = im2_warped.to(self.device)
 
-                for _ in range(int(self.no_samples)):
+                for _ in range(self.no_samples):
                     f_sample = self.sampler.sample_qf(im1, sigma_voxel_f, u_f)
 
                     im_out = self.model(f_sample, im2_warped)

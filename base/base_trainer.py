@@ -24,6 +24,7 @@ class BaseTrainer:
 
         cfg_trainer = config['trainer']
         self.epochs = cfg_trainer['epochs']
+        self.no_samples = cfg_trainer['no_samples']
         self.save_period = cfg_trainer['save_period']
         self.monitor = cfg_trainer.get('monitor', 'off')
 
