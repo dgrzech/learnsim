@@ -20,7 +20,7 @@ def KL(v, sigma_voxel_v, u_v, diff_op):
     t1 = 36.0 * torch.sum(sigma_voxel_v) + torch.sum(du_v_dx ** 2) + torch.sum(du_v_dy ** 2) + torch.sum(du_v_dz ** 2)
     t2 = -1.0 * (torch.sum(dv_dx ** 2) + torch.sum(dv_dy ** 2) + torch.sum(dv_dz) ** 2)
 
-    det_sigma_0 = (1.0 + torch.prod(u_v * 1.0 / torch.unsqueeze(sigma_voxel_v, 4) * u_v)) * torch.prod(sigma_voxel_v)
+    det_sigma_0 = (1.0 + torch.sum(u_v * 1.0 / torch.unsqueeze(sigma_voxel_v, 4) * u_v)) * torch.prod(sigma_voxel_v)
     t3 = -1.0 * math.log(det_sigma_0)
 
     return 0.5 * (t1 + t2 + t3)
