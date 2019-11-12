@@ -41,6 +41,14 @@ class Trainer(BaseTrainer):
         self.sampler = Sampler(self.device)
         self.grid = generate_grid([128, 128, 128])
 
+    @staticmethod
+    def _save_params(batch_idx, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f):
+        torch.save(v, './temp/vels/v_' + str(batch_idx) + '.pt')
+        torch.save(sigma_voxel_v, './temp/sigmas_v/v_' + str(batch_idx) + '.pt')
+        torch.save(u_v, './temp/modes_of_variation_v/v_' + str(batch_idx) + '.pt')
+        torch.save(sigma_voxel_f, './temp/sigmas_f/f_' + str(batch_idx) + '.pt')
+        torch.save(u_f, './temp/modes_of_variation_f/f_' + str(batch_idx) + '.pt')
+
     def _train_epoch(self, epoch):
         """
         training logic for an epoch
@@ -72,6 +80,7 @@ class Trainer(BaseTrainer):
                 p.requires_grad = False
 
             self.optimizer.zero_grad()
+            total_loss = 0.0
             loss = 0.0
 
             for _ in range(self.no_samples):
@@ -86,6 +95,7 @@ class Trainer(BaseTrainer):
 
             loss /= float(self.no_samples)
             loss += self.criterion(None, v, sigma_voxel_v, u_v, self.model.diff_op)
+            total_loss += loss.item()
 
             loss.backward()
             self.optimizer.step()
@@ -140,21 +150,20 @@ class Trainer(BaseTrainer):
                 loss += loss_aux
 
             loss /= self.no_samples
+            total_loss += loss.item()
+
             loss.backward()
             self.optimizer.step()
 
             sigma_voxel_f.detach()
             u_f.detach()
 
-            torch.save(v, './temp/vels/v_' + str(batch_idx) + '.pt')
-            torch.save(sigma_voxel_v, './temp/sigmas_v/v_' + str(batch_idx) + '.pt')
-            torch.save(u_v, './temp/modes_of_variation_v/v_' + str(batch_idx) + '.pt')
-            torch.save(sigma_voxel_f, './temp/sigmas_f/f_' + str(batch_idx) + '.pt')
-            torch.save(u_f, './temp/modes_of_variation_f/f_' + str(batch_idx) + '.pt')
-
+            self._save_params(batch_idx, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f)  # save updated tensors
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-            self.train_metrics.update('loss', loss.item())
-            self.train_metrics.update('metric', self.metric_ftns[0](im_out, v, sigma_voxel_v, u_v, self.model.diff_op))
+            self.train_metrics.update('loss', total_loss)
+
+            for met in self.metric_ftns:
+                self.train_metrics.update(met.__name__, met())
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
