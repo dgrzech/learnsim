@@ -13,7 +13,8 @@
             "data_dir": "\/vol\/bitbucket\/dig15\/rgbd_data\/slavcheva\/Hat\/nii\/",
             "batch_size": 1,
             "shuffle": true,
-            "num_workers": 4
+            "num_workers": 1,
+            "no_consecutive_frames": 5
         }
     },
 

@@ -100,16 +100,22 @@ class Sampler:
         self.normal_dist = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
 
     def sample_qv(self, v, sigma_voxel_v, u_v):
-        epsilon = sigma_voxel_v * self.normal_dist.sample((3, 128, 128, 128)).squeeze().to(self.device)
+        dim = v.shape
+        epsilon_dim = [dim[4], dim[1], dim[2], dim[3]]
+        x_dim = [dim[1], dim[2], dim[3]]
+
+        epsilon = sigma_voxel_v * self.normal_dist.sample(epsilon_dim).squeeze().to(self.device)
         epsilon = epsilon.unsqueeze(0).permute(0, 2, 3, 4, 1)
-        x = self.normal_dist.sample((128, 128, 128)).to(self.device)
+        x = self.normal_dist.sample(x_dim).to(self.device)
 
         v_sample = v + epsilon + x * u_v
         return v_sample
 
     def sample_qf(self, f, sigma_voxel_f, u_f):
-        epsilon = sigma_voxel_f * self.normal_dist.sample((1, 128, 128, 128)).squeeze().to(self.device)
-        x = self.normal_dist.sample((1, 128, 128, 128)).squeeze().to(self.device)
+        dim = f.shape[1:]
+
+        epsilon = sigma_voxel_f * self.normal_dist.sample(dim).squeeze().to(self.device)
+        x = self.normal_dist.sample(dim).squeeze().to(self.device)
 
         f_sample = f + epsilon + x * u_f
         return f_sample

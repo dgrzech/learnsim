@@ -39,15 +39,15 @@ class Trainer(BaseTrainer):
         """
 
         self.sampler = Sampler(self.device)
-        self.grid = generate_grid([128, 128, 128])
+        self.grid = None
 
     @staticmethod
-    def _save_params(batch_idx, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f):
-        torch.save(v, './temp/vels/v_' + str(batch_idx) + '.pt')
-        torch.save(sigma_voxel_v, './temp/sigmas_v/v_' + str(batch_idx) + '.pt')
-        torch.save(u_v, './temp/modes_of_variation_v/v_' + str(batch_idx) + '.pt')
-        torch.save(sigma_voxel_f, './temp/sigmas_f/f_' + str(batch_idx) + '.pt')
-        torch.save(u_f, './temp/modes_of_variation_f/f_' + str(batch_idx) + '.pt')
+    def _save_params(idx, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f):
+        torch.save(v, './temp/vels/v_' + str(idx) + '.pt')
+        torch.save(sigma_voxel_v, './temp/sigmas_v/sigma_' + str(idx) + '.pt')
+        torch.save(u_v, './temp/modes_of_variation_v/u_' + str(idx) + '.pt')
+        torch.save(sigma_voxel_f, './temp/sigmas_f/sigma_' + str(idx) + '.pt')
+        torch.save(u_f, './temp/modes_of_variation_f/u_' + str(idx) + '.pt')
 
     def _train_epoch(self, epoch):
         """
@@ -60,9 +60,13 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
 
-        for batch_idx, (im1, im2, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f) in enumerate(self.data_loader):
+        for batch_idx, (im_pair_idx, im1, im2, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f) in enumerate(self.data_loader):
             im1 = im1.to(self.device)
             im2 = im2.to(self.device)
+
+            if self.grid is None:  # initialise the grid
+                dim = im1.shape[2:]
+                self.grid = generate_grid(dim)
 
             v.requires_grad = True
             v = v.to(self.device)
@@ -158,7 +162,7 @@ class Trainer(BaseTrainer):
             sigma_voxel_f.detach()
             u_f.detach()
 
-            self._save_params(batch_idx, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f)  # save updated tensors
+            self._save_params(int(im_pair_idx[0]), v, sigma_voxel_v, u_v, sigma_voxel_f, u_f)  # save updated tensors
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', total_loss)
 
