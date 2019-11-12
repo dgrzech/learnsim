@@ -1,2 +1,5 @@
-def metric():
-    return 0.0
+import torch
+
+
+def SSD(im_out):
+    return 0.5 * torch.sum(im_out)

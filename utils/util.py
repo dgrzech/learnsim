@@ -10,6 +10,7 @@ from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
 from scipy.linalg import toeplitz
+from torch import nn
 from torch.distributions import Normal
 
 
@@ -39,18 +40,53 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def integrate_vect(v, no_steps=10):
-    assert no_steps >= 0, 'nb_steps should be >=0, found: %d' % no_steps
+def generate_id_grid(sz):
+    nz = sz[0]
+    ny = sz[1]
+    nx = sz[2]
 
-    v_out = v.permute(0, 4, 1, 2, 3)
-    v_out /= (2 ** no_steps)
+    x = torch.linspace(-1, 1, steps=nx).to(dtype=torch.float32)
+    y = torch.linspace(-1, 1, steps=ny).to(dtype=torch.float32)
+    z = torch.linspace(-1, 1, steps=nz).to(dtype=torch.float32)
+
+    x = x.expand(ny, -1).expand(nz, -1, -1)
+    y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2)
+    z = z.expand(nx, -1).transpose(0, 1).expand(ny, -1, -1).transpose(0, 1)
+
+    x.unsqueeze_(0).unsqueeze_(4)
+    y.unsqueeze_(0).unsqueeze_(4)
+    z.unsqueeze_(0).unsqueeze_(4)
+
+    grid = torch.cat((x, y, z), 4).to(dtype=torch.float32, device='cuda:0')
+    return grid
+
+
+def forward(n):
+    r = np.zeros(n)
+    c = np.zeros(n)
+
+    r[0] = -6.0
+    r[1] = 1.0
+    r[2] = 1.0
+    r[4] = 1.0
+
+    c[0] = -6.0
+    c[1] = 1.0
+    c[2] = 1.0
+    c[4] = 1.0
+
+    return toeplitz(r, c)
+
+
+def integrate_v(v, identity_grid, no_steps=12):
+    assert no_steps >= 0, 'nb_steps should be >=0, found: %d' % no_steps
+    out = v / (2 ** no_steps)
 
     for _ in range(no_steps):
-        v_next = v_out + F.grid_sample(v_out, v)
-        v_out = v_next
-        v = v_out.permute(0, 2, 3, 4, 1)
+        w = identity_grid + out.permute([0, 2, 3, 4, 1])
+        out = out + F.grid_sample(out, w, padding_mode='zeros')
 
-    return v_out.permute(0, 2, 3, 4, 1)
+    return out
 
 
 class MetricTracker:
@@ -77,68 +113,20 @@ class MetricTracker:
         return dict(self._data.average)
 
 
-def forward(n):
-    r = np.zeros(n)
-    c = np.zeros(n)
-
-    r[0] = -6.0
-    r[1] = 1.0
-    r[2] = 1.0
-    r[4] = 1.0
-
-    c[0] = -6.0
-    c[1] = 1.0
-    c[2] = 1.0
-    c[4] = 1.0
-
-    return toeplitz(r, c)
-
-
 class Sampler:
     def __init__(self, device):
         self.device = device
         self.normal_dist = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
 
     def sample_qv(self, v, sigma_voxel_v, u_v):
-        dim = v.shape
-        epsilon_dim = [dim[4], dim[1], dim[2], dim[3]]
-        x_dim = [dim[1], dim[2], dim[3]]
-
-        epsilon = sigma_voxel_v * self.normal_dist.sample(epsilon_dim).squeeze().to(self.device)
-        epsilon = epsilon.unsqueeze(0).permute(0, 2, 3, 4, 1)
-        x = self.normal_dist.sample(x_dim).to(self.device)
-
-        v_sample = v + epsilon + x * u_v
-        return v_sample
+        epsilon = sigma_voxel_v * self.normal_dist.sample(sample_shape=sigma_voxel_v.shape).squeeze(5).to(self.device)
+        x = self.normal_dist.sample(sample_shape=u_v.shape).squeeze(5).to(self.device)
+        return v + epsilon + x * u_v
 
     def sample_qf(self, f, sigma_voxel_f, u_f):
-        dim = f.shape[1:]
-
-        epsilon = sigma_voxel_f * self.normal_dist.sample(dim).squeeze().to(self.device)
-        x = self.normal_dist.sample(dim).squeeze().to(self.device)
-
-        f_sample = f + epsilon + x * u_f
-        return f_sample
-
-
-def generate_grid(sz):
-    nz = sz[0]
-    ny = sz[1]
-    nx = sz[2]
-
-    x = torch.linspace(-1, 1, steps=nx).to(dtype=torch.float32)
-    y = torch.linspace(-1, 1, steps=ny).to(dtype=torch.float32)
-    z = torch.linspace(-1, 1, steps=nz).to(dtype=torch.float32)
-
-    x = x.expand(ny, -1).expand(nz, -1, -1)
-    y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2)
-    z = z.expand(nx, -1).transpose(0, 1).expand(ny, -1, -1).transpose(0, 1)
-
-    x.unsqueeze_(0).unsqueeze_(4)
-    y.unsqueeze_(0).unsqueeze_(4)
-    z.unsqueeze_(0).unsqueeze_(4)
-
-    return torch.cat((x, y, z), 4).to(dtype=torch.float32, device='cuda:0')
+        epsilon = sigma_voxel_f * self.normal_dist.sample(sample_shape=f.shape).squeeze(5).to(self.device)
+        x = self.normal_dist.sample(sample_shape=u_f.shape).squeeze(5).to(self.device)
+        return f + epsilon + x * u_f
 
 
 class DifferentialOperator(ABC):
@@ -167,3 +155,29 @@ class GradientOperator(DifferentialOperator):
         dv_dz = F.pad(v[:, :, :, 1:, :], self.p3d1, 'constant', 0) - F.pad(v[:, :, :, :-1, :], self.p3d2, 'constant', 0)
 
         return dv_dx, dv_dy, dv_dz
+
+
+class DataLoss(nn.Module, ABC):
+    def __init__(self):
+        pass
+
+    def forward(self, im1, im2):
+        z = self.map(im1, im2)
+        return self.reduce(z)
+
+    @abstractmethod
+    def map(self, im1, im2):
+        pass
+
+    @abstractmethod
+    def reduce(self, z):
+        pass
+
+
+class SSD(DataLoss):
+    def map(self, im1, im2):
+        return im1 - im2
+
+    def reduce(self, z):
+        return torch.sum(z ** 2)
+

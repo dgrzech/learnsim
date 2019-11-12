@@ -8,7 +8,7 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer, config):
+    def __init__(self, model, criterion, metric_ftns, optimizer_v, optimizer_phi, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
@@ -20,11 +20,15 @@ class BaseTrainer:
 
         self.criterion = criterion
         self.metric_ftns = metric_ftns
-        self.optimizer = optimizer
+
+        self.optimizer_v = optimizer_v
+        self.optimizer_phi = optimizer_phi
 
         cfg_trainer = config['trainer']
         self.epochs = cfg_trainer['epochs']
         self.no_samples = cfg_trainer['no_samples']
+        self.no_steps_v = cfg_trainer['no_steps_v']
+
         self.save_period = cfg_trainer['save_period']
         self.monitor = cfg_trainer.get('monitor', 'off')
 
@@ -132,7 +136,8 @@ class BaseTrainer:
             'arch': arch,
             'epoch': epoch,
             'state_dict': self.model.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
+            'optimizer_v': self.optimizer_v.state_dict(),
+            'optimizer_phi': self.optimizer_phi.state_dict(),
             'monitor_best': self.mnt_best,
             'config': self.config
         }
@@ -163,10 +168,11 @@ class BaseTrainer:
         self.model.load_state_dict(checkpoint['state_dict'])
 
         # load optimizer state from checkpoint only when optimizer type is not changed.
-        if checkpoint['config']['optimizer']['type'] != self.config['optimizer']['type']:
+        if checkpoint['config']['optimizer_v']['type'] != self.config['optimizer_v']['type'] or checkpoint['config']['optimizer_phi']['type'] != self.config['optimizer_phi']['type']:
             self.logger.warning("Warning: Optimizer type given in config file is different from that of checkpoint. "
                                 "Optimizer parameters not being resumed.")
         else:
-            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
+            self.optimizer_phi.load_state_dict(checkpoint['optimizer_phi'])
 
         self.logger.info("Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch))

@@ -11,9 +11,10 @@ class SimEnc(BaseModel):
         super(SimEnc, self).__init__()
 
         self.s = 7
+        padding = math.floor(7 / 2)
 
-        self.conv1 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=2)
-        self.conv2 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=2)
+        self.conv1 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=padding, bias=False)
+        self.conv2 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=padding, bias=False)
 
         # initialise kernels to identity
         nn.init.zeros_(self.conv1.weight)
@@ -35,8 +36,8 @@ class SimEnc(BaseModel):
 
     def encode(self, im_fixed, im_warped):
         diff = im_fixed - im_warped
-
         h1 = torch.tanh(self.conv1(diff))
+
         return torch.tanh(self.conv2(h1))
 
     def forward(self, fixed, moving):

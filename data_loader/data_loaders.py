@@ -33,16 +33,13 @@ class RGBDDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-
+        
         img_pair = self.img_pairs[idx]
 
-        im1 = np.array(io.imread(img_pair[0]))
-        im2 = np.array(io.imread(img_pair[1]))
+        im1 = torch.from_numpy(np.array(io.imread(img_pair[0])))
+        im2 = torch.from_numpy(np.array(io.imread(img_pair[1])))
 
         assert im1.shape == im2.shape, "images don't have the same dimensions"
-
-        im1 = np.expand_dims(im1, axis=0)
-        im2 = np.expand_dims(im2, axis=0)
 
         """
         if already exist, then load them from a file; otherwise create new ones
@@ -52,42 +49,43 @@ class RGBDDataset(Dataset):
         if os.path.exists('./temp/vels/v_' + str(idx) + '.pt'):
             v = torch.load('./temp/vels/v_' + str(idx) + '.pt')
         else:
-            dim_im = im1.shape[1:]
-            dim_v = [dim_im[0], dim_im[1], dim_im[2], 3]
-
-            v = torch.zeros(dim_v, dtype=torch.float32)  # otherwise initialise
+            v = torch.zeros_like(im1)  # otherwise initialise
+            v = torch.stack([v, v, v], dim=0)
             torch.save(v, './temp/vels/v_' + str(idx) + '.pt')
 
         # voxel uncertainty of v
         if os.path.exists('./temp/sigmas_v/sigma_' + str(idx) + '.pt'):
             sigma_voxel_v = torch.load('./temp/sigmas_v/sigma_' + str(idx) + '.pt')
         else:
-            sigma_voxel_v = torch.ones(dim_im, dtype=torch.float32)
+            dim = 1.0 / (float(v.shape[-1]) / 2.0)
+            sigma_voxel_v = dim * torch.ones_like(v)
             torch.save(sigma_voxel_v, './temp/sigmas_v/sigma_' + str(idx) + '.pt')
+
+        im1.unsqueeze_(0)
+        im2.unsqueeze_(0)
 
         # voxel uncertainty of f
         if os.path.exists('./temp/sigmas_f/sigma_' + str(idx) + '.pt'):
             sigma_voxel_f = torch.load('./temp/sigmas_f/sigma_' + str(idx) + '.pt')
         else:
-            sigma_voxel_f = torch.ones(dim_im, dtype=torch.float32)
+            sigma_voxel_f = torch.ones_like(im1)
             torch.save(sigma_voxel_f, './temp/sigmas_f/sigma_' + str(idx) + '.pt')
 
         # mode of variation of v
         if os.path.exists('./temp/modes_of_variation_v/u_' + str(idx) + '.pt'):
             u_v = torch.load('./temp/modes_of_variation_v/u_' + str(idx) + '.pt')
         else:
-            u_v = torch.zeros(dim_v, dtype=torch.float32)
+            u_v = torch.zeros_like(v)
             torch.save(u_v, './temp/modes_of_variation_v/u_' + str(idx) + '.pt')
 
         # mode of variation of f
         if os.path.exists('./temp/modes_of_variation_f/u_' + str(idx) + '.pt'):
             u_f = torch.load('./temp/modes_of_variation_f/u_' + str(idx) + '.pt')
         else:
-            dim_mode_of_variation = [1, dim_im[0], dim_im[1], dim_im[2]]
-            u_f = torch.zeros(dim_mode_of_variation, dtype=torch.float32)
+            u_f = torch.zeros_like(im1, dtype=torch.float32)
             torch.save(u_f, './temp/modes_of_variation_f/u_' + str(idx) + '.pt')
 
-        return idx, torch.from_numpy(im1), torch.from_numpy(im2), v, sigma_voxel_v, u_v, sigma_voxel_f, u_f
+        return idx, im1, im2, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f
 
 
 class LearnSimDataLoader(BaseDataLoader):

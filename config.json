@@ -13,21 +13,29 @@
             "data_dir": "\/vol\/bitbucket\/dig15\/rgbd_data\/slavcheva\/Hat\/nii\/",
             "batch_size": 1,
             "shuffle": true,
-            "num_workers": 1,
+            "num_workers": 2,
             "no_consecutive_frames": 5
         }
     },
 
-    "optimizer": {
-        "type": "Adam",
+    "optimizer_v": {
+        "type": "SGD",
         "args":{
+            "lr": 0.001
+        }
+    },
+    "optimizer_phi": {
+        "type": "Adam",
+        "args": {
             "lr": 0.0001,
             "weight_decay": 0,
             "amsgrad": true
         }
     },
+
+
     "loss": "loss_function",
-    "metrics": ["metric"],
+    "metrics": ["SSD"],
 
     "lr_scheduler": {
         "type": "StepLR",
@@ -38,7 +46,8 @@
     },
     "trainer": {
         "epochs": 4096,
-        "no_samples": 4,
+        "no_samples": 8,
+	"no_steps_v": 216,
 
         "save_dir": "saved/",
         "save_period": 1,
