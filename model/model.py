@@ -36,9 +36,9 @@ class SimEnc(BaseModel):
 
     def encode(self, im_fixed, im_warped):
         diff = im_fixed - im_warped
-        h1 = torch.tanh(self.conv1(diff))
+        h1 = self.conv1(diff)
 
-        return torch.tanh(self.conv2(h1))
+        return self.conv2(h1)
 
     def forward(self, fixed, moving):
         return self.encode(fixed, moving)
