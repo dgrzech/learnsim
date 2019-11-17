@@ -98,9 +98,7 @@ class Trainer(BaseTrainer):
 
                 for _ in range(self.no_samples):
                     v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
-                    warp_field = integrate_v(v_sample, self.identity_grid)
-                    warp_field = self.identity_grid + warp_field.permute([0, 2, 3, 4, 1])
-
+                    warp_field = self.identity_grid + integrate_v(v_sample, self.identity_grid).permute([0, 2, 3, 4, 1])
                     im2_warped = F.grid_sample(im2, warp_field, padding_mode='border')
 
                     im_out = self.model(im1, im2_warped)
@@ -136,11 +134,8 @@ class Trainer(BaseTrainer):
             # first term
             for _ in range(self.no_samples):
                 v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
-                warp_field = integrate_v(v_sample, self.identity_grid)
-                warp_field = self.identity_grid + warp_field.permute([0, 2, 3, 4, 1])
-
+                warp_field = self.identity_grid + integrate_v(v_sample, self.identity_grid).permute([0, 2, 3, 4, 1])
                 im2_warped = F.grid_sample(im2, warp_field, padding_mode='border')
-                im2_warped = im2_warped.to(self.device)
 
                 im_out = self.model(im1, im2_warped)
                 loss -= self.criterion(im_out)
@@ -150,11 +145,8 @@ class Trainer(BaseTrainer):
                 loss_aux = 0.0
 
                 v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
-                warp_field = integrate_v(v_sample, self.identity_grid)
-                warp_field = self.identity_grid + warp_field.permute([0, 2, 3, 4, 1])
-
+                warp_field = self.identity_grid + integrate_v(v_sample, self.identity_grid).permute([0, 2, 3, 4, 1])
                 im2_warped = F.grid_sample(im2, warp_field, padding_mode='border')
-                im2_warped = im2_warped.to(self.device)
 
                 for _ in range(self.no_samples):
                     f_sample = self.sampler.sample_qf(im1, log_var_f, u_f)
@@ -179,11 +171,9 @@ class Trainer(BaseTrainer):
             self.train_metrics.update('loss', -1.0 * total_loss)
 
             with torch.no_grad():
-                warp_field = integrate_v(v, self.identity_grid)
-                warp_field = self.identity_grid + warp_field.permute([0, 2, 3, 4, 1])
-
+                warp_field = self.identity_grid + integrate_v(v, self.identity_grid).permute([0, 2, 3, 4, 1])
                 im2_warped = F.grid_sample(im2, warp_field, padding_mode='border')
-                im2_warped = im2_warped
+
                 im_out = self.model(im1, im2_warped)
 
                 for met in self.metric_ftns:
