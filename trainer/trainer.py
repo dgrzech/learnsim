@@ -39,17 +39,17 @@ class Trainer(BaseTrainer):
         utils
         """
 
-        self.sampler = Sampler(self.device)
+        self.sampler = Sampler()
         self.identity_grid = None
 
     @staticmethod
-    def _save_params(idx, v, sigma_voxel_v, u_v, optimizer_v, sigma_voxel_f, u_f):
+    def _save_params(idx, v, log_var_v, u_v, optimizer_v, log_var_f, u_f):
         torch.save(v, './temp/vels/v_' + str(idx) + '.pt')
-        torch.save(sigma_voxel_v, './temp/sigmas_v/sigma_' + str(idx) + '.pt')
+        torch.save(log_var_v, './temp/log_var_v/log_var_v' + str(idx) + '.pt')
         torch.save(optimizer_v.state_dict(), './temp/opt/opt_v_' + str(idx) + '.tar')
 
         torch.save(u_v, './temp/modes_of_variation_v/u_' + str(idx) + '.pt')
-        torch.save(sigma_voxel_f, './temp/sigmas_f/sigma_' + str(idx) + '.pt')
+        torch.save(log_var_f, './temp/log_var_f/log_var_f_' + str(idx) + '.pt')
         torch.save(u_f, './temp/modes_of_variation_f/u_' + str(idx) + '.pt')
 
     def _train_epoch(self, epoch):
@@ -63,7 +63,7 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
 
-        for batch_idx, (im_pair_idx, im1, im2, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f) in enumerate(self.data_loader):
+        for batch_idx, (im_pair_idx, im1, im2, v, log_var_v, u_v, log_var_f, u_f) in enumerate(self.data_loader):
             im1 = im1.to(self.device)
             im2 = im2.to(self.device)
 
@@ -76,17 +76,17 @@ class Trainer(BaseTrainer):
             """
 
             v = v.to(self.device).detach().requires_grad_(True)
-            sigma_voxel_v = sigma_voxel_v.to(self.device).detach().requires_grad_(True)
+            log_var_v = log_var_v.to(self.device).detach().requires_grad_(True)
             u_v = u_v.to(self.device).detach().requires_grad_(True)
             
             for p in self.model.parameters():
                 p.requires_grad_(False)
             
             if not os.path.exists('./temp/opt/opt_' + str(im_pair_idx) + '.tar'):
-                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [v, sigma_voxel_v, u_v])
+                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [v, log_var_v, u_v])
                 torch.save(self.optimizer_v.state_dict(), './temp/opt/opt_v_' + str(int(im_pair_idx[0])) + '.tar')
             else:
-                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [v, sigma_voxel_v, u_v])
+                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [v, log_var_v, u_v])
                 checkpoint = torch.load('./temp/opt/opt_v_' + str(int(im_pair_idx[0])) + '.tar')
                 self.optimizer_v.load_state_dict(checkpoint['optimizer_state_dict'])
  
@@ -97,17 +97,17 @@ class Trainer(BaseTrainer):
                 loss = 0.0
 
                 for _ in range(self.no_samples):
-                    v_sample = self.sampler.sample_qv(v, sigma_voxel_v, u_v)
+                    v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
                     warp_field = integrate_v(v_sample, self.identity_grid)
                     warp_field = self.identity_grid + warp_field.permute([0, 2, 3, 4, 1])
 
                     im2_warped = F.grid_sample(im2, warp_field, padding_mode='border')
 
                     im_out = self.model(im1, im2_warped)
-                    loss += self.criterion(im_out)
+                    loss -= self.criterion(im_out)
                 
                 loss /= float(self.no_samples)
-                # loss += self.criterion(None, v, sigma_voxel_v, u_v, self.model.diff_op)
+                loss -= self.criterion(None, v, log_var_v, u_v, self.model.diff_op)
                 if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
                     print('iter ' + str(iter_no) + '/' + str(self.no_steps_v - 1) + ', cost: ' + str(loss.item()))
 
@@ -121,13 +121,13 @@ class Trainer(BaseTrainer):
             """
 
             v.detach()
-            sigma_voxel_v.detach()
+            log_var_v.detach()
             u_v.detach()
 
             for p in self.model.parameters():
                 p.requires_grad_(True)
 
-            sigma_voxel_f = sigma_voxel_f.to(self.device).detach().requires_grad_(True)
+            log_var_f = log_var_f.to(self.device).detach().requires_grad_(True)
             u_f = u_f.to(self.device).detach().requires_grad_(True)
 
             self.optimizer_phi.zero_grad()
@@ -135,7 +135,7 @@ class Trainer(BaseTrainer):
 
             # first term
             for _ in range(self.no_samples):
-                v_sample = self.sampler.sample_qv(v, sigma_voxel_v, u_v)
+                v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
                 warp_field = integrate_v(v_sample, self.identity_grid)
                 warp_field = self.identity_grid + warp_field.permute([0, 2, 3, 4, 1])
 
@@ -143,13 +143,13 @@ class Trainer(BaseTrainer):
                 im2_warped = im2_warped.to(self.device)
 
                 im_out = self.model(im1, im2_warped)
-                loss += self.criterion(im_out)
+                loss -= self.criterion(im_out)
 
             # second term
             for _ in range(self.no_samples):
                 loss_aux = 0.0
 
-                v_sample = self.sampler.sample_qv(v, sigma_voxel_v, u_v)
+                v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
                 warp_field = integrate_v(v_sample, self.identity_grid)
                 warp_field = self.identity_grid + warp_field.permute([0, 2, 3, 4, 1])
 
@@ -157,26 +157,26 @@ class Trainer(BaseTrainer):
                 im2_warped = im2_warped.to(self.device)
 
                 for _ in range(self.no_samples):
-                    f_sample = self.sampler.sample_qf(im1, sigma_voxel_f, u_f)
+                    f_sample = self.sampler.sample_qf(im1, log_var_f, u_f)
 
                     im_out = self.model(f_sample, im2_warped)
-                    loss_aux += self.criterion(im_out)
+                    loss_aux -= self.criterion(im_out)
 
                 loss_aux /= float(self.no_samples)
-                loss += loss_aux
+                loss -= loss_aux
 
             loss /= (2.0 * float(self.no_samples))
-            total_loss += loss.item()
-
             loss.backward()
             self.optimizer_phi.step()
 
-            sigma_voxel_f.detach()
+            total_loss += loss.item()
+
+            log_var_f.detach()
             u_f.detach()
 
-            self._save_params(int(im_pair_idx[0]), v, sigma_voxel_v, u_v, self.optimizer_v, sigma_voxel_f, u_f)  # save updated tensors
+            self._save_params(int(im_pair_idx[0]), v, log_var_v, u_v, self.optimizer_v, log_var_f, u_f)  # save updated tensors
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-            self.train_metrics.update('loss', total_loss)
+            self.train_metrics.update('loss', -1.0 * total_loss)
 
             with torch.no_grad():
                 warp_field = integrate_v(v, self.identity_grid)
@@ -191,7 +191,7 @@ class Trainer(BaseTrainer):
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
-                    epoch, self._progress(batch_idx), loss.item()))
+                    epoch, self._progress(batch_idx), -1.0 * loss.item()))
 
             if batch_idx == self.len_epoch:
                 break

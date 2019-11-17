@@ -114,19 +114,22 @@ class MetricTracker:
 
 
 class Sampler:
-    def __init__(self, device):
-        self.device = device
-        self.normal_dist = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
+    def __init__(self):
+        pass
 
-    def sample_qv(self, v, sigma_voxel_v, u_v):
-        epsilon = sigma_voxel_v * self.normal_dist.sample(sample_shape=sigma_voxel_v.shape).squeeze(5).to(self.device)
-        x = self.normal_dist.sample(sample_shape=u_v.shape).squeeze(5).to(self.device)
-        return v + epsilon + x * u_v
+    def sample_qv(self, mu_v, log_var_v, u_v):
+        sigma = torch.exp(0.5 * log_var_v) + 1e-5
+        eps = torch.randn_like(sigma)
+        x = torch.randn_like(u_v)
 
-    def sample_qf(self, f, sigma_voxel_f, u_f):
-        epsilon = sigma_voxel_f * self.normal_dist.sample(sample_shape=f.shape).squeeze(5).to(self.device)
-        x = self.normal_dist.sample(sample_shape=u_f.shape).squeeze(5).to(self.device)
-        return f + epsilon + x * u_f
+        return mu_v + sigma * eps + x * u_v
+
+    def sample_qf(self, mu_f, log_var_f, u_f):
+        sigma = torch.exp(0.5 * log_var_f) + 1e-5
+        eps = torch.randn_like(sigma)
+        x = torch.randn_like(u_f)
+
+        return mu_f + sigma * eps + x * u_f
 
 
 class DifferentialOperator(ABC):
@@ -140,19 +143,19 @@ class DifferentialOperator(ABC):
 
 class GradientOperator(DifferentialOperator):
     def __init__(self):
-        self.p1d1 = (0, 0, 0, 0, 0, 0, 1, 0)
-        self.p1d2 = (0, 0, 0, 0, 0, 0, 0, 1)
+        self.p1d1 = (0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
+        self.p1d2 = (0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
 
-        self.p2d1 = (0, 0, 0, 0, 1, 0, 0, 0)
-        self.p2d2 = (0, 0, 0, 0, 0, 1, 0, 0)
+        self.p2d1 = (0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
+        self.p2d2 = (0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
 
-        self.p3d1 = (0, 0, 1, 0, 0, 0, 0, 0)
-        self.p3d2 = (0, 0, 0, 1, 0, 0, 0, 0)
+        self.p3d1 = (0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
+        self.p3d2 = (0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
 
     def apply(self, v):
-        dv_dx = F.pad(v[:, 1:, :, :, :], self.p1d1, 'constant', 0) - F.pad(v[:, :-1, :, :, :], self.p1d2, 'constant', 0)
-        dv_dy = F.pad(v[:, :, 1:, :, :], self.p2d1, 'constant', 0) - F.pad(v[:, :, :-1, :, :], self.p2d2, 'constant', 0)
-        dv_dz = F.pad(v[:, :, :, 1:, :], self.p3d1, 'constant', 0) - F.pad(v[:, :, :, :-1, :], self.p3d2, 'constant', 0)
+        dv_dx = F.pad(v[:, :,  1:, :, :], self.p1d1, 'constant', 0) - F.pad(v[:, :, :-1, :, :], self.p1d2, 'constant', 0)
+        dv_dy = F.pad(v[:, :, :, 1:, :], self.p2d1, 'constant', 0) - F.pad(v[:, :, :, :-1, :], self.p2d2, 'constant', 0)
+        dv_dz = F.pad(v[:, :, :, :, 1:], self.p3d1, 'constant', 0) - F.pad(v[:, :, :, :, :-1], self.p3d2, 'constant', 0)
 
         return dv_dx, dv_dy, dv_dz
 

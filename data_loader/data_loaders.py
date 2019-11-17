@@ -53,23 +53,23 @@ class RGBDDataset(Dataset):
             v = torch.stack([v, v, v], dim=0)
             torch.save(v, './temp/vels/v_' + str(idx) + '.pt')
 
-        # voxel uncertainty of v
-        if os.path.exists('./temp/sigmas_v/sigma_' + str(idx) + '.pt'):
-            sigma_voxel_v = torch.load('./temp/sigmas_v/sigma_' + str(idx) + '.pt')
+        # sigma_v
+        if os.path.exists('./temp/log_var_v/log_var_v_' + str(idx) + '.pt'):
+            log_var_v = torch.load('./temp/log_var_v/log_var_v_' + str(idx) + '.pt')
         else:
             dim = 1.0 / (float(v.shape[-1]) / 2.0)
-            sigma_voxel_v = dim * torch.ones_like(v)
-            torch.save(sigma_voxel_v, './temp/sigmas_v/sigma_' + str(idx) + '.pt')
+            log_var_v = torch.log(dim * torch.ones_like(v))
+            torch.save(log_var_v, './temp/log_var_v/log_var_v_' + str(idx) + '.pt')
 
         im1.unsqueeze_(0)
         im2.unsqueeze_(0)
 
-        # voxel uncertainty of f
-        if os.path.exists('./temp/sigmas_f/sigma_' + str(idx) + '.pt'):
-            sigma_voxel_f = torch.load('./temp/sigmas_f/sigma_' + str(idx) + '.pt')
+        # sigma_f
+        if os.path.exists('./temp/log_var_f/log_var_f_' + str(idx) + '.pt'):
+            log_var_f = torch.load('./temp/log_var_f/log_var_f_' + str(idx) + '.pt')
         else:
-            sigma_voxel_f = torch.ones_like(im1)
-            torch.save(sigma_voxel_f, './temp/sigmas_f/sigma_' + str(idx) + '.pt')
+            log_var_f = torch.log(0.1 * torch.ones_like(im1))
+            torch.save(log_var_f, './temp/log_var_f/log_var_f_' + str(idx) + '.pt')
 
         # mode of variation of v
         if os.path.exists('./temp/modes_of_variation_v/u_' + str(idx) + '.pt'):
@@ -85,7 +85,7 @@ class RGBDDataset(Dataset):
             u_f = torch.zeros_like(im1, dtype=torch.float32)
             torch.save(u_f, './temp/modes_of_variation_f/u_' + str(idx) + '.pt')
 
-        return idx, im1, im2, v, sigma_voxel_v, u_v, sigma_voxel_f, u_f
+        return idx, im1, im2, v, log_var_v, u_v, log_var_f, u_f
 
 
 class LearnSimDataLoader(BaseDataLoader):

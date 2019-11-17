@@ -19,9 +19,11 @@
     },
 
     "optimizer_v": {
-        "type": "SGD",
+        "type": "Adam",
         "args":{
-            "lr": 0.001
+            "lr": 0.001,
+	    "weight_decay": 0,
+	    "amsgrad": true
         }
     },
     "optimizer_phi": {
@@ -46,8 +48,8 @@
     },
     "trainer": {
         "epochs": 4096,
-        "no_samples": 8,
-	"no_steps_v": 216,
+        "no_samples": 4,
+	"no_steps_v": 224,
 
         "save_dir": "saved/",
         "save_period": 1,
