@@ -1,4 +1,5 @@
 import torch
+
 from abc import abstractmethod
 from numpy import inf
 from logger import TensorboardWriter
@@ -8,21 +9,31 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, criterion, metric_ftns, optimizer_v, optimizer_phi, config):
+    def __init__(self, model, data_loss, kl_loss, transformation_model, registration_module, metric_ftns, optimizer_phi, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
         # setup GPU device if available, move model into configured device
         self.device, device_ids = self._prepare_device(config['n_gpu'])
+
         self.model = model.to(self.device)
+        self.data_loss = data_loss.to(self.device)
+        self.kl_loss = kl_loss.to(self.device)
+
+        self.transformation_model = transformation_model.to(self.device)
+        self.registration_module = registration_module.to(self.device)
+
+        self.optimizer_phi = optimizer_phi
+
         if len(device_ids) > 1:
             self.model = torch.nn.DataParallel(model, device_ids=device_ids)
+            self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
+            self.kl_loss = torch.nn.DataParallel(kl_loss, device_ids=device_ids)
 
-        self.criterion = criterion
+            self.transformation_model = torch.nn.DataParallel(transformation_model, device_ids=device_ids)
+            self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
+
         self.metric_ftns = metric_ftns
-
-        self.optimizer_v = optimizer_v
-        self.optimizer_phi = optimizer_phi
 
         cfg_trainer = config['trainer']
         self.epochs = cfg_trainer['epochs']
@@ -44,7 +55,6 @@ class BaseTrainer:
             self.early_stop = cfg_trainer.get('early_stop', inf)
 
         self.start_epoch = 1
-
         self.checkpoint_dir = config.save_dir
 
         # setup visualization writer instance                

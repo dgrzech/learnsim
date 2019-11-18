@@ -1,9 +1,29 @@
 {
     "name": "LearnSim",
-    "n_gpu": 1,
+    "n_gpu": 2,
 
     "arch": {
         "type": "SimEnc",
+        "args": {
+            "s": 7
+        }
+    },
+
+    "data_loss": {
+        "type": "SSD",
+        "args": {}
+    },
+    "kl_loss": {
+        "type": "KL",
+        "args": {}
+    },
+
+    "transformation_model": {
+        "type": "SVF",
+        "args": {}
+    },
+    "registration_module": {
+        "type": "RegistrationModule",
         "args": {}
     },
 
@@ -11,19 +31,17 @@
         "type": "LearnSimDataLoader",
         "args":{
             "data_dir": "\/vol\/bitbucket\/dig15\/rgbd_data\/slavcheva\/Hat\/nii\/",
-            "batch_size": 1,
+            "batch_size": 2,
             "shuffle": true,
-            "num_workers": 2,
+            "num_workers": 8,
             "no_consecutive_frames": 5
         }
     },
 
     "optimizer_v": {
-        "type": "Adam",
-        "args":{
-            "lr": 0.001,
-	    "weight_decay": 0,
-	    "amsgrad": true
+        "type": "SGD",
+        "args": {
+            "lr": 0.001
         }
     },
     "optimizer_phi": {
@@ -35,21 +53,12 @@
         }
     },
 
-
-    "loss": "loss_function",
     "metrics": ["SSD"],
 
-    "lr_scheduler": {
-        "type": "StepLR",
-        "args": {
-            "step_size": 50,
-            "gamma": 0.1
-        }
-    },
     "trainer": {
         "epochs": 4096,
-        "no_samples": 4,
-	"no_steps_v": 224,
+        "no_samples": 6,
+	    "no_steps_v": 224,
 
         "save_dir": "saved/",
         "save_period": 1,

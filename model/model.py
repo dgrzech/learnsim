@@ -3,18 +3,17 @@ import torch
 import torch.nn as nn
 
 from base import BaseModel
-from utils import GradientOperator
 
 
-class SimEnc(BaseModel):
-    def __init__(self):
-        super(SimEnc, self).__init__()
+class CNN(BaseModel):
+    def __init__(self, s):
+        super(CNN, self).__init__()
 
-        self.s = 7
-        padding = math.floor(7 / 2)
+        self.s = s
+        self.padding = math.floor(self.s / 2)
 
-        self.conv1 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=padding, bias=False)
-        self.conv2 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=padding, bias=False)
+        self.conv1 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=self.padding, bias=False)
+        self.conv2 = nn.Conv3d(1, 1, kernel_size=self.s, stride=1, padding=self.padding, bias=False)
 
         # initialise kernels to identity
         nn.init.zeros_(self.conv1.weight)
@@ -32,14 +31,20 @@ class SimEnc(BaseModel):
             self.conv1.weight = nn.Parameter(w1)
             self.conv2.weight = nn.Parameter(w2)
 
-        self.diff_op = GradientOperator()
-
     def encode(self, im_fixed, im_warped):
         diff = im_fixed - im_warped
         h1 = self.conv1(diff)
-
         return self.conv2(h1)
 
     def forward(self, fixed, moving):
         return self.encode(fixed, moving)
+
+
+class SimEnc(BaseModel):
+    def __init__(self, s):
+        super(SimEnc, self).__init__()
+        self.CNN = CNN(s)
+
+    def forward(self, fixed, moving):
+        return self.CNN.forward(fixed, moving)
 

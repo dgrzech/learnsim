@@ -1,17 +1,12 @@
-from abc import ABC, abstractmethod
-
 import json
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
 
 from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
 from scipy.linalg import toeplitz
-from torch import nn
-from torch.distributions import Normal
 
 
 def ensure_dir(dirname):
@@ -40,27 +35,6 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def generate_id_grid(sz):
-    nz = sz[0]
-    ny = sz[1]
-    nx = sz[2]
-
-    x = torch.linspace(-1, 1, steps=nx).to(dtype=torch.float32)
-    y = torch.linspace(-1, 1, steps=ny).to(dtype=torch.float32)
-    z = torch.linspace(-1, 1, steps=nz).to(dtype=torch.float32)
-
-    x = x.expand(ny, -1).expand(nz, -1, -1)
-    y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2)
-    z = z.expand(nx, -1).transpose(0, 1).expand(ny, -1, -1).transpose(0, 1)
-
-    x.unsqueeze_(0).unsqueeze_(4)
-    y.unsqueeze_(0).unsqueeze_(4)
-    z.unsqueeze_(0).unsqueeze_(4)
-
-    grid = torch.cat((x, y, z), 4).to(dtype=torch.float32, device='cuda:0')
-    return grid
-
-
 def forward(n):
     r = np.zeros(n)
     c = np.zeros(n)
@@ -78,15 +52,32 @@ def forward(n):
     return toeplitz(r, c)
 
 
-def integrate_v(v, identity_grid, no_steps=12):
-    assert no_steps >= 0, 'nb_steps should be >=0, found: %d' % no_steps
-    out = v / (2 ** no_steps)
+def init_identity_grid(im_dim):
+    """
 
-    for _ in range(no_steps):
-        w = identity_grid + out.permute([0, 2, 3, 4, 1])
-        out = out + F.grid_sample(out, w, padding_mode='zeros')
+    :param sz: size of the grid
+    :return: normalised 3D grid
+    """
 
-    return out
+    sz = im_dim[1:]
+
+    nz = sz[0]
+    ny = sz[1]
+    nx = sz[2]
+
+    x = torch.linspace(-1, 1, steps=nx).to(dtype=torch.float32)
+    y = torch.linspace(-1, 1, steps=ny).to(dtype=torch.float32)
+    z = torch.linspace(-1, 1, steps=nz).to(dtype=torch.float32)
+
+    x = x.expand(ny, -1).expand(nz, -1, -1)
+    y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2)
+    z = z.expand(nx, -1).transpose(0, 1).expand(ny, -1, -1).transpose(0, 1)
+
+    x.unsqueeze_(0).unsqueeze_(4)
+    y.unsqueeze_(0).unsqueeze_(4)
+    z.unsqueeze_(0).unsqueeze_(4)
+
+    return torch.cat((x, y, z), 4)
 
 
 class MetricTracker:
@@ -111,76 +102,3 @@ class MetricTracker:
     
     def result(self):
         return dict(self._data.average)
-
-
-class Sampler:
-    def __init__(self):
-        pass
-
-    def sample_qv(self, mu_v, log_var_v, u_v):
-        sigma = torch.exp(0.5 * log_var_v) + 1e-5
-        eps = torch.randn_like(sigma)
-        x = torch.randn_like(u_v)
-
-        return mu_v + sigma * eps + x * u_v
-
-    def sample_qf(self, mu_f, log_var_f, u_f):
-        sigma = torch.exp(0.5 * log_var_f) + 1e-5
-        eps = torch.randn_like(sigma)
-        x = torch.randn_like(u_f)
-
-        return mu_f + sigma * eps + x * u_f
-
-
-class DifferentialOperator(ABC):
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def apply(self, v):
-        return
-
-
-class GradientOperator(DifferentialOperator):
-    def __init__(self):
-        self.p1d1 = (0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
-        self.p1d2 = (0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
-
-        self.p2d1 = (0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
-        self.p2d2 = (0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
-
-        self.p3d1 = (0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
-        self.p3d2 = (0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
-
-    def apply(self, v):
-        dv_dx = F.pad(v[:, :,  1:, :, :], self.p1d1, 'constant', 0) - F.pad(v[:, :, :-1, :, :], self.p1d2, 'constant', 0)
-        dv_dy = F.pad(v[:, :, :, 1:, :], self.p2d1, 'constant', 0) - F.pad(v[:, :, :, :-1, :], self.p2d2, 'constant', 0)
-        dv_dz = F.pad(v[:, :, :, :, 1:], self.p3d1, 'constant', 0) - F.pad(v[:, :, :, :, :-1], self.p3d2, 'constant', 0)
-
-        return dv_dx, dv_dy, dv_dz
-
-
-class DataLoss(nn.Module, ABC):
-    def __init__(self):
-        pass
-
-    def forward(self, im1, im2):
-        z = self.map(im1, im2)
-        return self.reduce(z)
-
-    @abstractmethod
-    def map(self, im1, im2):
-        pass
-
-    @abstractmethod
-    def reduce(self, z):
-        pass
-
-
-class SSD(DataLoss):
-    def map(self, im1, im2):
-        return im1 - im2
-
-    def reduce(self, z):
-        return torch.sum(z ** 2)
-

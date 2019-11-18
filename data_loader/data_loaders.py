@@ -3,8 +3,8 @@ import os
 import torch
 
 from base import BaseDataLoader
+from utils import init_identity_grid
 
-# from itertools import combinations
 from skimage import io
 from torch.utils.data import Dataset
 
@@ -26,6 +26,8 @@ class RGBDDataset(Dataset):
             sublist = temp[:idx]
             for next_img_path in sublist[-self.no_consecutive_frames:]:
                 self.img_pairs.append([next_img_path, img_path])
+
+        self.identity_grid = None
 
     def __len__(self):
         return len(self.img_pairs)
@@ -64,6 +66,9 @@ class RGBDDataset(Dataset):
         im1.unsqueeze_(0)
         im2.unsqueeze_(0)
 
+        # identity grid, FIXME (dig15): no need to initialise separately for every image pair
+        identity_grid = torch.squeeze(init_identity_grid(im1.shape))
+
         # sigma_f
         if os.path.exists('./temp/log_var_f/log_var_f_' + str(idx) + '.pt'):
             log_var_f = torch.load('./temp/log_var_f/log_var_f_' + str(idx) + '.pt')
@@ -85,12 +90,13 @@ class RGBDDataset(Dataset):
             u_f = torch.zeros_like(im1, dtype=torch.float32)
             torch.save(u_f, './temp/modes_of_variation_f/u_' + str(idx) + '.pt')
 
-        return idx, im1, im2, v, log_var_v, u_v, log_var_f, u_f
+        return idx, im1, im2, v, log_var_v, u_v, log_var_f, u_f, identity_grid
 
 
 class LearnSimDataLoader(BaseDataLoader):
     def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1, no_consecutive_frames=1, training=True):
         self.data_dir = data_dir
         self.dataset = RGBDDataset(data_dir, no_consecutive_frames)
+
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
 
