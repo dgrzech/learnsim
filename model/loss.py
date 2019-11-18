@@ -26,9 +26,13 @@ class SSD(DataLoss):
 
 
 class KL(nn.Module):
-    def __init__(self):
+    def __init__(self, diff_op):
         super(KL, self).__init__()
-        self.diff_op = GradientOperator()  # TODO (dig15): load from config file
+
+        if diff_op == 'GradientOperator':
+            self.diff_op = GradientOperator()
+        else:
+            raise Exception('Unknown differential operator')
 
     def forward(self, v, log_var_v, u_v):
         du_v_dx, du_v_dy, du_v_dz = self.diff_op.apply(u_v)

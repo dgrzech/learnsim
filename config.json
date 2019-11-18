@@ -15,7 +15,9 @@
     },
     "kl_loss": {
         "type": "KL",
-        "args": {}
+        "args": {
+            "diff_op": "GradientOperator"
+        }
     },
 
     "transformation_model": {
