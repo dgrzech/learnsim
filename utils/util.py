@@ -65,9 +65,9 @@ def init_identity_grid(im_dim):
     ny = sz[1]
     nx = sz[2]
 
-    x = torch.linspace(-1, 1, steps=nx).to(dtype=torch.float32)
-    y = torch.linspace(-1, 1, steps=ny).to(dtype=torch.float32)
-    z = torch.linspace(-1, 1, steps=nz).to(dtype=torch.float32)
+    x = torch.linspace(-1, 1, steps=nx)
+    y = torch.linspace(-1, 1, steps=ny)
+    z = torch.linspace(-1, 1, steps=nz)
 
     x = x.expand(ny, -1).expand(nz, -1, -1)
     y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2)

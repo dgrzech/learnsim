@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import torch
 
 from base import BaseTrainer
@@ -13,8 +12,8 @@ class Trainer(BaseTrainer):
     """
 
     def __init__(self, model, data_loss, kl_loss, transformation_model, registration_module,
-                 metric_ftns, optimizer_phi, config, data_loader, valid_data_loader=None, len_epoch=None):
-        super().__init__(model, data_loss, kl_loss, transformation_model, registration_module, metric_ftns, optimizer_phi, config)
+                 metric_ftns, config, data_loader, valid_data_loader=None, len_epoch=None):
+        super().__init__(model, data_loss, kl_loss, transformation_model, registration_module, metric_ftns, config)
 
         self.config = config
         self.data_loader = data_loader
@@ -39,19 +38,27 @@ class Trainer(BaseTrainer):
 
         self.sampler = Sampler()
 
-    @staticmethod
-    def _save_params(idx, v, log_var_v, u_v, optimizer_v, log_var_f, u_f):
-        torch.save(v, './temp/vels/v_' + str(idx) + '.pt')
-        torch.save(log_var_v, './temp/log_var_v/log_var_v' + str(idx) + '.pt')
-        torch.save(optimizer_v.state_dict(), './temp/opt/opt_v_' + str(idx) + '.tar')
-
-        torch.save(u_v, './temp/modes_of_variation_v/u_' + str(idx) + '.pt')
-        torch.save(log_var_f, './temp/log_var_f/log_var_f_' + str(idx) + '.pt')
-        torch.save(u_f, './temp/modes_of_variation_f/u_' + str(idx) + '.pt')
-
     def _switch_network_gradients(self, gradients_on):
         for p in self.model.parameters():
             p.requires_grad_(gradients_on)
+
+    @staticmethod
+    def _save_tensors(im_pair_idxs, v, log_var_v, u_v, log_var_f, u_f):
+        v = v.cpu()
+        log_var_v = log_var_v.cpu()
+        u_v = u_v.cpu()
+
+        log_var_f = log_var_f.cpu()
+        u_f = u_f.cpu()
+
+        im_pair_idxs = im_pair_idxs.tolist()
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+            torch.save(v[loop_idx, :, :, :, :], './temp/vels/v_' + str(im_pair_idx) + '.pt')
+            torch.save(log_var_v[loop_idx, :, :, :, :], './temp/log_var_v/log_var_v_' + str(im_pair_idx) + '.pt')
+            torch.save(u_v[loop_idx, :, :, :, :], './temp/modes_of_variation_v/u_' + str(im_pair_idx) + '.pt')
+
+            torch.save(log_var_f[loop_idx, :, :, :, :], './temp/log_var_f/log_var_f_' + str(im_pair_idx) + '.pt')
+            torch.save(u_f[loop_idx, :, :, :, :], './temp/modes_of_variation_f/u_' + str(im_pair_idx) + '.pt')
 
     def _train_epoch(self, epoch):
         """
@@ -64,31 +71,44 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
 
-        for batch_idx, (im_pair_idx, im1, im2, v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
+        for batch_idx, (im_pair_idxs, im1, im2, v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
                 in enumerate(self.data_loader):
-            im1 = im1.to(self.device)
-            im2 = im2.to(self.device)
+            im1 = im1.to(self.device, non_blocking=True)
+            im2 = im2.to(self.device, non_blocking=True)
+
+            v = v.to(self.device, non_blocking=True).requires_grad_(True)
+            log_var_v = log_var_v.to(self.device, non_blocking=True).requires_grad_(True)
+            u_v = u_v.to(self.device, non_blocking=True).requires_grad_(True)
+
+            log_var_f = log_var_f.to(self.device, non_blocking=True).requires_grad_(True)
+            u_f = u_f.to(self.device, non_blocking=True).requires_grad_(True)
+
+            identity_grid = identity_grid.to(self.device, non_blocking=True)
+
+            """
+            optimizers
+            """
+
+            # v
+            if self.optimizer_v is None:
+                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [v, log_var_v, u_v])
+
+            # phi
+            if self.optimizer_phi is None:  # TODO (dig15): separate optimisers for phi and f?
+                if self.config['n_gpu'] == 1:
+                    model_params = [p for p in self.model.parameters() if p.requires_grad]
+                else:
+                    model_params = [p for p in self.model.module.parameters() if p.requires_grad]
+
+                self.optimizer_phi = self.config.init_obj('optimizer_phi', torch.optim, model_params + [log_var_f, u_f])
+
+            total_loss = 0.0
 
             """
             q_v
             """
-
+            
             self._switch_network_gradients(False)
-
-            v = v.to(self.device).detach().requires_grad_(True)
-            log_var_v = log_var_v.to(self.device).detach().requires_grad_(True)
-            u_v = u_v.to(self.device).detach().requires_grad_(True)
-            identity_grid = identity_grid.to(self.device)
-
-            if not os.path.exists('./temp/opt/opt_' + str(im_pair_idx) + '.tar'):
-                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [v, log_var_v, u_v])
-                torch.save(self.optimizer_v.state_dict(), './temp/opt/opt_v_' + str(int(im_pair_idx[0])) + '.tar')
-            else:
-                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [v, log_var_v, u_v])
-                checkpoint = torch.load('./temp/opt/opt_v_' + str(int(im_pair_idx[0])) + '.tar')
-                self.optimizer_v.load_state_dict(checkpoint['optimizer_state_dict'])
-
-            total_loss = 0.0
 
             for iter_no in range(self.no_steps_v):
                 self.optimizer_v.zero_grad()
@@ -102,12 +122,8 @@ class Trainer(BaseTrainer):
                     im_out = self.model(im1, im2_warped)
                     loss -= self.data_loss.forward(im_out)
 
-                loss /= float(self.no_samples)
-                loss = loss.sum()
-
-                kl_loss = self.kl_loss(v, log_var_v, u_v)
-                kl_loss = kl_loss.sum()
-                loss -= kl_loss
+                loss = loss.sum() / float(self.no_samples)
+                loss -= self.kl_loss(v, log_var_v, u_v).sum()
 
                 if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
                     print('iter ' + str(iter_no) + '/' + str(self.no_steps_v - 1) + ', cost: ' + str(loss.item()))
@@ -117,9 +133,9 @@ class Trainer(BaseTrainer):
 
             total_loss += loss.item()
 
-            v.detach()
-            log_var_v.detach()
-            u_v.detach()
+            v.requires_grad_(False)
+            log_var_v.requires_grad_(False)
+            u_v.requires_grad_(False)
 
             """
             q_phi
@@ -127,14 +143,11 @@ class Trainer(BaseTrainer):
 
             self._switch_network_gradients(True)
 
-            log_var_f = log_var_f.to(self.device).detach().requires_grad_(True)
-            u_f = u_f.to(self.device).detach().requires_grad_(True)
-
             self.optimizer_phi.zero_grad()
             loss = 0.0
 
-            # first term
             for _ in range(self.no_samples):
+                # first term
                 v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
                 warp_field = self.transformation_model.forward(identity_grid, v_sample)
                 im2_warped = self.registration_module.forward(im2, identity_grid, warp_field)
@@ -142,37 +155,28 @@ class Trainer(BaseTrainer):
                 im_out = self.model(im1, im2_warped)
                 loss -= self.data_loss.forward(im_out)
 
-            # second term
-            for _ in range(self.no_samples):
-                loss_aux = 0.0
-
-                v_sample = self.sampler.sample_qv(v, log_var_v, u_v)
-                warp_field = self.transformation_model.forward(identity_grid, v_sample)
-                im2_warped = self.registration_module.forward(im2, identity_grid, warp_field)
-
+                # second term
                 for _ in range(self.no_samples):
                     f_sample = self.sampler.sample_qf(im1, log_var_f, u_f)
                     im_out = self.model(f_sample, im2_warped)
-                    loss_aux += self.data_loss.forward(im_out)
+                    loss -= (self.data_loss.forward(im_out) / float(self.no_samples))
 
-                loss_aux /= float(self.no_samples)
-                loss -= loss_aux
-
-            loss /= (2.0 * float(self.no_samples))
-            loss = loss.sum()
+            loss = loss.sum() / (2.0 * float(self.no_samples))
+            total_loss += loss.item()
 
             loss.backward()
             self.optimizer_phi.step()
 
-            total_loss += loss.item()
+            log_var_f.requires_grad_(False)
+            u_f.requires_grad_(False)
 
-            log_var_f.detach()
-            u_f.detach()
+            """
+            logging
+            """
 
-            self._save_params(int(im_pair_idx[0]), v, log_var_v, u_v, self.optimizer_v, log_var_f, u_f)  # save updated tensors
-
+            self.train_metrics.update('loss', total_loss)
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-            self.train_metrics.update('loss', -1.0 * total_loss)
+            self._save_tensors(im_pair_idxs, v, log_var_v, u_v, log_var_f, u_f)  # save updated tensors
 
             with torch.no_grad():
                 warp_field = self.transformation_model.forward(identity_grid, v)
@@ -190,10 +194,6 @@ class Trainer(BaseTrainer):
                 break
 
         log = self.train_metrics.result()
-
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
-
         return log
 
     def _progress(self, batch_idx):

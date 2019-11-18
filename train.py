@@ -34,10 +34,6 @@ def main(config):
     model = config.init_obj('arch', module_arch)
     logger.info(model)
 
-    # build optimizer
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer_phi = config.init_obj('optimizer_phi', torch.optim, trainable_params)
-
     # initialise the loss
     data_loss = config.init_obj('data_loss', model_loss)
     kl_loss = config.init_obj('kl_loss', model_loss)
@@ -52,9 +48,7 @@ def main(config):
 
     # run training
     trainer = Trainer(model, data_loss, kl_loss, transformation_model, registration_module, metrics,
-                      optimizer_phi,
-                      config=config,
-                      data_loader=data_loader, valid_data_loader=valid_data_loader)
+                      config=config, data_loader=data_loader, valid_data_loader=valid_data_loader)
     trainer.train()
 
 

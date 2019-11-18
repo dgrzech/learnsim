@@ -9,7 +9,7 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, data_loss, kl_loss, transformation_model, registration_module, metric_ftns, optimizer_phi, config):
+    def __init__(self, model, data_loss, kl_loss, transformation_model, registration_module, metric_ftns, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
@@ -23,8 +23,6 @@ class BaseTrainer:
         self.transformation_model = transformation_model.to(self.device)
         self.registration_module = registration_module.to(self.device)
 
-        self.optimizer_phi = optimizer_phi
-
         if len(device_ids) > 1:
             self.model = torch.nn.DataParallel(model, device_ids=device_ids)
             self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
@@ -33,6 +31,8 @@ class BaseTrainer:
             self.transformation_model = torch.nn.DataParallel(transformation_model, device_ids=device_ids)
             self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
 
+        self.optimizer_v = None
+        self.optimizer_phi = None
         self.metric_ftns = metric_ftns
 
         cfg_trainer = config['trainer']
