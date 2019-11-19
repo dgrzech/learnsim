@@ -39,8 +39,12 @@ class Trainer(BaseTrainer):
         self.sampler = Sampler()
 
     def _switch_network_gradients(self, gradients_on):
-        for p in self.model.parameters():
-            p.requires_grad_(gradients_on)
+        if self.config['n_gpu'] == 1:
+            for p in self.model.parameters():
+                p.requires_grad_(gradients_on)
+        else:
+            for p in self.model.module.parameters():
+                p.requires_grad_(gradients_on)
 
     @staticmethod
     def _save_tensors(im_pair_idxs, v, log_var_v, u_v, log_var_f, u_f):
