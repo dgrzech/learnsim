@@ -5,6 +5,11 @@ import torch.nn as nn
 from base import BaseModel
 
 
+"""
+encoding function
+"""
+
+
 class CNN(BaseModel):
     def __init__(self, s):
         super(CNN, self).__init__()
@@ -28,16 +33,16 @@ class CNN(BaseModel):
         w2 = w2.view(1, 1, self.s, self.s, self.s)
 
         with torch.no_grad():
-            self.conv1.weight = nn.Parameter(w1)
-            self.conv2.weight = nn.Parameter(w2)
+            self.conv1.weight = nn.Parameter(w1, requires_grad=True)
+            self.conv2.weight = nn.Parameter(w2, requires_grad=True)
 
-    def encode(self, im_fixed, im_warped):
-        diff = im_fixed - im_warped
+    def encode(self, f, m_warped):
+        diff = f - m_warped
         h1 = self.conv1(diff)
         return self.conv2(h1)
 
-    def forward(self, fixed, moving):
-        return self.encode(fixed, moving)
+    def forward(self, f, m_warped):
+        return self.encode(f, m_warped)
 
 
 class SimEnc(BaseModel):
@@ -45,6 +50,6 @@ class SimEnc(BaseModel):
         super(SimEnc, self).__init__()
         self.CNN = CNN(s)
 
-    def forward(self, fixed, moving):
-        return self.CNN.forward(fixed, moving)
+    def forward(self, f, m_warped):
+        return self.CNN.forward(f, m_warped)
 

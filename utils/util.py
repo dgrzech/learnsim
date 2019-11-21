@@ -1,12 +1,10 @@
-import json
-import numpy as np
-import pandas as pd
-import torch
-
 from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
-from scipy.linalg import toeplitz
+
+import json
+import pandas as pd
+import torch
 
 
 def ensure_dir(dirname):
@@ -35,27 +33,10 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def forward(n):
-    r = np.zeros(n)
-    c = np.zeros(n)
-
-    r[0] = -6.0
-    r[1] = 1.0
-    r[2] = 1.0
-    r[4] = 1.0
-
-    c[0] = -6.0
-    c[1] = 1.0
-    c[2] = 1.0
-    c[4] = 1.0
-
-    return toeplitz(r, c)
-
-
 def init_identity_grid(im_dim):
     """
 
-    :param sz: size of the grid
+    :param im_dim: dimensions of the image for which to create a grid
     :return: normalised 3D grid
     """
 

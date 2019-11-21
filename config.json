@@ -13,11 +13,15 @@
         "type": "SSD",
         "args": {}
     },
-    "kl_loss": {
-        "type": "KL",
+    "reg_loss": {
+        "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator"
         }
+    },
+    "entropy": {
+        "type": "EntropyMultivariateNormal",
+        "args": {}
     },
 
     "transformation_model": {
@@ -29,18 +33,13 @@
         "args": {}
     },
 
-    "data_loader": {
-        "type": "LearnSimDataLoader",
-        "args":{
-            "data_dir": "\/vol\/bitbucket\/dig15\/rgbd_data\/slavcheva\/Hat\/nii\/",
-            "batch_size": 2,
-            "shuffle": true,
-            "num_workers": 8,
-            "no_consecutive_frames": 5
+    "optimizer_v": {
+        "type": "SGD",
+        "args": {
+            "lr": 0.001
         }
     },
-
-    "optimizer_v": {
+    "optimizer_f": {
         "type": "SGD",
         "args": {
             "lr": 0.001
@@ -57,10 +56,21 @@
 
     "metrics": ["SSD"],
 
+    "data_loader": {
+        "type": "LearnSimDataLoader",
+        "args":{
+            "data_dir": "\/vol\/bitbucket\/dig15\/rgbd_data\/slavcheva\/Hat\/nii\/",
+            "batch_size": 4,
+            "num_workers": 8,
+            "no_consecutive_frames": 2,
+            "shuffle": true
+        }
+    },
+
     "trainer": {
         "epochs": 4096,
         "no_samples": 6,
-	    "no_steps_v": 224,
+	    "no_steps_v": 128,
 
         "save_dir": "saved/",
         "save_period": 1,
@@ -68,7 +78,6 @@
         
         "monitor": "min val_loss",
         "early_stop": 10,
-
         "tensorboard": true
     }
 }

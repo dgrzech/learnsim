@@ -1,3 +1,6 @@
+from parse_config import ConfigParser
+from trainer import Trainer
+
 import argparse
 import collections
 import torch
@@ -9,9 +12,6 @@ import model.metric as module_metric
 import model.model as module_arch
 import utils.registration as registration
 import utils.transformation as transformation
-
-from parse_config import ConfigParser
-from trainer import Trainer
 
 # fix random seeds for reproducibility
 SEED = 123
@@ -34,20 +34,20 @@ def main(config):
     model = config.init_obj('arch', module_arch)
     logger.info(model)
 
+    # initialise the transformation model and registration modules
+    transformation_model = config.init_obj('transformation_model', transformation)
+    registration_module = config.init_obj('registration_module', registration)
+
     # initialise the loss
     data_loss = config.init_obj('data_loss', model_loss)
-    kl_loss = config.init_obj('kl_loss', model_loss)
-
-    # initialise the transformation model
-    transformation_model = config.init_obj('transformation_model', transformation)
-    # initialise the registration module
-    registration_module = config.init_obj('registration_module', registration)
+    reg_loss = config.init_obj('reg_loss', model_loss)
+    entropy = config.init_obj('entropy', model_loss)
 
     # get function handle of metrics
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
     # run training
-    trainer = Trainer(model, data_loss, kl_loss, transformation_model, registration_module, metrics,
+    trainer = Trainer(model, data_loss, reg_loss, entropy, transformation_model, registration_module, metrics,
                       config=config, data_loader=data_loader, valid_data_loader=valid_data_loader)
     trainer.train()
 

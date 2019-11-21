@@ -1,7 +1,7 @@
-import torch.nn.functional as F
-
 from abc import ABC, abstractmethod
 from torch import nn
+
+import torch.nn.functional as F
 
 
 class TransformationModel(nn.Module, ABC):

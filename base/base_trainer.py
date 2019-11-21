@@ -9,33 +9,43 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, data_loss, kl_loss, transformation_model, registration_module, metric_ftns, config):
+    def __init__(self, model, data_loss, reg_loss, entropy, transformation_model, registration_module, metric_ftns, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
-        # setup GPU device if available, move model into configured device
+        # setup GPU device if available and move the model and losses into configured device
         self.device, device_ids = self._prepare_device(config['n_gpu'])
 
         self.model = model.to(self.device)
-        self.data_loss = data_loss.to(self.device)
-        self.kl_loss = kl_loss.to(self.device)
-
         self.transformation_model = transformation_model.to(self.device)
         self.registration_module = registration_module.to(self.device)
 
+        self.data_loss = data_loss.to(self.device)
+        self.reg_loss = reg_loss.to(self.device)
+        self.entropy = entropy.to(self.device)
+
         if len(device_ids) > 1:
             self.model = torch.nn.DataParallel(model, device_ids=device_ids)
-            self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
-            self.kl_loss = torch.nn.DataParallel(kl_loss, device_ids=device_ids)
-
             self.transformation_model = torch.nn.DataParallel(transformation_model, device_ids=device_ids)
             self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
 
+            self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
+            self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
+            self.entropy = torch.nn.DataParallel(entropy, device_ids=device_ids)
+
+        # optimizers
+        trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+        self.optimizer_phi = config.init_obj('optimizer_phi', torch.optim, trainable_params)
+
         self.optimizer_v = None
-        self.optimizer_phi = None
+        self.optimizer_f = None
+
+        # metrics
         self.metric_ftns = metric_ftns
 
+        # training logic
         cfg_trainer = config['trainer']
+
         self.epochs = cfg_trainer['epochs']
         self.no_samples = cfg_trainer['no_samples']
         self.no_steps_v = cfg_trainer['no_steps_v']
