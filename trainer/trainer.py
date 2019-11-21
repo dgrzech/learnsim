@@ -82,32 +82,26 @@ class Trainer(BaseTrainer):
             log_var_f = log_var_f.to(self.device, non_blocking=True).requires_grad_(True)
             u_f = u_f.to(self.device, non_blocking=True).requires_grad_(True)
 
-            identity_grid = identity_grid.to(self.device, non_blocking=True)
+            identity_grid = identity_grid.to(self.device, non_blocking=True).requires_grad_(False)
 
             """
             optimizers
             """
 
-            # v
-            if self.optimizer_v is None:
-                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
-
-            # f
-            if self.optimizer_f is None:
-                self.optimizer_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
+            optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
+            optimizer_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
 
             total_loss = 0.0
+            loss = 0.0
 
             """
             q_v
             """
 
             self._enable_encoder_gradients(False)
+            optimizer_v.zero_grad()
 
             for iter_no in range(self.no_steps_v):
-                self.optimizer_v.zero_grad()
-                loss = 0.0
-
                 for _ in range(self.no_samples):
                     v_sample = sample_qv(mu_v, log_var_v, u_v)
                     warp_field = self.transformation_model.forward(identity_grid, v_sample)
@@ -117,7 +111,6 @@ class Trainer(BaseTrainer):
                     loss += self.data_loss.forward(im_out)
 
                 loss = loss.sum() / float(self.no_samples)
-
                 loss += self.reg_loss(mu_v).sum()
                 loss -= self.entropy(log_var_v, u_v).sum()
 
@@ -125,9 +118,11 @@ class Trainer(BaseTrainer):
                     print('iter ' + str(iter_no) + '/' + str(self.no_steps_v - 1) + ', cost: ' + str(loss.item()))
 
                 loss.backward()
-                self.optimizer_v.step()
+                optimizer_v.step()
+                optimizer_v.zero_grad()
 
-            total_loss += loss.item()
+                total_loss += loss.item()
+                loss = 0.0
 
             mu_v.requires_grad_(False)
             log_var_v.requires_grad_(False)
@@ -138,8 +133,7 @@ class Trainer(BaseTrainer):
             """
 
             self._enable_encoder_gradients(True)
-
-            self.optimizer_f.zero_grad()
+            optimizer_f.zero_grad()
             self.optimizer_phi.zero_grad()
 
             loss = 0.0
@@ -163,8 +157,7 @@ class Trainer(BaseTrainer):
             total_loss += loss.item()
 
             loss.backward()
-
-            self.optimizer_f.step()
+            optimizer_f.step()
             self.optimizer_phi.step()
 
             log_var_f.requires_grad_(False)

@@ -54,7 +54,7 @@ class RegLossL2(RegLoss):
 
     def forward(self, v):
         dv_dx, dv_dy, dv_dz = self.diff_op.apply(v)
-        return torch.sum(dv_dx ** 2) + torch.sum(dv_dy ** 2) + torch.sum(dv_dz ** 2)
+        return 0.5 * (torch.sum(dv_dx ** 2) + torch.sum(dv_dy ** 2) + torch.sum(dv_dz ** 2))
 
 
 """
@@ -77,7 +77,7 @@ class EntropyMultivariateNormal(Entropy):
 
     def forward(self, log_var_v, u_v):
         sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
-        return 0.5 * (torch.log(1.0 + torch.sum(u_v * 1.0 / (sigma_v ** 2) * u_v)) + torch.sum(log_var_v))
+        return 0.5 * (torch.log(1.0 + torch.sum(u_v * 1.0 / (sigma_v ** 2) * u_v)) + 2.0 * torch.sum(log_var_v))
 
 
 """
@@ -94,14 +94,14 @@ class KL(nn.Module):
         else:
             raise Exception('Unknown differential operator')
 
-    def forward(self, v, log_var_v, u_v):
+    def forward(self, mu_v, log_var_v, u_v):
         du_v_dx, du_v_dy, du_v_dz = self.diff_op.apply(u_v)
-        dv_dx, dv_dy, dv_dz = self.diff_op.apply(v)
+        dv_dx, dv_dy, dv_dz = self.diff_op.apply(mu_v)
 
         sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
 
         t1 = 36.0 * torch.sum(sigma_v ** 2) + torch.sum(du_v_dx ** 2) + torch.sum(du_v_dy ** 2) + torch.sum(du_v_dz ** 2)
         t2 = torch.sum(dv_dx ** 2) + torch.sum(dv_dy ** 2) + torch.sum(dv_dz ** 2)
-        t3 = -1.0 * (torch.log(1.0 + torch.sum(u_v * 1.0 / (sigma_v ** 2) * u_v)) + torch.sum(log_var_v))
+        t3 = -1.0 * (torch.log(1.0 + torch.sum(u_v * 1.0 / (sigma_v ** 2) * u_v)) + 2.0 * torch.sum(log_var_v))
 
         return -0.5 * (t1 + t2 + t3)

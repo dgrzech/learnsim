@@ -52,4 +52,3 @@ class SimEnc(BaseModel):
 
     def forward(self, f, m_warped):
         return self.CNN.forward(f, m_warped)
-

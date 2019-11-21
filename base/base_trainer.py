@@ -33,12 +33,9 @@ class BaseTrainer:
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
             self.entropy = torch.nn.DataParallel(entropy, device_ids=device_ids)
 
-        # optimizers
+        # encoder optimiser
         trainable_params = filter(lambda p: p.requires_grad, model.parameters())
         self.optimizer_phi = config.init_obj('optimizer_phi', torch.optim, trainable_params)
-
-        self.optimizer_v = None
-        self.optimizer_f = None
 
         # metrics
         self.metric_ftns = metric_ftns

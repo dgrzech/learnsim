@@ -49,10 +49,10 @@ class RGBDDataset(Dataset):
         """
 
         # velocity field
-        if path.exists('./temp/mu_v/mu_v_' + str(idx) + '.pt'):
+        if path.exists('./temp/mu_v/mu_v_' + str(idx) + '.pt'):  # if exists, then load
             mu_v = torch.load('./temp/mu_v/mu_v_' + str(idx) + '.pt')
-        else:
-            mu_v = torch.zeros_like(im1)  # otherwise initialise
+        else:  # otherwise initialise
+            mu_v = torch.zeros_like(im1)
             mu_v = torch.stack([mu_v, mu_v, mu_v], dim=0)
 
         # sigma_v
