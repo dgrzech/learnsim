@@ -1,6 +1,6 @@
 {
     "name": "LearnSim",
-    "n_gpu": 2,
+    "n_gpu": 3,
 
     "arch": {
         "type": "SimEnc",
@@ -60,8 +60,8 @@
         "type": "LearnSimDataLoader",
         "args":{
             "data_dir": "\/vol\/bitbucket\/dig15\/rgbd_data\/slavcheva\/Hat\/nii\/",
-            "batch_size": 2,
-            "num_workers": 8,
+            "batch_size": 6,
+            "num_workers": 12,
             "no_consecutive_frames": 2,
             "shuffle": true
         }
@@ -69,7 +69,7 @@
 
     "trainer": {
         "epochs": 4096,
-        "no_samples": 8,
+        "no_samples": 6,
 	    "no_steps_v": 128,
 
         "save_dir": "saved/",
