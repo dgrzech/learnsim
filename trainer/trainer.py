@@ -11,9 +11,9 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, model, data_loss, reg_loss, entropy, transformation_model, registration_module,
+    def __init__(self, enc, data_loss, reg_loss, entropy, transformation_model, registration_module,
                  metric_ftns, config, data_loader, valid_data_loader=None, len_epoch=None):
-        super().__init__(model, data_loss, reg_loss, entropy, transformation_model, registration_module, metric_ftns, config)
+        super().__init__(enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metric_ftns, config)
 
         self.config = config
         self.data_loader = data_loader
@@ -32,12 +32,12 @@ class Trainer(BaseTrainer):
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.train_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
 
-    def _enable_encoder_gradients(self, mode):
+    def _set_enc_grad_enabled(self, mode):
         if self.config['n_gpu'] == 1:
-            for p in self.model.parameters():
+            for p in self.enc.parameters():
                 p.requires_grad_(mode)
         else:
-            for p in self.model.module.parameters():
+            for p in self.enc.module.parameters():
                 p.requires_grad_(mode)
 
     @staticmethod
@@ -67,7 +67,6 @@ class Trainer(BaseTrainer):
         :return: log that contains average loss and metric in this epoch
         """
 
-        self.model.train()
         self.train_metrics.reset()
 
         for batch_idx, (im_pair_idxs, im1, im2, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
@@ -98,28 +97,29 @@ class Trainer(BaseTrainer):
             q_v
             """
 
-            self._enable_encoder_gradients(False)
-            optimizer_v.zero_grad()
+            self.enc.eval()
+            self._set_enc_grad_enabled(False)
 
             for iter_no in range(self.no_steps_v):
+                optimizer_v.zero_grad()
+
                 for _ in range(self.no_samples):
                     v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    warp_field = self.transformation_model.forward(identity_grid, v_sample)
+                    warp_field = self.transformation_model(identity_grid, v_sample)
 
-                    im2_warped = self.registration_module.forward(im2, identity_grid, warp_field)
-                    im_out = self.model(im1, im2_warped)
-                    loss += self.data_loss.forward(im_out)
+                    im2_warped = self.registration_module(im2, identity_grid, warp_field)
+                    im_out = self.enc(im1, im2_warped)
+                    loss += self.data_loss(im_out)
 
                 loss = loss.sum() / float(self.no_samples)
                 loss += self.reg_loss(mu_v).sum()
                 loss -= self.entropy(log_var_v, u_v).sum()
 
-                if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
-                    print('iter ' + str(iter_no) + '/' + str(self.no_steps_v - 1) + ', cost: ' + str(loss.item()))
-
                 loss.backward()
                 optimizer_v.step()
-                optimizer_v.zero_grad()
+
+                if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
+                    print('iter ' + str(iter_no) + '/' + str(self.no_steps_v - 1) + ', cost: ' + str(loss.item()))
 
                 total_loss += loss.item()
                 loss = 0.0
@@ -132,26 +132,26 @@ class Trainer(BaseTrainer):
             q_phi
             """
 
-            self._enable_encoder_gradients(True)
-            optimizer_f.zero_grad()
+            self.enc.train()
+            self._set_enc_grad_enabled(True)
             self.optimizer_phi.zero_grad()
 
-            loss = 0.0
+            optimizer_f.zero_grad()
 
             for _ in range(self.no_samples):
                 # first term
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = self.transformation_model.forward(identity_grid, v_sample)
+                warp_field = self.transformation_model(identity_grid, v_sample)
 
-                im2_warped = self.registration_module.forward(im2, identity_grid, warp_field)
-                im_out = self.model(im1, im2_warped)
-                loss += self.data_loss.forward(im_out)
+                im2_warped = self.registration_module(im2, identity_grid, warp_field)
+                im_out = self.enc(im1, im2_warped)
+                loss += self.data_loss(im_out)
 
                 # second term
                 for _ in range(self.no_samples):
                     f_sample = sample_qf(im1, log_var_f, u_f)
-                    im_out = self.model(f_sample, im2_warped)
-                    loss += (self.data_loss.forward(im_out) / float(self.no_samples))
+                    im_out = self.enc(f_sample, im2_warped)
+                    loss -= (self.data_loss(im_out) / float(self.no_samples))
 
             loss = loss.sum() / (2.0 * float(self.no_samples))
             total_loss += loss.item()
@@ -172,9 +172,9 @@ class Trainer(BaseTrainer):
             self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f)  # save updated tensors
 
             with torch.no_grad():
-                warp_field = self.transformation_model.forward(identity_grid, mu_v)
-                im2_warped = self.registration_module.forward(im2, identity_grid, warp_field)
-                im_out = self.model(im1, im2_warped)
+                warp_field = self.transformation_model(identity_grid, mu_v)
+                im2_warped = self.registration_module(im2, identity_grid, warp_field)
+                im_out = self.enc(im1, im2_warped)
 
                 for met in self.metric_ftns:
                     self.train_metrics.update(met.__name__, met(im_out))

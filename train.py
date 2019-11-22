@@ -31,8 +31,8 @@ def main(config):
     valid_data_loader = data_loader.split_validation()
 
     # build model architecture, then print to console
-    model = config.init_obj('arch', module_arch)
-    logger.info(model)
+    enc = config.init_obj('arch', module_arch)
+    logger.info(enc)
 
     # initialise the transformation model and registration modules
     transformation_model = config.init_obj('transformation_model', transformation)
@@ -47,7 +47,7 @@ def main(config):
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
     # run training
-    trainer = Trainer(model, data_loss, reg_loss, entropy, transformation_model, registration_module, metrics,
+    trainer = Trainer(enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metrics,
                       config=config, data_loader=data_loader, valid_data_loader=valid_data_loader)
     trainer.train()
 

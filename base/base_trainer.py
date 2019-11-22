@@ -9,14 +9,14 @@ class BaseTrainer:
     """
     Base class for all trainers
     """
-    def __init__(self, model, data_loss, reg_loss, entropy, transformation_model, registration_module, metric_ftns, config):
+    def __init__(self, enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metric_ftns, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
         # setup GPU device if available and move the model and losses into configured device
         self.device, device_ids = self._prepare_device(config['n_gpu'])
 
-        self.model = model.to(self.device)
+        self.enc = enc.to(self.device)
         self.transformation_model = transformation_model.to(self.device)
         self.registration_module = registration_module.to(self.device)
 
@@ -25,7 +25,7 @@ class BaseTrainer:
         self.entropy = entropy.to(self.device)
 
         if len(device_ids) > 1:
-            self.model = torch.nn.DataParallel(model, device_ids=device_ids)
+            self.enc = torch.nn.DataParallel(enc, device_ids=device_ids)
             self.transformation_model = torch.nn.DataParallel(transformation_model, device_ids=device_ids)
             self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
 
@@ -34,7 +34,7 @@ class BaseTrainer:
             self.entropy = torch.nn.DataParallel(entropy, device_ids=device_ids)
 
         # encoder optimiser
-        trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+        trainable_params = filter(lambda p: p.requires_grad, enc.parameters())
         self.optimizer_phi = config.init_obj('optimizer_phi', torch.optim, trainable_params)
 
         # metrics
@@ -148,11 +148,11 @@ class BaseTrainer:
         :param log: logging information of the epoch
         :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
         """
-        arch = type(self.model).__name__
+        arch = type(self.enc).__name__
         state = {
             'arch': arch,
             'epoch': epoch,
-            'state_dict': self.model.state_dict(),
+            'state_dict': self.enc.state_dict(),
             'optimizer_phi': self.optimizer_phi.state_dict(),
             'monitor_best': self.mnt_best,
             'config': self.config
@@ -181,7 +181,7 @@ class BaseTrainer:
         if checkpoint['config']['arch'] != self.config['arch']:
             self.logger.warning("Warning: Architecture configuration given in config file is different from that of "
                                 "checkpoint. This may yield an exception while state_dict is being loaded.")
-        self.model.load_state_dict(checkpoint['state_dict'])
+        self.enc.load_state_dict(checkpoint['state_dict'])
 
         # load optimizer state from checkpoint only when optimizer type is not changed.
         if checkpoint['config']['optimizer_phi']['type'] != self.config['optimizer_phi']['type']:
