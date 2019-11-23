@@ -8,7 +8,6 @@ import numpy as np
 
 import data_loader.data_loaders as module_data
 import model.loss as model_loss
-import model.metric as module_metric
 import model.model as module_arch
 import utils.registration as registration
 import utils.transformation as transformation
@@ -44,7 +43,7 @@ def main(config):
     entropy = config.init_obj('entropy', model_loss)
 
     # get function handle of metrics
-    metrics = [getattr(module_metric, met) for met in config['metrics']]
+    metrics = ['SSD', 'reg', 'entropy']
 
     # run training
     trainer = Trainer(enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metrics,
