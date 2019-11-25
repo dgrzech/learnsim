@@ -77,7 +77,7 @@ class EntropyMultivariateNormal(Entropy):
 
     def forward(self, log_var_v, u_v):
         sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
-        return 0.5 * (torch.log(1.0 + torch.sum(u_v * 1.0 / (sigma_v ** 2) * u_v)) + 2.0 * torch.sum(log_var_v))
+        return 0.5 * (torch.log(1.0 + torch.sum(u_v * 1.0 / (sigma_v ** 2) * u_v)) + torch.sum(log_var_v))
 
 
 """
