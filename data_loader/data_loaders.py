@@ -1,10 +1,12 @@
 from os import listdir, path
-from skimage import io
+# from skimage import io
+from skimage.transform import resize
 from torch.utils.data import Dataset
 
 from base import BaseDataLoader
 from utils import init_identity_grid
 
+import nibabel as nib
 import numpy as np
 import os
 import torch
@@ -30,9 +32,9 @@ class RGBDDataset(Dataset):
             for next_img_path in sublist[:self.no_consecutive_frames]:
                 self.img_pairs.append((img_path, next_img_path))
 
-            sublist = temp[:idx]
-            for next_img_path in sublist[-self.no_consecutive_frames:]:
-                self.img_pairs.append([next_img_path, img_path])
+            # sublist = temp[:idx]
+            # for next_img_path in sublist[-self.no_consecutive_frames:]:
+            #     self.img_pairs.append([next_img_path, img_path])
 
     def __len__(self):
         return len(self.img_pairs)
@@ -43,8 +45,22 @@ class RGBDDataset(Dataset):
         
         img_pair = self.img_pairs[idx]
 
-        im1 = torch.from_numpy(np.array(io.imread(img_pair[0])))
-        im2 = torch.from_numpy(np.array(io.imread(img_pair[1])))
+        # im1 = torch.from_numpy(np.array(io.imread(img_pair[0])))
+        # im2 = torch.from_numpy(np.array(io.imread(img_pair[1])))
+
+        im1 = np.array(nib.load(img_pair[0]).dataobj)
+        im1 = torch.from_numpy(np.array(resize(im1, (128, 128, 128))))
+
+        im1_min = torch.min(im1)
+        im1_max = torch.max(im1)
+        im1 = 2.0 * (im1 - im1_min) / (im1_max - im1_min) - 1.0
+
+        im2 = np.array(nib.load(img_pair[1]).dataobj)
+        im2 = torch.from_numpy(np.array(resize(im2, (128, 128, 128))))
+
+        im2_min = torch.min(im2)
+        im2_max = torch.max(im2)
+        im2 = 2.0 * (im2 - im2_min) / (im2_max - im2_min) - 1.0
 
         assert im1.shape == im2.shape, "images don't have the same dimensions"
 
@@ -81,7 +97,7 @@ class RGBDDataset(Dataset):
             log_var_f = torch.log(0.1 * torch.ones_like(im1))
         # u_f
         if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
-            u_f = torch.load(os.path.join(self.save_path['u_f'], 'u_f_' + str(idx) + '.pt'))
+            u_f = torch.load(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
         else:
             u_f = torch.zeros_like(im1)
 

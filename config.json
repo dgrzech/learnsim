@@ -1,6 +1,6 @@
 {
     "name": "LearnSim",
-    "n_gpu": 3,
+    "n_gpu": 1,
 
     "arch": {
         "type": "SimEnc",
@@ -57,10 +57,9 @@
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
-            "data_dir": "\/vol\/bitbucket\/dig15\/rgbd_data\/slavcheva\/Hat\/nii\/",
-            "batch_size": 6,
-            "num_workers": 12,
-            "no_consecutive_frames": 2,
+            "data_dir": "\/vol\/bitbucket\/dig15\/biobank_test\/",
+            "batch_size": 1,
+            "num_workers": 1,
             "shuffle": true
         }
     },
