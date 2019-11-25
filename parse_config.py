@@ -31,10 +31,22 @@ class ConfigParser:
         self._save_dir = save_dir / 'models' / exper_name / run_id
         self._log_dir = save_dir / 'log' / exper_name / run_id
 
+        self._mu_v_dir = save_dir / 'models' / exper_name / run_id / 'mu_v'
+        self._log_var_v_dir = save_dir / 'models' / exper_name / run_id / 'log_var_v'
+        self._u_v_dir = save_dir / 'models' / exper_name / run_id / 'u_v'
+        self._log_var_f_dir = save_dir / 'models' / exper_name / run_id / 'log_var_f'
+        self._u_f_dir = save_dir / 'models' / exper_name / run_id / 'u_f'
+
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+
+        self.mu_v_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.log_var_v_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.u_v_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.log_var_f_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.u_f_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -130,6 +142,31 @@ class ConfigParser:
     @property
     def log_dir(self):
         return self._log_dir
+
+    @property
+    def mu_v_dir(self):
+        return self._mu_v_dir
+
+    @property
+    def log_var_v_dir(self):
+        return self._log_var_v_dir
+
+    @property
+    def u_v_dir(self):
+        return self._u_v_dir
+
+    @property
+    def log_var_f_dir(self):
+        return self._log_var_f_dir
+
+    @property
+    def u_f_dir(self):
+        return self._u_f_dir
+
+    @property
+    def save_dirs(self):
+        return {'mu_v': self.mu_v_dir, 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
+                'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir}
 
 
 # helper functions to update config dict with custom cli options

@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import torch
 
 from base import BaseTrainer
@@ -40,8 +41,7 @@ class Trainer(BaseTrainer):
             for p in self.enc.module.parameters():
                 p.requires_grad_(mode)
 
-    @staticmethod
-    def _save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
+    def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         mu_v = mu_v.cpu()
         log_var_v = log_var_v.cpu()
         u_v = u_v.cpu()
@@ -52,12 +52,17 @@ class Trainer(BaseTrainer):
         im_pair_idxs = im_pair_idxs.tolist()
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            torch.save(mu_v[loop_idx, :, :, :, :], './temp/mu_v/mu_v_' + str(im_pair_idx) + '.pt')
-            torch.save(log_var_v[loop_idx, :, :, :, :], './temp/log_var_v/log_var_v_' + str(im_pair_idx) + '.pt')
-            torch.save(u_v[loop_idx, :, :, :, :], './temp/modes_of_variation_v/u_' + str(im_pair_idx) + '.pt')
+            torch.save(mu_v[loop_idx, :, :, :, :],
+                       os.path.join(self.data_loader.save_dirs['mu_v'], 'mu_v_' + str(im_pair_idx) + '.pt'))
+            torch.save(log_var_v[loop_idx, :, :, :, :],
+                       os.path.join(self.data_loader.save_dirs['log_var_v'], 'log_var_v_' + str(im_pair_idx) + '.pt'))
+            torch.save(u_v[loop_idx, :, :, :, :],
+                       os.path.join(self.data_loader.save_dirs['u_v'], 'u_v_' + str(im_pair_idx) + '.pt'))
 
-            torch.save(log_var_f[loop_idx, :, :, :, :], './temp/log_var_f/log_var_f_' + str(im_pair_idx) + '.pt')
-            torch.save(u_f[loop_idx, :, :, :, :], './temp/modes_of_variation_f/u_' + str(im_pair_idx) + '.pt')
+            torch.save(log_var_f[loop_idx, :, :, :, :],
+                       os.path.join(self.data_loader.save_dirs['log_var_f'], 'log_var_f_' + str(im_pair_idx) + '.pt'))
+            torch.save(u_f[loop_idx, :, :, :, :],
+                       os.path.join(self.data_loader.save_dirs['u_f'], 'u_f_' + str(im_pair_idx) + '.pt'))
 
     def _train_epoch(self, epoch):
         """

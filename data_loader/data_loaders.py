@@ -6,13 +6,19 @@ from base import BaseDataLoader
 from utils import init_identity_grid
 
 import numpy as np
+import os
 import torch
 
 
 class RGBDDataset(Dataset):
-    def __init__(self, scene_paths, no_consecutive_frames):
+    def __init__(self, scene_paths, save_paths, no_consecutive_frames):
+        self.identity_grid = None
+
         self.scene_paths = scene_paths
-        img_paths = {scene_paths: [path.join(scene_paths, f) for f in listdir(scene_paths) if path.isfile(path.join(scene_paths, f))]}  # for scene_path in scene_paths}
+        self.save_paths = save_paths
+
+        img_paths = {scene_paths: [path.join(scene_paths, f) for f in listdir(scene_paths) if
+                                   path.isfile(path.join(scene_paths, f))]}  # for scene_path in scene_paths}
 
         self.no_consecutive_frames = no_consecutive_frames
         self.img_pairs = []
@@ -27,8 +33,6 @@ class RGBDDataset(Dataset):
             sublist = temp[:idx]
             for next_img_path in sublist[-self.no_consecutive_frames:]:
                 self.img_pairs.append([next_img_path, img_path])
-
-        self.identity_grid = None
 
     def __len__(self):
         return len(self.img_pairs)
@@ -49,21 +53,21 @@ class RGBDDataset(Dataset):
         """
 
         # velocity field
-        if path.exists('./temp/mu_v/mu_v_' + str(idx) + '.pt'):  # if exists, then load
-            mu_v = torch.load('./temp/mu_v/mu_v_' + str(idx) + '.pt')
+        if path.exists(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):  # if exists, then load
+            mu_v = torch.load(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
         else:  # otherwise initialise
             mu_v = torch.zeros_like(im1)
             mu_v = torch.stack([mu_v, mu_v, mu_v], dim=0)
 
         # sigma_v
-        if path.exists('./temp/log_var_v/log_var_v_' + str(idx) + '.pt'):
-            log_var_v = torch.load('./temp/log_var_v/log_var_v_' + str(idx) + '.pt')
+        if path.exists(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
+            log_var_v = torch.load(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
         else:
             dim = 1.0 / (float(mu_v.shape[-1]) / 2.0)
             log_var_v = torch.log(dim * torch.ones_like(mu_v))
         # u_v
-        if path.exists('./temp/modes_of_variation_v/u_' + str(idx) + '.pt'):
-            u_v = torch.load('./temp/modes_of_variation_v/u_' + str(idx) + '.pt')
+        if path.exists(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
+            u_v = torch.load(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
         else:
             u_v = torch.zeros_like(mu_v)
 
@@ -71,13 +75,13 @@ class RGBDDataset(Dataset):
         im2.unsqueeze_(0)
 
         # sigma_f
-        if path.exists('./temp/log_var_f/log_var_f_' + str(idx) + '.pt'):
-            log_var_f = torch.load('./temp/log_var_f/log_var_f_' + str(idx) + '.pt')
+        if path.exists(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
+            log_var_f = torch.load(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
         else:
             log_var_f = torch.log(0.1 * torch.ones_like(im1))
         # u_f
-        if path.exists('./temp/modes_of_variation_f/u_' + str(idx) + '.pt'):
-            u_f = torch.load('./temp/modes_of_variation_f/u_' + str(idx) + '.pt')
+        if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
+            u_f = torch.load(os.path.join(self.save_path['u_f'], 'u_f_' + str(idx) + '.pt'))
         else:
             u_f = torch.zeros_like(im1)
 
@@ -89,9 +93,10 @@ class RGBDDataset(Dataset):
 
 
 class LearnSimDataLoader(BaseDataLoader):
-    def __init__(self, data_dir, batch_size, shuffle=True,
+    def __init__(self, data_dir, batch_size, save_dirs=None, shuffle=True,
                  validation_split=0.0, num_workers=1, no_consecutive_frames=1):
         self.data_dir = data_dir
-        self.dataset = RGBDDataset(data_dir, no_consecutive_frames)
+        self.save_dirs = save_dirs
 
+        self.dataset = RGBDDataset(data_dir, save_dirs, no_consecutive_frames)
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
