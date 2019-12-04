@@ -110,9 +110,9 @@ class Trainer(BaseTrainer):
 
                 for _ in range(self.no_samples):
                     v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    warp_field = self.transformation_model(identity_grid, v_sample)
+                    warp_field = self.transformation_model.forward_3d_add(identity_grid, v_sample)
 
-                    im2_warped = self.registration_module(im2, identity_grid, warp_field)
+                    im2_warped = self.registration_module(im2, warp_field)
                     im_out = self.enc(im1, im2_warped)
                     loss_qv += (self.data_loss(im_out).sum() / float(self.no_samples))
 
@@ -146,9 +146,9 @@ class Trainer(BaseTrainer):
             for _ in range(self.no_samples):
                 # first term
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = self.transformation_model(identity_grid, v_sample)
+                warp_field = self.transformation_model.forward_3d_add(identity_grid, v_sample)
 
-                im2_warped = self.registration_module(im2, identity_grid, warp_field)
+                im2_warped = self.registration_module(im2, warp_field)
                 im_out = self.enc(im1, im2_warped)
                 loss_qphi += (self.data_loss(im_out).sum() / float(self.no_samples))
 
@@ -181,8 +181,8 @@ class Trainer(BaseTrainer):
             self.train_metrics.update('loss', total_loss)
 
             with torch.no_grad():
-                warp_field = self.transformation_model(identity_grid, mu_v)
-                im2_warped = self.registration_module(im2, identity_grid, warp_field)
+                warp_field = self.transformation_model.forward_3d_add(identity_grid, mu_v)
+                im2_warped = self.registration_module(im2, warp_field)
                 im_out = self.enc(im1, im2_warped)
 
                 ssd = self.data_loss(im_out).mean()

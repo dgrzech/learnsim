@@ -4,7 +4,7 @@ from skimage.transform import resize
 from torch.utils.data import Dataset
 
 from base import BaseDataLoader
-from utils import init_identity_grid
+from utils import init_identity_grid_2d, init_identity_grid_3d
 
 import nibabel as nib
 import numpy as np
@@ -102,8 +102,10 @@ class RGBDDataset(Dataset):
             u_f = torch.zeros_like(im1)
 
         # identity grid
-        if self.identity_grid is None:
-            self.identity_grid = torch.squeeze(init_identity_grid(im1.shape))
+        if self.identity_grid is None and len(im1.shape) == 3:
+            self.identity_grid = torch.squeeze(init_identity_grid_2d(im1.shape))
+        elif self.identity_grid is None and len(im1.shape) == 4:
+            self.identity_grid = torch.squeeze(init_identity_grid_3d(im1.shape))
 
         return idx, im1, im2, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
 

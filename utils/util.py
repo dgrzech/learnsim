@@ -33,13 +33,25 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def init_identity_grid(im_dim):
-    """
+def init_identity_grid_2d(im_dim):
+    sz = im_dim[1:]
 
-    :param im_dim: dimensions of the image for which to create a grid
-    :return: normalised 3D grid
-    """
+    ny = sz[0]
+    nx = sz[1]
 
+    x = torch.linspace(-1, 1, steps=nx)
+    y = torch.linspace(-1, 1, steps=ny)
+
+    x = x.expand(ny, -1)
+    y = y.expand(nx, -1).transpose(0, 1)
+
+    x.unsqueeze_(0).unsqueeze_(3)
+    y.unsqueeze_(0).unsqueeze_(3)
+
+    return torch.cat((x, y), 3)
+
+
+def init_identity_grid_3d(im_dim):
     sz = im_dim[1:]
 
     nz = sz[0]
