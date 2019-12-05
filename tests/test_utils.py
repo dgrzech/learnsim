@@ -1,4 +1,6 @@
 from model.loss import EntropyMultivariateNormal
+
+from utils.plots import plot_2d, plot_3d
 from utils.transformation import SVF
 from utils.util import init_identity_grid_3d, init_identity_grid_2d
 
@@ -6,136 +8,133 @@ import math
 import numpy as np
 import pytest
 import torch
+import unittest
 
 
-def test_entropy():
-    entropy = EntropyMultivariateNormal()
+def pixel_to_normalised_2d(px_idx, dims):
+    dim_x = dims[2]
+    dim_y = dims[3]
 
-    n = 2  # no. of voxels in each dimension
+    x = -1.0 + 2.0 * px_idx[0] / (dim_x - 1.0)
+    y = -1.0 + 2.0 * px_idx[1] / (dim_y - 1.0)
 
-    # initialise sigma_v
-    log_var_v = torch.log(torch.abs(torch.randn(n, n, n)))
-    sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
-    var_v = sigma_v ** 2
-
-    # initialise the first mode of variation
-    u_v = torch.zeros((n, n, n))
-
-    # calculate the entropy
-    val = entropy.forward(log_var_v, u_v).item()
-    val_true = 0.5 * math.log(np.linalg.det(np.diag(var_v.data.numpy().flatten())))
-
-    assert pytest.approx(val, 0.01) == val_true
+    return x, y
 
 
-def test_scaling_and_squaring_2d_translation():
-    print('--- TRANSLATION 2D ---')
+def pixel_to_normalised_3d(px_idx, dims):
+    dim_x = dims[2]
+    dim_y = dims[3]
+    dim_z = dims[4]
 
-    n = 4
-    dim = (1, n, n)
+    x = -1.0 + 2.0 * px_idx[0] / (dim_x - 1.0)
+    y = -1.0 + 2.0 * px_idx[1] / (dim_y - 1.0)
+    z = -1.0 + 2.0 * px_idx[2] / (dim_z - 1.0)
 
-    identity_grid_2d = init_identity_grid_2d(dim)
-    transformation = SVF()
-
-    print(identity_grid_2d)
-
-    v = torch.zeros((1, 2, n, n))
-    warp_field = transformation.forward_2d_add(identity_grid_2d, v)
-    print('zero velocity field\n', warp_field)
-
-    # warp_field = transformation.forward_2d_comp(identity_grid_2d, v)
-    # print('zero velocity field\n', warp_field)
-
-    v = 0.2 * torch.ones((1, 2, n, n))
-    warp_field = transformation.forward_2d_add(identity_grid_2d, v)
-    print('uniform velocity field\n', warp_field)
-
-    # warp_field = transformation.forward_2d_comp(identity_grid_2d, v)
-    # print('uniform velocity field \n', warp_field)
+    return x, y, z
 
 
-def test_scaling_and_squaring_3d_translation():
-    print('--- TRANSLATION 3D ---')
+class LossTestMethods(unittest.TestCase):
+    def setUp(self):
+        n = 2
+        self.dims = (n, n, n)
 
-    n = 4
-    dim = (1, n, n, n)
+        print(self._testMethodName)
 
-    identity_grid_3d = init_identity_grid_3d(dim)
-    transformation = SVF()
+    def test_entropy(self):
+        n = 2  # no. of voxels in each dimension
+        entropy = EntropyMultivariateNormal()
 
-    print(identity_grid_3d)
+        # initialise sigma_v
+        log_var_v = torch.log(torch.abs(torch.randn(self.dims)))
+        sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
+        var_v = sigma_v ** 2
 
-    v = torch.zeros((1, 3, n, n, n))
-    warp_field = transformation.forward_3d_add(identity_grid_3d, v)
-    print('zero velocity field\n', warp_field)
+        # initialise the first mode of variation
+        u_v = torch.zeros((n, n, n))
 
-    # warp_field = transformation.forward_3d_comp(identity_grid_3d, v)
-    # print('zero velocity field\n', warp_field)
+        # calculate the entropy
+        val = entropy.forward(log_var_v, u_v).item()
+        val_true = 0.5 * math.log(np.linalg.det(np.diag(var_v.data.numpy().flatten())))
 
-    v = 0.2 * torch.ones((1, 3, n, n, n))
-    warp_field = transformation.forward_3d_add(identity_grid_3d, v)
-    print('uniform velocity field\n', warp_field)
-
-    # warp_field = transformation.forward_3d_comp(identity_grid_3d, v)
-    # print('uniform velocity field \n', warp_field)
-
-
-def test_scaling_and_squaring_2d_rotation():
-    print('--- ROTATION 2D ---')
-
-    n = 4
-    dim = (1, n, n)
-
-    identity_grid_2d = init_identity_grid_2d(dim)
-    transformation = SVF()
-
-    v = torch.zeros((1, 2, n, n))
-
-    for idx_x in range(v.shape[3]):
-        for idx_y in range(v.shape[2]):
-            v[0, 0, idx_x, idx_y] = 1.0 - 2.0 * idx_x / float(v.shape[3])
-            v[0, 1, idx_x, idx_y] = -1.0 + 2.0 * idx_y / float(v.shape[2])
-
-    print(v)
-    warp_field = transformation.forward_2d_add(identity_grid_2d, v)
-    print(warp_field)
-
-    # warp_field = transformation.forward_2d_comp(identity_grid_2d, v)
-    # print(warp_field)
+        assert pytest.approx(val, 0.01) == val_true
 
 
-def test_scaling_and_squaring_3d_rotation():
-    print('--- ROTATION 3D---')
+class UtilsTestMethods(unittest.TestCase):
+    def setUp(self):
+        n = 8
 
-    n = 4
-    dim = (1, n, n, n)
+        dim_2d = (1, n, n)
+        self.identity_grid_2d = init_identity_grid_2d(dim_2d)
+        self.dim_2d = (1, 2, n, n)
 
-    identity_grid_3d = init_identity_grid_3d(dim)
-    transformation = SVF()
+        dim_3d = (1, n, n, n)
+        self.identity_grid_3d = init_identity_grid_3d(dim_3d)
+        self.dim_3d = (1, 3, n, n, n)
 
-    v = torch.zeros((1, 3, n, n, n))
+        print(self._testMethodName)
 
-    for idx_x in range(v.shape[4]):
-        for idx_y in range(v.shape[3]):
-            v[0, 1, :, idx_y, idx_x] = 1.0 - 2.0 * idx_x / float(v.shape[3])
-            v[0, 2, :, idx_y, idx_x] = -1.0 + 2.0 * idx_y / float(v.shape[2])
+    def test_scaling_and_squaring_2d_translation(self):
+        transformation = SVF()
 
-    warp_field = transformation.forward_3d_add(identity_grid_3d, v)
-    print(warp_field)
+        # v = torch.zeros(self.dim_2d)
+        # warp_field = transformation.forward_2d_add(self.identity_grid_2d, v)
+        # warp_field = transformation.forward_2d_comp(self.identity_grid_2d, v)
+        # print('zero velocity field\n', warp_field)
 
-    # warp_field = transformation.forward_3d_comp(identity_grid_3d, v)
-    # print(warp_field)
+        v = 0.2 * torch.ones(self.dim_2d)
+        warp_field = transformation.forward_2d_add(self.identity_grid_2d, v)
+        # warp_field = transformation.forward_2d_comp(self.identity_grid_2d, v)
+        # print('uniform velocity field\n', warp_field)
+        plot_2d(v, warp_field)
 
+    def test_scaling_and_squaring_3d_translation(self):
+        transformation = SVF()
 
-def test_utils():
-    test_entropy()
+        # v = torch.zeros(self.dim_3d)
+        # warp_field = transformation.forward_3d_add(self.identity_grid_3d, v)
+        # warp_field = transformation.forward_3d_comp(self.identity_grid_3d, v)
+        # print('zero velocity field\n', warp_field)
 
-    test_scaling_and_squaring_2d_translation()
-    test_scaling_and_squaring_3d_translation()
+        v = 0.2 * torch.ones(self.dim_3d)
+        warp_field = transformation.forward_3d_add(self.identity_grid_3d, v)
+        # warp_field = transformation.forward_3d_comp(self.identity_grid_3d, v)
+        # print('uniform velocity field\n', warp_field)
+        plot_3d(v, warp_field)
 
-    test_scaling_and_squaring_2d_rotation()
-    test_scaling_and_squaring_3d_rotation()
+    def test_scaling_and_squaring_2d_rotation(self):
+        transformation = SVF()
+
+        v = torch.zeros(self.dim_2d)
+        for idx_x in range(v.shape[3]):
+            for idx_y in range(v.shape[2]):
+                x, y = pixel_to_normalised_2d((idx_x, idx_y), self.dim_2d)
+
+                v[0, 0, idx_x, idx_y] = y
+                v[0, 1, idx_x, idx_y] = -1.0 * x
+
+        warp_field = transformation.forward_2d_add(self.identity_grid_2d, v)
+        # warp_field = transformation.forward_2d_comp(self.identity_grid_2d, v)
+        # print(warp_field)
+        plot_2d(v, warp_field)
+
+    def test_scaling_and_squaring_3d_rotation(self):
+        transformation = SVF()
+
+        v = torch.zeros(self.dim_3d)
+        for idx_z in range(v.shape[2]):
+            for idx_y in range(v.shape[3]):
+                for idx_x in range(v.shape[4]):
+                    x, y, z = pixel_to_normalised_3d((idx_x, idx_y, idx_z), self.dim_3d)
+
+                    v[0, 0, idx_x, idx_y, idx_z] = y
+                    v[0, 1, idx_x, idx_y, idx_z] = -1.0 * x
+                    v[0, 2, idx_x, idx_y, idx_z] = 0.0
+
+        warp_field = transformation.forward_3d_add(self.identity_grid_3d, v)
+        # warp_field = transformation.forward_3d_comp(self.identity_grid_3d, v)
+        # print(warp_field)
+        plot_3d(v, warp_field)
 
 
 if __name__ == '__main__':
-    test_utils()
+    unittest.main()
