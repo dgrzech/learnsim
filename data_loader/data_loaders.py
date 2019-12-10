@@ -1,5 +1,4 @@
 from os import listdir, path
-# from skimage import io
 from skimage.transform import resize
 from torch.utils.data import Dataset
 
@@ -14,13 +13,11 @@ import torch
 
 class RGBDDataset(Dataset):
     def __init__(self, scene_paths, save_paths, no_consecutive_frames):
-        self.identity_grid = None
-
         self.scene_paths = scene_paths
         self.save_paths = save_paths
 
-        img_paths = {scene_paths: [path.join(scene_paths, f) for f in listdir(scene_paths) if
-                                   path.isfile(path.join(scene_paths, f))]}  # for scene_path in scene_paths}
+        img_paths = {scene_paths: [path.join(scene_paths, f)
+                                   for f in listdir(scene_paths) if path.isfile(path.join(scene_paths, f))]}
 
         self.no_consecutive_frames = no_consecutive_frames
         self.img_pairs = []
@@ -29,12 +26,11 @@ class RGBDDataset(Dataset):
 
         for idx, img_path in enumerate(temp):
             sublist = temp[idx+1:]
+
             for next_img_path in sublist[:self.no_consecutive_frames]:
                 self.img_pairs.append((img_path, next_img_path))
 
-            # sublist = temp[:idx]
-            # for next_img_path in sublist[-self.no_consecutive_frames:]:
-            #     self.img_pairs.append([next_img_path, img_path])
+        self.identity_grid = None
 
     def __len__(self):
         return len(self.img_pairs)
@@ -44,23 +40,13 @@ class RGBDDataset(Dataset):
             idx = idx.tolist()
         
         img_pair = self.img_pairs[idx]
+        im1, im2 = np.array(nib.load(img_pair[0]).dataobj), np.array(nib.load(img_pair[1]).dataobj)
 
-        # im1 = torch.from_numpy(np.array(io.imread(img_pair[0])))
-        # im2 = torch.from_numpy(np.array(io.imread(img_pair[1])))
+        im1, im2 = torch.from_numpy(np.array(resize(im1, (128, 128, 128)))),\
+                   torch.from_numpy(np.array(resize(im2, (128, 128, 128))))
 
-        im1 = np.array(nib.load(img_pair[0]).dataobj)
-        im1 = torch.from_numpy(np.array(resize(im1, (128, 128, 128))))
-
-        im1_min = torch.min(im1)
-        im1_max = torch.max(im1)
-        im1 = 2.0 * (im1 - im1_min) / (im1_max - im1_min) - 1.0
-
-        im2 = np.array(nib.load(img_pair[1]).dataobj)
-        im2 = torch.from_numpy(np.array(resize(im2, (128, 128, 128))))
-
-        im2_min = torch.min(im2)
-        im2_max = torch.max(im2)
-        im2 = 2.0 * (im2 - im2_min) / (im2_max - im2_min) - 1.0
+        im1_min, im1_max, im2_min, im2_max = torch.min(im1), torch.max(im1), torch.min(im2), torch.max(im2)
+        im1, im2 = 2.0 * (im1 - im1_min) / (im1_max - im1_min) - 1.0, 2.0 * (im2 - im2_min) / (im2_max - im2_min) - 1.0
 
         assert im1.shape == im2.shape, "images don't have the same dimensions"
 

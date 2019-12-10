@@ -43,11 +43,9 @@ class Trainer(BaseTrainer):
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         mu_v = mu_v.cpu()
-        log_var_v = log_var_v.cpu()
-        u_v = u_v.cpu()
 
-        log_var_f = log_var_f.cpu()
-        u_f = u_f.cpu()
+        log_var_v, u_v = log_var_v.cpu(), u_v.cpu()
+        log_var_f, u_f = log_var_f.cpu(), u_f.cpu()
 
         im_pair_idxs = im_pair_idxs.tolist()
 
@@ -76,17 +74,17 @@ class Trainer(BaseTrainer):
 
         for batch_idx, (im_pair_idxs, im1, im2, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
                 in enumerate(self.data_loader):
-            identity_grid = identity_grid.to(self.device, non_blocking=True).requires_grad_(False)
-
-            im1 = im1.to(self.device, non_blocking=True)
-            im2 = im2.to(self.device, non_blocking=True)
+            im1, im2 = im1.to(self.device, non_blocking=True), \
+                       im2.to(self.device, non_blocking=True)
 
             mu_v = mu_v.to(self.device, non_blocking=True).requires_grad_(True)
-            log_var_v = log_var_v.to(self.device, non_blocking=True).requires_grad_(True)
-            u_v = u_v.to(self.device, non_blocking=True).requires_grad_(True)
 
-            log_var_f = log_var_f.to(self.device, non_blocking=True).requires_grad_(True)
-            u_f = u_f.to(self.device, non_blocking=True).requires_grad_(True)
+            log_var_v, u_v = log_var_v.to(self.device, non_blocking=True).requires_grad_(True), \
+                             u_v.to(self.device, non_blocking=True).requires_grad_(True)
+            log_var_f, u_f = log_var_f.to(self.device, non_blocking=True).requires_grad_(True), \
+                             u_f.to(self.device, non_blocking=True).requires_grad_(True)
+
+            identity_grid = identity_grid.to(self.device, non_blocking=True).requires_grad_(False)
 
             total_loss = 0.0
 
@@ -133,7 +131,7 @@ class Trainer(BaseTrainer):
                           f', entropy: {entropy_term.item():.2f}'
                           )
 
-                total_loss += loss_qv.item()
+                total_loss += (loss_qv.item() / float(self.no_steps_v))
 
             mu_v.requires_grad_(False)
             log_var_v.requires_grad_(False)
@@ -167,7 +165,7 @@ class Trainer(BaseTrainer):
                     f_sample = sample_qf(im1, log_var_f, u_f)
                     im_out = self.enc(f_sample, im2_warped)
 
-                    data_term_sample = (self.data_loss(im_out).sum() / float(self.no_samples)) / float(self.no_samples)
+                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
                     loss_qphi -= data_term_sample
 
             loss_qphi.backward()
@@ -201,9 +199,9 @@ class Trainer(BaseTrainer):
                 reg_term = self.reg_loss(mu_v).mean()
                 entropy_term = self.entropy(log_var_v, u_v).mean()
 
-                self.train_metrics.update('SSD', data_term.item())
-                self.train_metrics.update('reg', reg_term.item())
-                self.train_metrics.update('entropy', entropy_term.item())
+                self.train_metrics.update('data_term', data_term.item())
+                self.train_metrics.update('reg_term', reg_term.item())
+                self.train_metrics.update('entropy_term', entropy_term.item())
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(

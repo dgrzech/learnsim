@@ -57,7 +57,7 @@
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
-            "data_dir": "\/vol\/bitbucket\/dig15\/biobank_test\/",
+            "data_dir": "/vol/bitbucket/dig15/biobank_test/",
             "batch_size": 1,
             "num_workers": 1,
             "shuffle": true

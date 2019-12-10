@@ -19,22 +19,34 @@ from utils.sampler import sample_qv
 def main(config):
     logger = config.get_logger('test')
 
-    # setup data_loader instance
+    """
+    setup data loader instance
+    """
+
     data_loader = config.init_obj('data_loader', module_data, save_dirs=config.save_dirs)
 
-    # build model architecture
+    """
+    build the model architecture
+    """
+
     enc = config.init_obj('arch', module_arch)
     transformation_model = config.init_obj('transformation_model', transformation)
     registration_module = config.init_obj('registration_module', registration)
 
     logger.info(enc)
 
-    # initialise the losses
+    """
+    initialise the losses
+    """
+
     data_loss = config.init_obj('data_loss', model_loss)
     reg_loss = config.init_obj('reg_loss', model_loss)
     entropy = config.init_obj('entropy', model_loss)
 
-    # prepare model for testing
+    """
+    prepare model for testing
+    """
+
     logger.info('loading checkpoint: {} ...'.format(config.resume))
     checkpoint = torch.load(config.resume)
     state_dict = checkpoint['state_dict']
@@ -55,22 +67,32 @@ def main(config):
     transformation_model.eval()
     registration_module.eval()
 
-    # test
+    """
+    test
+    """
+
     no_steps_v = config['trainer']['no_steps_v']
     no_samples = config['trainer']['no_samples']
 
     for batch_idx, (im_pair_idxs, im1, im2, mu_v, log_var_v, u_v, _, _, identity_grid) in enumerate(tqdm(data_loader)):
         im1, im2 = im1.to(device, non_blocking=True), im2.to(device, non_blocking=True)
-        identity_grid = identity_grid.to(device, non_blocking=True).requires_grad_(False)
 
         mu_v = mu_v.to(device, non_blocking=True).requires_grad_(True)
         log_var_v, u_v = log_var_v.to(device, non_blocking=True).requires_grad_(True), \
                          u_v.to(device, non_blocking=True).requires_grad_(True)
 
-        # initialise the optimiser for v
+        identity_grid = identity_grid.to(device, non_blocking=True).requires_grad_(False)
+
+        """
+        initialise the optimiser
+        """
+
         optimizer_v = config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
 
-        # optimise mu_v, log_var_v, and u_v on data
+        """
+        optimise mu_v, log_var_v, and u_v on data
+        """
+
         for iter_no in range(no_steps_v):
             optimizer_v.zero_grad()
             data_term = 0.0
@@ -100,7 +122,10 @@ def main(config):
                       f', entropy: {entropy_term.item():.2f}'
                       )
 
-        # save im2_warped to disk
+        """
+        save warped moving image to disk
+        """
+
         with torch.no_grad():
             warp_field = transformation_model.forward_3d_add(identity_grid, mu_v)
             im2_warped = registration_module(im2, warp_field)

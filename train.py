@@ -43,7 +43,7 @@ def main(config):
     entropy = config.init_obj('entropy', model_loss)
 
     # get function handle of metrics
-    metrics = ['SSD', 'reg', 'entropy']
+    metrics = ['data_term', 'reg_term', 'entropy_term']
 
     # run training
     trainer = Trainer(enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metrics,
