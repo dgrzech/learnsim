@@ -106,7 +106,7 @@ class Trainer(BaseTrainer):
 
             for iter_no in range(self.no_steps_v):
                 optimizer_v.zero_grad()
-                loss_qv = 0.0
+                data_term = 0.0
 
                 for _ in range(self.no_samples):
                     v_sample = sample_qv(mu_v, log_var_v, u_v)
@@ -114,16 +114,24 @@ class Trainer(BaseTrainer):
 
                     im2_warped = self.registration_module(im2, warp_field)
                     im_out = self.enc(im1, im2_warped)
-                    loss_qv += (self.data_loss(im_out).sum() / float(self.no_samples))
 
-                loss_qv += self.reg_loss(mu_v).sum()
-                loss_qv -= self.entropy(log_var_v, u_v).sum()
+                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                    data_term += data_term_sample
 
+                reg_term = self.reg_loss(mu_v).sum()
+                entropy_term = self.entropy(log_var_v, u_v).sum()
+
+                loss_qv = data_term + reg_term - entropy_term
                 loss_qv.backward()
                 optimizer_v.step()
 
                 if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
-                    print('iter ' + str(iter_no) + '/' + str(self.no_steps_v - 1) + ', cost: ' + str(loss_qv.item()))
+                    print(f'ITERATION ' + str(iter_no) + '/' + str(self.no_steps_v - 1) +
+                          f', TOTAL ENERGY: {loss_qv.item():.2f}' +
+                          f'\ndata: {data_term.item():.2f}' +
+                          f', regularisation: {reg_term.item():.2f}' +
+                          f', entropy: {entropy_term.item():.2f}'
+                          )
 
                 total_loss += loss_qv.item()
 
@@ -150,13 +158,17 @@ class Trainer(BaseTrainer):
 
                 im2_warped = self.registration_module(im2, warp_field)
                 im_out = self.enc(im1, im2_warped)
-                loss_qphi += (self.data_loss(im_out).sum() / float(self.no_samples))
+
+                data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                loss_qphi += data_term_sample
 
                 # second term
                 for _ in range(self.no_samples):
                     f_sample = sample_qf(im1, log_var_f, u_f)
                     im_out = self.enc(f_sample, im2_warped)
-                    loss_qphi -= ((self.data_loss(im_out).sum() / float(self.no_samples)) / float(self.no_samples))
+
+                    data_term_sample = (self.data_loss(im_out).sum() / float(self.no_samples)) / float(self.no_samples)
+                    loss_qphi -= data_term_sample
 
             loss_qphi.backward()
             optimizer_f.step()
@@ -185,13 +197,13 @@ class Trainer(BaseTrainer):
                 im2_warped = self.registration_module(im2, warp_field)
                 im_out = self.enc(im1, im2_warped)
 
-                ssd = self.data_loss(im_out).mean()
-                reg_loss = self.reg_loss(mu_v).mean()
-                entropy = self.entropy(log_var_v, u_v).mean()
+                data_term = self.data_loss(im_out).mean()
+                reg_term = self.reg_loss(mu_v).mean()
+                entropy_term = self.entropy(log_var_v, u_v).mean()
 
-                self.train_metrics.update('SSD', ssd.item())
-                self.train_metrics.update('reg', reg_loss.item())
-                self.train_metrics.update('entropy', entropy.item())
+                self.train_metrics.update('SSD', data_term.item())
+                self.train_metrics.update('reg', reg_term.item())
+                self.train_metrics.update('entropy', entropy_term.item())
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(

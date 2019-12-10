@@ -36,6 +36,7 @@ class ConfigParser:
         self._u_v_dir = save_dir / 'models' / exper_name / run_id / 'u_v'
         self._log_var_f_dir = save_dir / 'models' / exper_name / run_id / 'log_var_f'
         self._u_f_dir = save_dir / 'models' / exper_name / run_id / 'u_f'
+        self._im2_warped_dir = save_dir / 'models' / exper_name / run_id / 'im2_warped'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
@@ -47,6 +48,7 @@ class ConfigParser:
         self.u_v_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_var_f_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.u_f_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.im2_warped_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -164,9 +166,13 @@ class ConfigParser:
         return self._u_f_dir
 
     @property
+    def im2_warped_dir(self):
+        return self._im2_warped_dir
+
+    @property
     def save_dirs(self):
         return {'mu_v': self.mu_v_dir, 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
-                'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir}
+                'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir, 'im2_warped': self.im2_warped_dir}
 
 
 # helper functions to update config dict with custom cli options
