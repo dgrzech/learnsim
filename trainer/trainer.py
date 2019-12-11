@@ -33,14 +33,6 @@ class Trainer(BaseTrainer):
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
 
-    def _set_enc_grad_enabled(self, mode):
-        if self.config['n_gpu'] == 1:
-            for p in self.enc.parameters():
-                p.requires_grad_(mode)
-        else:
-            for p in self.enc.module.parameters():
-                p.requires_grad_(mode)
-
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         mu_v = mu_v.cpu()
 
@@ -100,7 +92,7 @@ class Trainer(BaseTrainer):
             """
 
             self.enc.eval()
-            self._set_enc_grad_enabled(False)
+            self.enc.set_grad_enabled(False)
 
             for iter_no in range(self.no_steps_v):
                 optimizer_v.zero_grad()
@@ -142,7 +134,7 @@ class Trainer(BaseTrainer):
             """
 
             self.enc.train()
-            self._set_enc_grad_enabled(True)
+            self.enc.set_grad_enabled(True)
 
             self.optimizer_phi.zero_grad()
             optimizer_f.zero_grad()

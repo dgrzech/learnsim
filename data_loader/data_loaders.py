@@ -3,7 +3,7 @@ from skimage.transform import resize
 from torch.utils.data import Dataset
 
 from base import BaseDataLoader
-from utils import init_identity_grid_2d, init_identity_grid_3d
+from utils.util import init_identity_grid_2d, init_identity_grid_3d
 
 import nibabel as nib
 import numpy as np
@@ -42,8 +42,12 @@ class RGBDDataset(Dataset):
         img_pair = self.img_pairs[idx]
         im1, im2 = np.array(nib.load(img_pair[0]).dataobj), np.array(nib.load(img_pair[1]).dataobj)
 
-        im1, im2 = torch.from_numpy(np.array(resize(im1, (128, 128, 128)))),\
-                   torch.from_numpy(np.array(resize(im2, (128, 128, 128))))
+        dim_x = 128
+        dim_y = 128
+        dim_z = 128
+
+        im1, im2 = torch.from_numpy(np.array(resize(im1, (dim_x, dim_y, dim_z)))),\
+                   torch.from_numpy(np.array(resize(im2, (dim_x, dim_y, dim_z))))
 
         im1_min, im1_max, im2_min, im2_max = torch.min(im1), torch.max(im1), torch.min(im2), torch.max(im2)
         im1, im2 = 2.0 * (im1 - im1_min) / (im1_max - im1_min) - 1.0, 2.0 * (im2 - im2_min) / (im2_max - im2_min) - 1.0
@@ -89,9 +93,9 @@ class RGBDDataset(Dataset):
 
         # identity grid
         if self.identity_grid is None and len(im1.shape) == 3:
-            self.identity_grid = torch.squeeze(init_identity_grid_2d(im1.shape))
+            self.identity_grid = torch.squeeze(init_identity_grid_2d(dim_x, dim_y))
         elif self.identity_grid is None and len(im1.shape) == 4:
-            self.identity_grid = torch.squeeze(init_identity_grid_3d(im1.shape))
+            self.identity_grid = torch.squeeze(init_identity_grid_3d(dim_x, dim_y, dim_z))
 
         return idx, im1, im2, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
 

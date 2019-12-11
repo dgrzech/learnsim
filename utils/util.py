@@ -3,6 +3,8 @@ from itertools import repeat
 from pathlib import Path
 
 import json
+import nibabel as nib
+import numpy as np
 import pandas as pd
 import torch
 
@@ -33,12 +35,7 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def init_identity_grid_2d(im_dim):
-    sz = im_dim[1:]
-
-    ny = sz[0]
-    nx = sz[1]
-
+def init_identity_grid_2d(nx, ny):
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
 
@@ -51,13 +48,7 @@ def init_identity_grid_2d(im_dim):
     return torch.cat((x, y), 3)
 
 
-def init_identity_grid_3d(im_dim):
-    sz = im_dim[1:]
-
-    nz = sz[0]
-    ny = sz[1]
-    nx = sz[2]
-
+def init_identity_grid_3d(nx, ny, nz):
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
     z = torch.linspace(-1, 1, steps=nz)
@@ -71,6 +62,31 @@ def init_identity_grid_3d(im_dim):
     z.unsqueeze_(0).unsqueeze_(4)
 
     return torch.cat((x, y, z), 4)
+
+
+def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
+    x = -1.0 + 2.0 * px_idx_x / (dim_x - 1.0)
+    y = -1.0 + 2.0 * px_idx_y / (dim_y - 1.0)
+
+    return x, y
+
+
+def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
+    x = -1.0 + 2.0 * px_idx_x / (dim_x - 1.0)
+    y = -1.0 + 2.0 * px_idx_y / (dim_y - 1.0)
+    z = -1.0 + 2.0 * px_idx_z / (dim_z - 1.0)
+
+    return x, y, z
+
+
+def save_im_to_disk(im, file_path, normalize=False):
+    if normalize:
+        im_min, im_max = torch.min(im), torch.max(im)
+        im = 2.0 * (im - im_min) / (im_max - im_min) - 1.0
+
+    im = im[0, 0, :, :, :].cpu().numpy()
+    im = nib.Nifti1Image(im, np.eye(4))
+    im.to_filename(file_path)
 
 
 class MetricTracker:

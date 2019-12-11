@@ -31,7 +31,7 @@ def plot_2d(v, warp_field):
     ax_v.set_ylabel('y')
 
     # get the displacement vectors
-    identity_grid = init_identity_grid_2d((1, nx, ny))
+    identity_grid = init_identity_grid_2d(nx, ny)
     displacement_field = warp_field - identity_grid.permute([0, 3, 1, 2])
 
     u = displacement_field[0, 0, :, :]
@@ -81,7 +81,7 @@ def plot_3d(v, warp_field):
     ax_v.set_zlabel('z')
 
     # get the displacement vectors
-    identity_grid = init_identity_grid_3d((1, nx, ny, nz))
+    identity_grid = init_identity_grid_3d(nx, ny, nz)
     displacement_field = warp_field - identity_grid.permute([0, 4, 1, 2, 3])
 
     u = displacement_field[0, 0, :, :, :]

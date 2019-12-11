@@ -1,6 +1,4 @@
 import argparse
-import nibabel as nib
-import numpy as np
 import os
 import torch
 
@@ -14,16 +12,7 @@ import utils.transformation as transformation
 
 from parse_config import ConfigParser
 from utils.sampler import sample_qv
-
-
-def save_to_disk(im, file_path, normalize=False):
-    if normalize:
-        im_min, im_max = torch.min(im), torch.max(im)
-        im = 2.0 * (im - im_min) / (im_max - im_min) - 1.0
-
-    im = im[0, 0, :, :, :].cpu().numpy()
-    im = nib.Nifti1Image(im, np.eye(4))
-    im.to_filename(file_path)
+from utils.util import save_im_to_disk
 
 
 def main(config):
@@ -91,12 +80,12 @@ def main(config):
         log_var_v, u_v = log_var_v.to(device, non_blocking=True).requires_grad_(True), \
                          u_v.to(device, non_blocking=True).requires_grad_(True)
 
-        identity_grid = identity_grid.to(device, non_blocking=True).requires_grad_(False)
+        identity_grid = identity_grid.to(device, non_blocking=True)
 
         file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'im1_' + str(batch_idx) + '.nii.gz')
-        save_to_disk(im1, file_path)
+        save_im_to_disk(im1, file_path)
         file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'im2_' + str(batch_idx) + '.nii.gz')
-        save_to_disk(im2, file_path)
+        save_im_to_disk(im2, file_path)
 
         """
         initialise the optimiser
@@ -146,7 +135,7 @@ def main(config):
                 im2_warped = registration_module(im2, warp_field)
 
                 file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'im2_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_to_disk(im2_warped, file_path, True)
+                save_im_to_disk(im2_warped, file_path, True)
 
     """
     calculate the metrics

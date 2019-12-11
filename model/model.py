@@ -50,5 +50,9 @@ class SimEnc(BaseModel):
         super(SimEnc, self).__init__()
         self.CNN = CNN(s)
 
+    def set_grad_enabled(self, mode):
+        for p in self.parameters():
+            p.requires_grad_(mode)
+
     def forward(self, f, m_warped):
         return self.CNN.forward(f, m_warped)

@@ -19,17 +19,20 @@ torch.autograd.set_detect_anomaly(True)
 
 class LossTestMethods(unittest.TestCase):
     def setUp(self):
-        n = 2
-        self.dims = (n, n, n)
-
         print(self._testMethodName)
+
+        n = 2
+
+        self.dim_x = n
+        self.dim_y = n
+        self.dim_z = n
 
     def test_entropy(self):
         n = 2  # no. of voxels in each dimension
         entropy = EntropyMultivariateNormal()
 
         # initialise sigma_v
-        log_var_v = torch.log(torch.abs(torch.randn(self.dims)))
+        log_var_v = torch.log(torch.abs(torch.randn(self.dim_x, self.dim_y, self.dim_z)))
         sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
         var_v = sigma_v ** 2
 
