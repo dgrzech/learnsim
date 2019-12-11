@@ -89,6 +89,12 @@ def save_im_to_disk(im, file_path, normalize=False):
     im.to_filename(file_path)
 
 
+def save_field_to_disk(field, file_path):
+    field = field[0, :, :, :, :].cpu().numpy()
+    field = nib.Nifti1Image(field, np.eye(4))
+    field.to_filename(file_path)
+
+
 class MetricTracker:
     def __init__(self, *keys, writer=None):
         self.writer = writer

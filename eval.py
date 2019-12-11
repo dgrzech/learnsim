@@ -12,7 +12,7 @@ import utils.transformation as transformation
 
 from parse_config import ConfigParser
 from utils.sampler import sample_qv
-from utils.util import save_im_to_disk
+from utils.util import save_field_to_disk, save_im_to_disk
 
 
 def main(config):
@@ -135,7 +135,14 @@ def main(config):
                 im2_warped = registration_module(im2, warp_field)
 
                 file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'im2_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_im_to_disk(im2_warped, file_path, True)
+                save_im_to_disk(im2_warped, file_path)
+
+                file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
+                save_field_to_disk(mu_v, file_path)
+
+                file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'deformation_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
+                save_field_to_disk(warp_field, file_path)
+
 
     """
     calculate the metrics
