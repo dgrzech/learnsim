@@ -1,14 +1,18 @@
-from model.loss import EntropyMultivariateNormal
-
 from utils.plots import plot_2d, plot_3d
 from utils.transformation import SVF
 from utils.util import init_identity_grid_3d, init_identity_grid_2d
 
-import math
-import numpy as np
-import pytest
 import torch
 import unittest
+
+
+# fix random seeds for reproducibility
+SEED = 123
+torch.manual_seed(SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+torch.autograd.set_detect_anomaly(True)
 
 
 def pixel_to_normalised_2d(px_idx, dims):
@@ -31,32 +35,6 @@ def pixel_to_normalised_3d(px_idx, dims):
     z = -1.0 + 2.0 * px_idx[2] / (dim_z - 1.0)
 
     return x, y, z
-
-
-class LossTestMethods(unittest.TestCase):
-    def setUp(self):
-        n = 2
-        self.dims = (n, n, n)
-
-        print(self._testMethodName)
-
-    def test_entropy(self):
-        n = 2  # no. of voxels in each dimension
-        entropy = EntropyMultivariateNormal()
-
-        # initialise sigma_v
-        log_var_v = torch.log(torch.abs(torch.randn(self.dims)))
-        sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
-        var_v = sigma_v ** 2
-
-        # initialise the first mode of variation
-        u_v = torch.zeros((n, n, n))
-
-        # calculate the entropy
-        val = entropy.forward(log_var_v, u_v).item()
-        val_true = 0.5 * math.log(np.linalg.det(np.diag(var_v.data.numpy().flatten())))
-
-        assert pytest.approx(val, 0.01) == val_true
 
 
 class UtilsTestMethods(unittest.TestCase):
@@ -134,7 +112,3 @@ class UtilsTestMethods(unittest.TestCase):
         # warp_field = transformation.forward_3d_comp(self.identity_grid_3d, v)
         # print(warp_field)
         plot_3d(v, warp_field)
-
-
-if __name__ == '__main__':
-    unittest.main()
