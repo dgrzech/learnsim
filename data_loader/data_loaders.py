@@ -69,8 +69,8 @@ class RGBDDataset(Dataset):
         if path.exists(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
             log_var_v = torch.load(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
         else:
-            dim = 1.0 / (float(mu_v.shape[-1]) / 2.0)
-            log_var_v = torch.log(dim * torch.ones_like(mu_v))
+            var_v = ((1.0 / float(mu_v.shape[-1])) ** 2) * torch.ones_like(mu_v)
+            log_var_v = torch.log(var_v)
         # u_v
         if path.exists(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
             u_v = torch.load(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
@@ -84,7 +84,8 @@ class RGBDDataset(Dataset):
         if path.exists(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
             log_var_f = torch.load(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
         else:
-            log_var_f = torch.log(0.1 * torch.ones_like(im1))
+            var_f = (0.1 ** 2) * torch.ones_like(im1)
+            log_var_f = torch.log(var_f)
         # u_f
         if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
             u_f = torch.load(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
