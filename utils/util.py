@@ -32,6 +32,7 @@ def inf_loop(data_loader):
     """
     wrapper function for endless data loader.
     """
+
     for loader in repeat(data_loader):
         yield from loader
 
@@ -103,11 +104,7 @@ def resample_im_to_be_isotropic(im):
     return resampled_im
 
 
-def save_im_to_disk(im, file_path, normalize=False):
-    if normalize:
-        im_min, im_max = torch.min(im), torch.max(im)
-        im = 2.0 * (im - im_min) / (im_max - im_min) - 1.0
-
+def save_im_to_disk(im, file_path):
     im = im[0, 0, :, :, :].cpu().numpy()
     im = nib.Nifti1Image(im, np.eye(4))
     im.to_filename(file_path)
