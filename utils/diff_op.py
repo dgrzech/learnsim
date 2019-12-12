@@ -17,14 +17,14 @@ class GradientOperator(DifferentialOperator):
     def __init__(self):
         super(GradientOperator, self).__init__()
 
-        self.pzd1 = (0, 0, 0, 0, 1, 0)
-        self.pzd2 = (0, 0, 0, 0, 0, 1)
+        self.pzd1 = [0, 0, 0, 0, 1, 0]
+        self.pzd2 = [0, 0, 0, 0, 0, 1]
 
-        self.pyd1 = (0, 0, 1, 0, 0, 0)
-        self.pyd2 = (0, 0, 0, 1, 0, 0)
+        self.pyd1 = [0, 0, 1, 0, 0, 0]
+        self.pyd2 = [0, 0, 0, 1, 0, 0]
 
-        self.pxd1 = (1, 0, 0, 0, 0, 0)
-        self.pxd2 = (0, 1, 0, 0, 0, 0)
+        self.pxd1 = [1, 0, 0, 0, 0, 0]
+        self.pxd2 = [0, 1, 0, 0, 0, 0]
 
     def apply(self, v):
         dv_dz = F.pad(v[:, :, 1:, :, :], self.pzd1, 'constant', 0) - F.pad(v[:, :, :-1, :, :], self.pzd2, 'constant', 0)

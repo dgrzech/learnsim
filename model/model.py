@@ -1,13 +1,8 @@
+from base import BaseModel
+
 import math
 import torch
 import torch.nn as nn
-
-from base import BaseModel
-
-
-"""
-encoding function
-"""
 
 
 class CNN(BaseModel):
@@ -46,6 +41,10 @@ class CNN(BaseModel):
 
 
 class SimEnc(BaseModel):
+    """
+    encoding function
+    """
+
     def __init__(self, s):
         super(SimEnc, self).__init__()
         self.CNN = CNN(s)

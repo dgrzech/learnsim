@@ -5,7 +5,6 @@ from utils.util import init_identity_grid_3d, init_identity_grid_2d, pixel_to_no
 import torch
 import unittest
 
-
 # fix random seeds for reproducibility
 SEED = 123
 torch.manual_seed(SEED)

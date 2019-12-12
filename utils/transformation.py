@@ -13,19 +13,19 @@ class TransformationModel(nn.Module, ABC):
         super(TransformationModel, self).__init__()
 
     @abstractmethod
-    def forward_2d_add(self):
+    def forward_2d_add(self, identity_grid, v):
         pass
 
     @abstractmethod
-    def forward_2d_comp(self):
+    def forward_2d_comp(self, identity_grid, v):
         pass
 
     @abstractmethod
-    def forward_3d_add(self):
+    def forward_3d_add(self, identity_grid, v):
         pass
 
     @abstractmethod
-    def forward_3d_comp(self):
+    def forward_3d_comp(self, identity_grid, v):
         pass
 
 

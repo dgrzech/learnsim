@@ -1,14 +1,15 @@
-import torch
-
 from abc import abstractmethod
 from numpy import inf
 from logger import TensorboardWriter
 
+import torch
+
 
 class BaseTrainer:
     """
-    Base class for all trainers
+    base class for all trainers
     """
+
     def __init__(self, enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metric_ftns, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
@@ -73,16 +74,18 @@ class BaseTrainer:
     @abstractmethod
     def _train_epoch(self, epoch):
         """
-        Training logic for an epoch
+        training logic for an epoch
 
         :param epoch: Current epoch number
         """
+
         raise NotImplementedError
 
     def train(self):
         """
-        Full training logic
+        full training logic
         """
+
         not_improved_count = 0
         for epoch in range(self.start_epoch, self.epochs + 1):
             result = self._train_epoch(epoch)
@@ -125,29 +128,34 @@ class BaseTrainer:
 
     def _prepare_device(self, n_gpu_use):
         """
-        setup GPU device if available, move model into configured device
+        set up GPU device if available and move model into configured device
         """
+
         n_gpu = torch.cuda.device_count()
+
         if n_gpu_use > 0 and n_gpu == 0:
             self.logger.warning("Warning: There\'s no GPU available on this machine,"
                                 "training will be performed on CPU.")
             n_gpu_use = 0
+
         if n_gpu_use > n_gpu:
             self.logger.warning("Warning: The number of GPU\'s configured to use is {}, but only {} are available "
                                 "on this machine.".format(n_gpu_use, n_gpu))
             n_gpu_use = n_gpu
+
         device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
         list_ids = list(range(n_gpu_use))
+
         return device, list_ids
 
     def _save_checkpoint(self, epoch, save_best=False):
         """
-        Saving checkpoints
+        saving checkpoints
 
         :param epoch: current epoch number
-        :param log: logging information of the epoch
         :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
         """
+
         arch = type(self.enc).__name__
         state = {
             'arch': arch,
@@ -167,12 +175,14 @@ class BaseTrainer:
 
     def _resume_checkpoint(self, resume_path):
         """
-        Resume from saved checkpoints
+        resume from saved checkpoints
 
         :param resume_path: Checkpoint path to be resumed
         """
+
         resume_path = str(resume_path)
         self.logger.info("Loading checkpoint: {} ...".format(resume_path))
+        
         checkpoint = torch.load(resume_path)
         self.start_epoch = checkpoint['epoch'] + 1
         self.mnt_best = checkpoint['monitor_best']

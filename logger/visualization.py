@@ -1,8 +1,9 @@
-import importlib
 from datetime import datetime
 
+import importlib
 
-class TensorboardWriter():
+
+class TensorboardWriter:
     def __init__(self, log_dir, logger, enabled):
         self.writer = None
         self.selected_module = ""

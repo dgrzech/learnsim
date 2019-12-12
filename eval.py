@@ -1,18 +1,18 @@
+from tqdm import tqdm
+
+from parse_config import ConfigParser
+from utils.sampler import sample_qv
+from utils.util import save_field_to_disk, save_im_to_disk
+
 import argparse
 import os
 import torch
-
-from tqdm import tqdm
 
 import data_loader.data_loaders as module_data
 import model.loss as model_loss
 import model.model as module_arch
 import utils.registration as registration
 import utils.transformation as transformation
-
-from parse_config import ConfigParser
-from utils.sampler import sample_qv
-from utils.util import save_field_to_disk, save_im_to_disk
 
 
 def main(config):
@@ -73,8 +73,10 @@ def main(config):
     no_steps_v = config['trainer']['no_steps_v']
     no_samples = config['trainer']['no_samples']
 
-    for batch_idx, (im_pair_idxs, im1, im2, mu_v, log_var_v, u_v, _, _, identity_grid) in enumerate(tqdm(data_loader)):
-        im1, im2 = im1.to(device, non_blocking=True), im2.to(device, non_blocking=True)
+    for batch_idx, (im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
+            in enumerate(tqdm(data_loader)):
+        im_fixed, im_moving = im_fixed.to(device, non_blocking=True), \
+                              im_moving.to(device, non_blocking=True)
 
         mu_v = mu_v.to(device, non_blocking=True).requires_grad_(True)
         log_var_v, u_v = log_var_v.to(device, non_blocking=True).requires_grad_(True), \
@@ -82,10 +84,10 @@ def main(config):
 
         identity_grid = identity_grid.to(device, non_blocking=True)
 
-        file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'im1_' + str(batch_idx) + '.nii.gz')
-        save_im_to_disk(im1, file_path)
-        file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'im2_' + str(batch_idx) + '.nii.gz')
-        save_im_to_disk(im2, file_path)
+        file_path = os.path.join(data_loader.save_dirs['im_moving_warped'], 'im_fixed_' + str(batch_idx) + '.nii.gz')
+        save_im_to_disk(im_fixed, file_path)
+        file_path = os.path.join(data_loader.save_dirs['im_moving_warped'], 'im_moving_' + str(batch_idx) + '.nii.gz')
+        save_im_to_disk(im_moving, file_path)
 
         """
         initialise the optimiser
@@ -105,8 +107,8 @@ def main(config):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
                 warp_field = transformation_model.forward_3d_add(identity_grid, v_sample)
 
-                im2_warped = registration_module(im2, warp_field)
-                im_out = enc(im1, im2_warped)
+                im_moving_warped = registration_module(im_moving, warp_field)
+                im_out = enc(im_fixed, im_moving_warped)
 
                 data_term_sample = data_loss(im_out).sum() / float(no_samples)
                 data_term += data_term_sample
@@ -132,17 +134,19 @@ def main(config):
 
             with torch.no_grad():
                 warp_field = transformation_model.forward_3d_add(identity_grid, mu_v)
-                im2_warped = registration_module(im2, warp_field)
+                im_moving_warped = registration_module(im_moving, warp_field)
 
-                file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'im2_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_im_to_disk(im2_warped, file_path)
+                file_path = os.path.join(data_loader.save_dirs['im_moving_warped'],
+                                         'im_moving_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
+                save_im_to_disk(im_moving_warped, file_path)
 
-                file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
+                file_path = os.path.join(data_loader.save_dirs['im_moving_warped'],
+                                         'v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
                 save_field_to_disk(mu_v, file_path)
 
-                file_path = os.path.join(data_loader.save_dirs['im2_warped'], 'deformation_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
+                file_path = os.path.join(data_loader.save_dirs['im_moving_warped'],
+                                         'deformation_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
                 save_field_to_disk(warp_field, file_path)
-
 
     """
     calculate the metrics
@@ -150,8 +154,8 @@ def main(config):
 
     with torch.no_grad():
         warp_field = transformation_model.forward_3d_add(identity_grid, mu_v)
-        im2_warped = registration_module(im2, warp_field)
-        im_out = enc(im1, im2_warped)
+        im_moving_warped = registration_module(im_moving, warp_field)
+        im_out = enc(im_fixed, im_moving_warped)
 
         data_term = data_loss(im_out).sum()
         reg_term = reg_loss(mu_v).sum()

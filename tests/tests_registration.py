@@ -1,11 +1,6 @@
 from mpl_toolkits.mplot3d import Axes3D
 from torch.optim import SGD
 
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-import unittest
-
 from model.loss import SSD, RegLossL2, EntropyMultivariateNormal
 from model.model import SimEnc
 from utils.registration import RegistrationModule
@@ -13,6 +8,10 @@ from utils.sampler import sample_qf, sample_qv
 from utils.transformation import SVF
 from utils.util import init_identity_grid_3d, pixel_to_normalised_3d, save_im_to_disk
 
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import unittest
 
 # fix random seeds for reproducibility
 SEED = 123
@@ -48,11 +47,11 @@ class RegistrationTestMethods(unittest.TestCase):
 
         self.mu_v = torch.zeros(self.dims_v).to('cuda:0').requires_grad_(True)
 
-        var_v = ((1.0 / float(self.dim_x)) ** 2) * torch.ones(self.dims_v)
+        var_v = float(self.dim_x ** (-2)) * torch.ones(self.dims_v)
         self.log_var_v = torch.log(var_v).to('cuda:0').requires_grad_(True)
         self.u_v = torch.zeros(self.dims_v).to('cuda:0').requires_grad_(True)
 
-        var_f = (0.1 ** 2) * torch.ones(self.dims_im)
+        var_f = float(0.1 ** 2) * torch.ones(self.dims_im)
         self.log_var_f = torch.log(var_f).to('cuda:0').requires_grad_(True)
         self.u_f = torch.zeros(self.dims_im).to('cuda:0').requires_grad_(True)
 

@@ -38,21 +38,24 @@ class RGBDDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        
+
         img_pair = self.img_pairs[idx]
-        im1, im2 = np.array(nib.load(img_pair[0]).dataobj), np.array(nib.load(img_pair[1]).dataobj)
+        im_fixed, im_moving = np.array(nib.load(img_pair[0]).dataobj), \
+                              np.array(nib.load(img_pair[1]).dataobj)
 
         dim_x = 128
         dim_y = 128
         dim_z = 128
 
-        im1, im2 = torch.from_numpy(np.array(resize(im1, (dim_x, dim_y, dim_z)))),\
-                   torch.from_numpy(np.array(resize(im2, (dim_x, dim_y, dim_z))))
+        im_fixed, im_moving = torch.from_numpy(np.array(resize(im_fixed, (dim_x, dim_y, dim_z)))), \
+                              torch.from_numpy(np.array(resize(im_moving, (dim_x, dim_y, dim_z))))
 
-        im1_min, im1_max, im2_min, im2_max = torch.min(im1), torch.max(im1), torch.min(im2), torch.max(im2)
-        im1, im2 = 2.0 * (im1 - im1_min) / (im1_max - im1_min) - 1.0, 2.0 * (im2 - im2_min) / (im2_max - im2_min) - 1.0
+        im_fixed_min, im_fixed_max, im_moving_min, im_moving_max = torch.min(im_fixed), torch.max(im_fixed), \
+                                                                   torch.min(im_moving), torch.max(im_moving)
+        im_fixed, im_moving = 2.0 * (im_fixed - im_fixed_min) / (im_fixed_max - im_fixed_min) - 1.0, \
+                              2.0 * (im_moving - im_moving_min) / (im_moving_max - im_moving_min) - 1.0
 
-        assert im1.shape == im2.shape, "images don't have the same dimensions"
+        assert im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
         """
         if already exist, then load them from a file; otherwise create new ones
@@ -62,14 +65,14 @@ class RGBDDataset(Dataset):
         if path.exists(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):  # if exists, then load
             mu_v = torch.load(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
         else:  # otherwise initialise
-            mu_v = torch.zeros_like(im1)
+            mu_v = torch.zeros_like(im_fixed)
             mu_v = torch.stack([mu_v, mu_v, mu_v], dim=0)
 
         # sigma_v
         if path.exists(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
             log_var_v = torch.load(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
         else:
-            var_v = ((1.0 / float(mu_v.shape[-1])) ** 2) * torch.ones_like(mu_v)
+            var_v = float(dim_x ** (-2)) * torch.ones_like(mu_v)
             log_var_v = torch.log(var_v)
         # u_v
         if path.exists(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
@@ -77,28 +80,28 @@ class RGBDDataset(Dataset):
         else:
             u_v = torch.zeros_like(mu_v)
 
-        im1.unsqueeze_(0)
-        im2.unsqueeze_(0)
+        im_fixed.unsqueeze_(0)
+        im_moving.unsqueeze_(0)
 
         # sigma_f
         if path.exists(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
             log_var_f = torch.load(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
         else:
-            var_f = (0.1 ** 2) * torch.ones_like(im1)
+            var_f = (0.1 ** 2) * torch.ones_like(im_fixed)
             log_var_f = torch.log(var_f)
         # u_f
         if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
             u_f = torch.load(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
         else:
-            u_f = torch.zeros_like(im1)
+            u_f = torch.zeros_like(im_fixed)
 
         # identity grid
-        if self.identity_grid is None and len(im1.shape) == 3:
+        if self.identity_grid is None and len(im_fixed.shape) == 3:
             self.identity_grid = torch.squeeze(init_identity_grid_2d(dim_x, dim_y))
-        elif self.identity_grid is None and len(im1.shape) == 4:
+        elif self.identity_grid is None and len(im_fixed.shape) == 4:
             self.identity_grid = torch.squeeze(init_identity_grid_3d(dim_x, dim_y, dim_z))
 
-        return idx, im1, im2, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
+        return idx, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
 
 
 class LearnSimDataLoader(BaseDataLoader):
