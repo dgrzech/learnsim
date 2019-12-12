@@ -6,6 +6,7 @@ import json
 import nibabel as nib
 import numpy as np
 import pandas as pd
+import SimpleITK as sitk
 import torch
 
 
@@ -77,6 +78,29 @@ def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     z = -1.0 + 2.0 * px_idx_z / (dim_z - 1.0)
 
     return x, y, z
+
+
+def rescale_im_intensity(im):
+    return sitk.RescaleIntensity(im, -1.0, 1.0)
+
+
+def resample_im_to_be_isotropic(im):
+    im_spacing = im.GetSpacing()
+    im_size = im.GetSize()
+
+    min_spacing = min(im_spacing)
+
+    new_spacing = [min_spacing, min_spacing, min_spacing]
+    new_size = [int(round(im_size[0] * (im_spacing[0] / min_spacing))),
+                int(round(im_size[1] * (im_spacing[1] / min_spacing))),
+                int(round(im_size[2] * (im_spacing[2] / min_spacing)))]
+
+    resampled_im = sitk.Resample(im, new_size, sitk.Transform(),
+                                 sitk.sitkLinear, im.GetOrigin(),
+                                 new_spacing, im.GetDirection(), 0.0,
+                                 im.GetPixelID())
+
+    return resampled_im
 
 
 def save_im_to_disk(im, file_path, normalize=False):

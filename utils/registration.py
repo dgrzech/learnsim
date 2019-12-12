@@ -9,4 +9,4 @@ class RegistrationModule(nn.Module):
 
     def forward(self, m, warp_field):
         grid = warp_field.permute([0, 2, 3, 4, 1])
-        return F.grid_sample(m, grid, padding_mode='zeros')
+        return F.grid_sample(m, grid, padding_mode='border')

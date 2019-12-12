@@ -3,11 +3,11 @@ from skimage.transform import resize
 from torch.utils.data import Dataset
 
 from base import BaseDataLoader
-from utils.util import init_identity_grid_2d, init_identity_grid_3d
+from utils.util import init_identity_grid_2d, init_identity_grid_3d, rescale_im_intensity
 
-import nibabel as nib
 import numpy as np
 import os
+import SimpleITK as sitk
 import torch
 
 
@@ -40,20 +40,20 @@ class RGBDDataset(Dataset):
             idx = idx.tolist()
 
         img_pair = self.img_pairs[idx]
-        im_fixed, im_moving = np.array(nib.load(img_pair[0]).dataobj), \
-                              np.array(nib.load(img_pair[1]).dataobj)
+
+        im_fixed, im_moving = sitk.ReadImage(img_pair[0], sitk.sitkFloat32), \
+                              sitk.ReadImage(img_pair[1], sitk.sitkFloat32)
+        im_fixed, im_moving = rescale_im_intensity(im_fixed), \
+                              rescale_im_intensity(im_moving)
 
         dim_x = 128
         dim_y = 128
         dim_z = 128
 
-        im_fixed, im_moving = torch.from_numpy(np.array(resize(im_fixed, (dim_x, dim_y, dim_z)))), \
-                              torch.from_numpy(np.array(resize(im_moving, (dim_x, dim_y, dim_z))))
-
-        im_fixed_min, im_fixed_max, im_moving_min, im_moving_max = torch.min(im_fixed), torch.max(im_fixed), \
-                                                                   torch.min(im_moving), torch.max(im_moving)
-        im_fixed, im_moving = 2.0 * (im_fixed - im_fixed_min) / (im_fixed_max - im_fixed_min) - 1.0, \
-                              2.0 * (im_moving - im_moving_min) / (im_moving_max - im_moving_min) - 1.0
+        im_fixed, im_moving = resize(np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0)), (dim_x, dim_y, dim_z)), \
+                              resize(np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (dim_x, dim_y, dim_z))
+        im_fixed, im_moving = torch.from_numpy(im_fixed), \
+                              torch.from_numpy(im_moving)
 
         assert im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
