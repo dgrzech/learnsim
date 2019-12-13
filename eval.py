@@ -105,7 +105,7 @@ def main(config):
 
             for _ in range(no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = transformation_model.forward_3d_add(identity_grid, v_sample)
+                warp_field = transformation_model.forward_3d(identity_grid, v_sample)
 
                 im_moving_warped = registration_module(im_moving, warp_field)
                 im_out = enc(im_fixed, im_moving_warped)
@@ -133,7 +133,7 @@ def main(config):
             """
 
             with torch.no_grad():
-                warp_field = transformation_model.forward_3d_add(identity_grid, mu_v)
+                warp_field = transformation_model.forward_3d(identity_grid, mu_v)
                 im_moving_warped = registration_module(im_moving, warp_field)
 
                 file_path = os.path.join(data_loader.save_dirs['im_moving_warped'],
@@ -153,7 +153,7 @@ def main(config):
     """
 
     with torch.no_grad():
-        warp_field = transformation_model.forward_3d_add(identity_grid, mu_v)
+        warp_field = transformation_model.forward_3d(identity_grid, mu_v)
         im_moving_warped = registration_module(im_moving, warp_field)
         im_out = enc(im_fixed, im_moving_warped)
 

@@ -124,7 +124,7 @@ class RegistrationTestMethods(unittest.TestCase):
         total_loss = 0.0
 
         with torch.no_grad():
-            warp_field = self.transformation_model.forward_3d_add(self.identity_grid, self.mu_v)
+            warp_field = self.transformation_model.forward_3d(self.identity_grid, self.mu_v)
             im_moving_warped = self.registration_module(im_moving, warp_field)
 
             print(f'PRE-REGISTRATION: ' +
@@ -145,7 +145,7 @@ class RegistrationTestMethods(unittest.TestCase):
 
             for _ in range(self.no_samples):
                 v_sample = sample_qv(self.mu_v, self.log_var_v, self.u_v)
-                warp_field = self.transformation_model.forward_3d_add(self.identity_grid, v_sample)
+                warp_field = self.transformation_model.forward_3d(self.identity_grid, v_sample)
 
                 im_moving_warped = self.registration_module(im_moving, warp_field)
                 im_out = self.enc(im_fixed, im_moving_warped)
@@ -188,7 +188,7 @@ class RegistrationTestMethods(unittest.TestCase):
         for _ in range(self.no_samples):
             # first term
             v_sample = sample_qv(self.mu_v, self.log_var_v, self.u_v)
-            warp_field = self.transformation_model.forward_3d_add(self.identity_grid, v_sample)
+            warp_field = self.transformation_model.forward_3d(self.identity_grid, v_sample)
 
             im_moving_warped = self.registration_module(im_moving, warp_field)
             im_out = self.enc(im_fixed, im_moving_warped)
@@ -218,7 +218,7 @@ class RegistrationTestMethods(unittest.TestCase):
         """
 
         with torch.no_grad():
-            warp_field = self.transformation_model.forward_3d_add(self.identity_grid, self.mu_v)
+            warp_field = self.transformation_model.forward_3d(self.identity_grid, self.mu_v)
             im_moving_warped = self.registration_module(im_moving, warp_field)
 
             save_im_to_disk(im_moving_warped, './temp/moving_warped.nii.gz')

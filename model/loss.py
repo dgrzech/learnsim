@@ -1,5 +1,6 @@
 from abc import abstractmethod, ABC
 from torch import nn
+
 from utils.diff_op import GradientOperator
 
 import torch
@@ -12,9 +13,14 @@ data loss
 class DataLoss(nn.Module, ABC):
     def __init__(self):
         super(DataLoss, self).__init__()
-
-    def forward(self, z):
-        return self.reduce(z)
+    
+    @abstractmethod
+    def forward(self):
+        pass
+    
+    @abstractmethod
+    def map(self, im_fixed, im_moving):
+        pass
 
     @abstractmethod
     def reduce(self, z):
@@ -25,8 +31,31 @@ class SSD(DataLoss):
     def __init__(self):
         super(SSD, self).__init__()
 
+    def forward(self, z):
+        return self.reduce(z)
+
+    def map(self, im_fixed, im_moving):
+        return im_fixed - im_moving
+
     def reduce(self, z):
-        return 0.5 * torch.sum(z ** 2)
+        return 0.5 * torch.sum(torch.pow(z, 2))
+
+
+class LCC(DataLoss):
+    def __init__(self):
+        super(LCC, self).__init__()
+    
+    def forward(self, im_fixed, im_moving):
+        return self.reduce(im_fixed, im_moving)
+
+    def map(self, im_fixed, im_moving):
+        pass
+
+    def reduce(self, im_fixed, im_moving):
+        vx = im_fixed - torch.mean(im_fixed)
+        vy = im_moving - torch.mean(im_moving)
+
+        return torch.sum(vx * vy) / (torch.sqrt(torch.sum(torch.pow(vx, 2))) * torch.sqrt(torch.sum(torch.pow(vy, 2))))
 
 
 """
@@ -54,7 +83,7 @@ class RegLossL2(RegLoss):
 
     def forward(self, v):
         dv_dx, dv_dy, dv_dz = self.diff_op.apply(v)
-        return 0.5 * (torch.sum(dv_dx.pow(2)) + torch.sum(dv_dy.pow(2)) + torch.sum(dv_dz.pow(2)))
+        return 0.5 * (torch.sum(torch.pow(dv_dx, 2)) + torch.sum(torch.pow(dv_dy, 2)) + torch.sum(torch.pow(dv_dz, 2)))
 
 
 """
@@ -101,7 +130,7 @@ class KL(nn.Module):
         sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
 
         t1 = 36.0 * torch.sum(sigma_v ** 2) \
-             + torch.sum(du_v_dx ** 2) + torch.sum(du_v_dy ** 2) + torch.sum(du_v_dz ** 2)
+             + torch.sum(torch.pow(du_v_dx, 2)) + torch.sum(torch.pow(du_v_dy, 2)) + torch.sum(torch.pow(du_v_dz, 2))
         t2 = torch.sum(dv_dx ** 2) + torch.sum(dv_dy ** 2) + torch.sum(dv_dz ** 2)
         t3 = -1.0 * (torch.log(1.0 + torch.sum(u_v * torch.pow(sigma_v, -2) * u_v)) + torch.sum(log_var_v))
 

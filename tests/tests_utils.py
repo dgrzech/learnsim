@@ -31,13 +31,11 @@ class UtilsTestMethods(unittest.TestCase):
         transformation = SVF()
 
         # v = torch.zeros(1, 2, self.dim_x, self.dim_y)
-        # warp_field = transformation.forward_2d_add(self.identity_grid_2d, v)
-        # warp_field = transformation.forward_2d_comp(self.identity_grid_2d, v)
+        # warp_field = transformation.forward_2d(self.identity_grid_2d, v)
         # print('zero velocity field\n', warp_field)
 
         v = 0.2 * torch.ones(1, 2, self.dim_x, self.dim_y)
-        warp_field = transformation.forward_2d_add(self.identity_grid_2d, v)
-        # warp_field = transformation.forward_2d_comp(self.identity_grid_2d, v)
+        warp_field = transformation.forward_2d(self.identity_grid_2d, v)
         # print('uniform velocity field\n', warp_field)
         plot_2d(v, warp_field)
 
@@ -45,13 +43,11 @@ class UtilsTestMethods(unittest.TestCase):
         transformation = SVF()
 
         # v = torch.zeros(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        # warp_field = transformation.forward_3d_add(self.identity_grid_3d, v)
-        # warp_field = transformation.forward_3d_comp(self.identity_grid_3d, v)
+        # warp_field = transformation.forward_3d(self.identity_grid_3d, v)
         # print('zero velocity field\n', warp_field)
 
         v = 0.2 * torch.ones(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        warp_field = transformation.forward_3d_add(self.identity_grid_3d, v)
-        # warp_field = transformation.forward_3d_comp(self.identity_grid_3d, v)
+        warp_field = transformation.forward_3d(self.identity_grid_3d, v)
         # print('uniform velocity field\n', warp_field)
         plot_3d(v, warp_field)
 
@@ -66,8 +62,7 @@ class UtilsTestMethods(unittest.TestCase):
                 v[0, 0, idx_x, idx_y] = y
                 v[0, 1, idx_x, idx_y] = -1.0 * x
 
-        warp_field = transformation.forward_2d_add(self.identity_grid_2d, v)
-        # warp_field = transformation.forward_2d_comp(self.identity_grid_2d, v)
+        warp_field = transformation.forward_2d(self.identity_grid_2d, v)
         # print(warp_field)
         plot_2d(v, warp_field)
 
@@ -84,7 +79,6 @@ class UtilsTestMethods(unittest.TestCase):
                     v[0, 1, idx_x, idx_y, idx_z] = -1.0 * x
                     v[0, 2, idx_x, idx_y, idx_z] = 0.0
 
-        warp_field = transformation.forward_3d_add(self.identity_grid_3d, v)
-        # warp_field = transformation.forward_3d_comp(self.identity_grid_3d, v)
+        warp_field = transformation.forward_3d(self.identity_grid_3d, v)
         # print(warp_field)
         plot_3d(v, warp_field)
