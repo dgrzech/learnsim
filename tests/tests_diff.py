@@ -144,9 +144,9 @@ class DiffTestMethods(unittest.TestCase):
         dv_y_dz = dv_dz[0, 1, :, :, :]
         dv_z_dz = dv_dz[0, 2, :, :, :]
 
-        for idx_z in range(self.dim_z - 1):
-            for idx_y in range(self.dim_y - 1):
-                for idx_x in range(self.dim_z - 1):
+        for idx_z in range(self.dim_z):
+            for idx_y in range(self.dim_y):
+                for idx_x in range(self.dim_z):
                     dv_x_dx_val = dv_x_dx[idx_z, idx_y, idx_x].item()
                     dv_y_dx_val = dv_y_dx[idx_z, idx_y, idx_x].item()
                     dv_z_dx_val = dv_z_dx[idx_z, idx_y, idx_x].item()
@@ -166,6 +166,11 @@ class DiffTestMethods(unittest.TestCase):
                     #       ', dv_dy: ', dv_x_dy_val, dv_y_dy_val, dv_z_dy_val,
                     #       ', dv_dz: ', dv_x_dz_val, dv_y_dz_val, dv_z_dz_val)
 
+                    if idx_x == 0 or idx_x == self.dim_x - 1 \
+                            or idx_y == 0 or idx_y == self.dim_y - 1 \
+                            or idx_z == 0 or idx_z == self.dim_z - 1:
+                        continue
+
                     assert pytest.approx(dv_x_dx_val, 1e-5) == 1.0
                     assert pytest.approx(dv_y_dx_val, 1e-5) == 0.0
                     assert pytest.approx(dv_z_dx_val, 1e-5) == 0.0
@@ -175,5 +180,5 @@ class DiffTestMethods(unittest.TestCase):
                     assert pytest.approx(dv_z_dy_val, 1e-5) == 0.0
 
                     assert pytest.approx(dv_x_dz_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_y_dz_val, 1e-5) == 2.0 * (idx_z + 0.5)
+                    assert pytest.approx(dv_y_dz_val, 1e-5) == 2.0 * idx_z
                     assert pytest.approx(dv_z_dz_val, 1e-5) == 0.0
