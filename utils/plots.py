@@ -100,3 +100,39 @@ def plot_3d(v, warp_field):
 
     # show
     plt.show()
+
+
+def plot_grid(grid):
+    grid = grid.cpu().numpy()
+
+    grid_x = grid[0, 0, :, :, :]
+    grid_y = grid[0, 1, :, :, :]
+    grid_z = grid[0, 2, :, :, :]
+
+    dim = grid_x.shape[0]
+    idx = np.array([i for i in range(dim) if i % 16 == 0])
+    idx = np.append(idx, [dim - 1])
+
+    grid_x = grid_x[idx]
+    grid_x = grid_x[:, idx]
+    grid_x = grid_x[:, :, idx]
+
+    grid_y = grid_y[idx]
+    grid_y = grid_y[:, idx]
+    grid_y = grid_y[:, :, idx]
+
+    grid_z = grid_z[idx]
+    grid_z = grid_z[:, idx]
+    grid_z = grid_z[:, :, idx]
+
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    ax.scatter(grid_x, grid_y, grid_z)
+
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+
+    plt.show(block=False)
+    plt.pause(10)
+    plt.close()
