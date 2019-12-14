@@ -24,11 +24,19 @@ class RGBDDataset(Dataset):
                                    for f in listdir(scene_paths) if path.isfile(path.join(scene_paths, f))]}
         temp = img_paths[scene_paths]
 
-        for img_path in temp:
-            sublist = [other_path for other_path in temp if other_path != img_path]
+        # for img_path in temp:
+        #     sublist = [other_img_path for other_img_path in temp if other_img_path != img_path]
 
-            for other_img_path in sublist:
-                self.img_pairs.append((img_path, other_img_path))
+        #     for other_img_path in sublist:
+        #         self.img_pairs.append((img_path, other_img_path))
+
+        img_path = temp[0]
+        
+        for other_img_path in temp:
+            if other_img_path == img_path:
+                continue
+
+            self.img_pairs.append((img_path, other_img_path))
 
     def __len__(self):
         return len(self.img_pairs)
