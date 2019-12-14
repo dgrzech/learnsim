@@ -84,9 +84,9 @@ def main(config):
 
         identity_grid = identity_grid.to(device, non_blocking=True)
 
-        file_path = os.path.join(data_loader.save_dirs['im_moving_warped'], 'im_fixed_' + str(batch_idx) + '.nii.gz')
+        file_path = os.path.join(data_loader.save_dirs['im_fixed'], 'im_fixed_' + str(batch_idx) + '.nii.gz')
         save_im_to_disk(im_fixed, file_path)
-        file_path = os.path.join(data_loader.save_dirs['im_moving_warped'], 'im_moving_' + str(batch_idx) + '.nii.gz')
+        file_path = os.path.join(data_loader.save_dirs['im_moving'], 'im_moving_' + str(batch_idx) + '.nii.gz')
         save_im_to_disk(im_moving, file_path)
 
         """
@@ -129,7 +129,7 @@ def main(config):
                   )
 
             """
-            save the warped moving image to disk
+            save the output images and fields to disk
             """
 
             with torch.no_grad():
@@ -140,12 +140,12 @@ def main(config):
                                          'im_moving_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
                 save_im_to_disk(im_moving_warped, file_path)
 
-                file_path = os.path.join(data_loader.save_dirs['im_moving_warped'],
-                                         'v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
+                file_path = os.path.join(data_loader.save_dirs['mu_v'],
+                                         'mu_v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
                 save_field_to_disk(mu_v, file_path)
 
-                file_path = os.path.join(data_loader.save_dirs['im_moving_warped'],
-                                         'deformation_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
+                file_path = os.path.join(data_loader.save_dirs['deformation_field'],
+                                         'deformation_field_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
                 save_field_to_disk(warp_field, file_path)
 
     """

@@ -40,6 +40,11 @@ class ConfigParser:
         self._u_v_dir = save_dir / 'models' / exper_name / run_id / 'u_v'
         self._log_var_f_dir = save_dir / 'models' / exper_name / run_id / 'log_var_f'
         self._u_f_dir = save_dir / 'models' / exper_name / run_id / 'u_f'
+        
+        self._deformation_field_dir = save_dir / 'models' / exper_name / run_id / 'deformation_field'
+
+        self._im_fixed_dir = save_dir / 'models' / exper_name / run_id / 'im_fixed'
+        self._im_moving_dir = save_dir / 'models' / exper_name / run_id / 'im_moving'
         self._im_moving_warped_dir = save_dir / 'models' / exper_name / run_id / 'im_moving_warped'
 
         # make directory for saving checkpoints and log.
@@ -52,6 +57,11 @@ class ConfigParser:
         self.u_v_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_var_f_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.u_f_dir.mkdir(parents=True, exist_ok=exist_ok)
+        
+        self.deformation_field_dir.mkdir(parents=True, exist_ok=exist_ok)
+
+        self.im_fixed_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.im_moving_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.im_moving_warped_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
@@ -173,6 +183,18 @@ class ConfigParser:
         return self._u_f_dir
 
     @property
+    def deformation_field_dir(self):
+        return self._deformation_field_dir
+
+    @property
+    def im_fixed_dir(self):
+        return self._im_fixed_dir
+    
+    @property
+    def im_moving_dir(self):
+        return self._im_moving_dir
+
+    @property
     def im_moving_warped_dir(self):
         return self._im_moving_warped_dir
 
@@ -181,6 +203,8 @@ class ConfigParser:
         return {'mu_v': self.mu_v_dir,
                 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
                 'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
+                'deformation_field': self.deformation_field_dir,
+                'im_fixed': self.im_fixed_dir, 'im_moving': self.im_moving_dir,
                 'im_moving_warped': self.im_moving_warped_dir}
 
 
