@@ -1,9 +1,9 @@
 from os import listdir, path
-from skimage.transform import resize
+from skimage import transform
 from torch.utils.data import Dataset
 
 from base import BaseDataLoader
-from utils.util import init_identity_grid_2d, init_identity_grid_3d, rescale_im_intensity
+from utils.util import init_identity_grid_2d, init_identity_grid_3d, rescale_im, standardise_im
 
 import numpy as np
 import os
@@ -43,17 +43,21 @@ class RGBDDataset(Dataset):
 
         im_fixed, im_moving = sitk.ReadImage(img_pair[0], sitk.sitkFloat32), \
                               sitk.ReadImage(img_pair[1], sitk.sitkFloat32)
-        im_fixed, im_moving = rescale_im_intensity(im_fixed), \
-                              rescale_im_intensity(im_moving)
 
         dim_x = 128
         dim_y = 128
         dim_z = 128
 
-        im_fixed, im_moving = resize(np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0)), (dim_x, dim_y, dim_z)), \
-                              resize(np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (dim_x, dim_y, dim_z))
-        im_fixed, im_moving = torch.from_numpy(im_fixed), \
-                              torch.from_numpy(im_moving)
+        im_fixed, im_moving = torch.from_numpy(transform.resize(
+                                  np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0)), (dim_x, dim_y, dim_z))), \
+                              torch.from_numpy(transform.resize(
+                                  np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (dim_x, dim_y, dim_z)))
+        
+        # standardise images
+        im_fixed, im_moving = standardise_im(im_fixed), standardise_im(im_moving)
+
+        # rescale to range (-1, 1)
+        im_fixed, im_moving = rescale_im(im_fixed), rescale_im(im_moving)
 
         assert im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 

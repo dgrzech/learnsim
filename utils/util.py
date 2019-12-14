@@ -81,10 +81,6 @@ def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     return x, y, z
 
 
-def rescale_im_intensity(im):
-    return sitk.RescaleIntensity(im, -1.0, 1.0)
-
-
 def resample_im_to_be_isotropic(im):
     im_spacing = im.GetSpacing()
     im_size = im.GetSize()
@@ -102,6 +98,22 @@ def resample_im_to_be_isotropic(im):
                                  im.GetPixelID())
 
     return resampled_im
+
+
+def rescale_im(im, range_min=-1.0, range_max=1.0):
+    im_min, im_max = torch.min(im), torch.max(im)
+
+    im = (range_max - range_min) * (im - im_min) / (im_max - im_min) + range_min
+    return im
+
+
+def standardise_im(im):
+    im_mean, im_std = torch.mean(im), torch.std(im)
+    
+    im -= im_mean
+    im /= im_std
+
+    return im
 
 
 def save_im_to_disk(im, file_path):
