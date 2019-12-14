@@ -15,22 +15,20 @@ class RGBDDataset(Dataset):
     def __init__(self, scene_paths, save_paths, no_consecutive_frames):
         self.scene_paths = scene_paths
         self.save_paths = save_paths
+        self.no_consecutive_frames = no_consecutive_frames
+        
+        self.img_pairs = []
+        self.identity_grid = None
 
         img_paths = {scene_paths: [path.join(scene_paths, f)
                                    for f in listdir(scene_paths) if path.isfile(path.join(scene_paths, f))]}
-
-        self.no_consecutive_frames = no_consecutive_frames
-        self.img_pairs = []
-
         temp = img_paths[scene_paths]
 
-        for idx, img_path in enumerate(temp):
-            sublist = temp[idx+1:]
+        for img_path in temp:
+            sublist = [other_path for other_path in temp if other_path != img_path]
 
-            for next_img_path in sublist[:self.no_consecutive_frames]:
-                self.img_pairs.append((img_path, next_img_path))
-
-        self.identity_grid = None
+            for other_img_path in sublist:
+                self.img_pairs.append((img_path, other_img_path))
 
     def __len__(self):
         return len(self.img_pairs)
