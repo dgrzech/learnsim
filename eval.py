@@ -84,9 +84,9 @@ def main(config):
 
         identity_grid = identity_grid.to(device, non_blocking=True)
 
-        file_path = os.path.join(data_loader.save_dirs['im_fixed'], 'im_fixed_' + str(batch_idx) + '.nii.gz')
+        file_path = os.path.join(data_loader.save_dirs['images'], 'im_fixed_' + str(batch_idx) + '.nii.gz')
         save_im_to_disk(im_fixed, file_path)
-        file_path = os.path.join(data_loader.save_dirs['im_moving'], 'im_moving_' + str(batch_idx) + '.nii.gz')
+        file_path = os.path.join(data_loader.save_dirs['images'], 'im_moving_' + str(batch_idx) + '.nii.gz')
         save_im_to_disk(im_moving, file_path)
 
         """
@@ -136,11 +136,11 @@ def main(config):
                 warp_field = transformation_model.forward_3d(identity_grid, mu_v)
                 im_moving_warped = registration_module(im_moving, warp_field)
 
-                file_path = os.path.join(data_loader.save_dirs['im_moving_warped'],
+                file_path = os.path.join(data_loader.save_dirs['images'],
                                          'im_moving_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
                 save_im_to_disk(im_moving_warped, file_path)
 
-                file_path = os.path.join(data_loader.save_dirs['mu_v'],
+                file_path = os.path.join(data_loader.save_dirs['mu_v_field'],
                                          'mu_v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
                 save_field_to_disk(mu_v, file_path)
 

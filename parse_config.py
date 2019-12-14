@@ -30,10 +30,13 @@ class ConfigParser:
         save_dir = Path(self.config['trainer']['save_dir'])
 
         exper_name = self.config['name']
+
         if run_id is None:  # use timestamp as default run-id
             run_id = datetime.now().strftime(r'%m%d_%H%M%S')
+
         self._save_dir = save_dir / 'models' / exper_name / run_id
         self._log_dir = save_dir / 'log' / exper_name / run_id
+        self._im_dir = save_dir / 'images' / exper_name / run_id
 
         self._mu_v_dir = save_dir / 'models' / exper_name / run_id / 'mu_v'
         self._log_var_v_dir = save_dir / 'models' / exper_name / run_id / 'log_var_v'
@@ -41,16 +44,17 @@ class ConfigParser:
         self._log_var_f_dir = save_dir / 'models' / exper_name / run_id / 'log_var_f'
         self._u_f_dir = save_dir / 'models' / exper_name / run_id / 'u_f'
         
-        self._deformation_field_dir = save_dir / 'models' / exper_name / run_id / 'deformation_field'
+        self._mu_v_field_dir = save_dir / 'images' / exper_name / run_id / 'mu_v'
+        self._deformation_field_dir = save_dir / 'images' / exper_name / run_id / 'deformation_field'
 
-        self._im_fixed_dir = save_dir / 'models' / exper_name / run_id / 'im_fixed'
-        self._im_moving_dir = save_dir / 'models' / exper_name / run_id / 'im_moving'
-        self._im_moving_warped_dir = save_dir / 'models' / exper_name / run_id / 'im_moving_warped'
+        self._images_dir = save_dir / 'images' / exper_name / run_id / 'images'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
+
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.mu_v_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_var_v_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -58,11 +62,10 @@ class ConfigParser:
         self.log_var_f_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.u_f_dir.mkdir(parents=True, exist_ok=exist_ok)
         
+        self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.deformation_field_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        self.im_fixed_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.im_moving_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.im_moving_warped_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.images_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -163,6 +166,10 @@ class ConfigParser:
         return self._log_dir
 
     @property
+    def im_dir(self):
+        return self._im_dir
+
+    @property
     def mu_v_dir(self):
         return self._mu_v_dir
 
@@ -183,29 +190,24 @@ class ConfigParser:
         return self._u_f_dir
 
     @property
+    def mu_v_field_dir(self):
+        return self._mu_v_field_dir
+
+    @property
     def deformation_field_dir(self):
         return self._deformation_field_dir
 
     @property
-    def im_fixed_dir(self):
-        return self._im_fixed_dir
+    def images_dir(self):
+        return self._images_dir
     
-    @property
-    def im_moving_dir(self):
-        return self._im_moving_dir
-
-    @property
-    def im_moving_warped_dir(self):
-        return self._im_moving_warped_dir
-
     @property
     def save_dirs(self):
         return {'mu_v': self.mu_v_dir,
                 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
                 'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
-                'deformation_field': self.deformation_field_dir,
-                'im_fixed': self.im_fixed_dir, 'im_moving': self.im_moving_dir,
-                'im_moving_warped': self.im_moving_warped_dir}
+                'mu_v_field': self.mu_v_field_dir, 'deformation_field': self.deformation_field_dir,
+                'images': self.images_dir}
 
 
 # helper functions to update config dict with custom cli options
