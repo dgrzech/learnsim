@@ -1,6 +1,7 @@
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 from utils.sampler import sample_qv, sample_qf
+from utils.util import save_field_to_disk, save_im_to_disk
 
 import numpy as np
 import os
@@ -33,6 +34,20 @@ class Trainer(BaseTrainer):
 
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
+
+    def _save_images(self, im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped):
+        im_pair_idxs = im_pair_idxs.tolist()
+
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+            save_im_to_disk(im_fixed, os.path.join(self.data_loader.save_dirs['images'],
+                                      'im_fixed_' + str(im_pair_idx) + '.nii.gz'))
+            save_im_to_disk(im_moving, os.path.join(self.data_loader.save_dirs['images'],
+                                      'im_moving_' + str(im_pair_idx) + '.nii.gz'))
+            save_im_to_disk(im_moving_warped, os.path.join(self.data_loader.save_dirs['images'],
+                                              'im_moving_warped_' + str(im_pair_idx) + '.nii.gz'))
+
+            save_field_to_disk(mu_v, os.path.join(self.data_loader.save_dirs['mu_v_field'],
+                                     'mu_v_' + str(im_pair_idx) + '.nii.gz'))
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         mu_v = mu_v.cpu()
@@ -82,6 +97,15 @@ class Trainer(BaseTrainer):
 
             total_loss = 0.0
 
+            with torch.no_grad():
+                warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
+                im_moving_warped = self.registration_module(im_moving, warp_field)
+
+                print(f'\nBATCH IDX: ' + str(batch_idx) + ', PRE-REGISTRATION: ' +
+                      f'{self.data_loss(im_fixed - im_moving).item():.2f}' +
+                      f', {self.data_loss(im_fixed - im_moving_warped).item():.2f}\n'
+                      )
+
             """
             initialise the optimisers
             """
@@ -102,7 +126,7 @@ class Trainer(BaseTrainer):
 
                 for _ in range(self.no_samples):
                     v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    warp_field = self.transformation_model.forward_3d_add(identity_grid, v_sample)
+                    warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
 
                     im_moving_warped = self.registration_module(im_moving, warp_field)
                     im_out = self.enc(im_fixed, im_moving_warped)
@@ -146,7 +170,7 @@ class Trainer(BaseTrainer):
             for _ in range(self.no_samples):
                 # first term
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = self.transformation_model.forward_3d_add(identity_grid, v_sample)
+                warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
 
                 im_moving_warped = self.registration_module(im_moving, warp_field)
                 im_out = self.enc(im_fixed, im_moving_warped)
@@ -185,7 +209,8 @@ class Trainer(BaseTrainer):
             self.train_metrics.update('loss', total_loss)
 
             with torch.no_grad():
-                warp_field = self.transformation_model.forward_3d_add(identity_grid, mu_v)
+                warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
+
                 im_moving_warped = self.registration_module(im_moving, warp_field)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
@@ -196,6 +221,12 @@ class Trainer(BaseTrainer):
                 self.train_metrics.update('data_term', data_term.item())
                 self.train_metrics.update('reg_term', reg_term.item())
                 self.train_metrics.update('entropy_term', entropy_term.item())
+
+                """
+                save the images
+                """
+
+                self._save_images(im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped)
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(

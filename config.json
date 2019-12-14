@@ -5,7 +5,7 @@
     "arch": {
         "type": "SimEnc",
         "args": {
-            "s": 7
+            "s": 3
         }
     },
 
