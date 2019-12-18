@@ -1,0 +1,82 @@
+{
+    "name": "LearnSim",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "SimEnc",
+        "args": {
+            "s": 3
+        }
+    },
+
+    "data_loss": {
+        "type": "LCC",
+        "args": {
+            "s": 4
+        }
+    },
+    "reg_loss": {
+        "type": "RegLossL2",
+        "args": {
+            "diff_op": "GradientOperator"
+        }
+    },
+    "entropy": {
+        "type": "EntropyMultivariateNormal",
+        "args": {}
+    },
+
+    "transformation_model": {
+        "type": "SVF",
+        "args": {}
+    },
+    "registration_module": {
+        "type": "RegistrationModule",
+        "args": {}
+    },
+
+    "optimizer_v": {
+        "type": "Adam",
+        "args": {
+            "lr": 5e-4
+        }
+    },
+    "optimizer_f": {
+        "type": "SGD",
+        "args": {
+            "lr": 0.001
+        }
+    },
+    "optimizer_phi": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.0001,
+            "weight_decay": 0,
+            "amsgrad": true
+        }
+    },
+
+    "data_loader": {
+        "type": "LearnSimDataLoader",
+        "args":{
+            "data_dir": "/vol/bitbucket/dig15/biobank_test/",
+            "batch_size": 1,
+            "num_workers": 1,
+            "shuffle": true
+        }
+    },
+
+    "trainer": {
+        "epochs": 4096,
+        "no_samples": 1,
+	    "no_steps_v": 128,
+
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+        
+        "monitor": "min val_loss",
+        "early_stop": 10,
+        "tensorboard": true
+    }
+}

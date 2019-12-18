@@ -1,6 +1,5 @@
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
-from utils.sampler import sample_qv, sample_qf
 from utils.util import save_field_to_disk, save_im_to_disk
 
 import numpy as np
@@ -102,38 +101,27 @@ class Trainer(BaseTrainer):
                 im_moving_warped = self.registration_module(im_moving, warp_field)
 
                 print(f'\nBATCH IDX: ' + str(batch_idx) + ', PRE-REGISTRATION: ' +
-                      f'{self.data_loss(im_fixed - im_moving).item():.2f}' +
-                      f', {self.data_loss(im_fixed - im_moving_warped).item():.2f}\n'
+                      f'{self.data_loss(im_fixed, im_moving).item():.5f}' +
+                      f', {self.data_loss(im_fixed, im_moving_warped).item():.5f}\n'
                       )
 
             """
-            initialise the optimisers
+            initialise the optimiser
             """
 
-            optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
-            optimizer_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
+            optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v])
 
             """
             q_v
             """
 
-            self.enc.eval()
-            self.enc.set_grad_enabled(False)
-
             for iter_no in range(self.no_steps_v):
                 optimizer_v.zero_grad()
-                data_term = 0.0
 
-                for _ in range(self.no_samples):
-                    v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
+                warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
+                im_moving_warped = self.registration_module(im_moving, warp_field)
 
-                    im_moving_warped = self.registration_module(im_moving, warp_field)
-                    im_out = self.enc(im_fixed, im_moving_warped)
-
-                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-                    data_term += data_term_sample
-
+                data_term = self.data_loss(im_fixed, im_moving_warped)
                 reg_term = self.reg_loss(mu_v).sum()
                 entropy_term = self.entropy(log_var_v, u_v).sum()
 
@@ -143,54 +131,17 @@ class Trainer(BaseTrainer):
 
                 if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
                     print(f'ITERATION ' + str(iter_no) + '/' + str(self.no_steps_v - 1) +
-                          f', TOTAL ENERGY: {loss_qv.item():.2f}' +
-                          f'\ndata: {data_term.item():.2f}' +
-                          f', regularisation: {reg_term.item():.2f}' +
-                          f', entropy: {entropy_term.item():.2f}'
-                          )
+                            f', TOTAL ENERGY: {loss_qv.item():.5f}' +
+                            f'\ndata: {data_term.item():.5f}' +
+                            f', regularisation: {reg_term.item():.5f}' +
+                            f', entropy: {entropy_term.item():.5f}'
+                         )
 
                 total_loss += (loss_qv.item() / float(self.no_steps_v))
 
             mu_v.requires_grad_(False)
             log_var_v.requires_grad_(False)
             u_v.requires_grad_(False)
-
-            """
-            q_phi
-            """
-
-            self.enc.train()
-            self.enc.set_grad_enabled(True)
-
-            self.optimizer_phi.zero_grad()
-            optimizer_f.zero_grad()
-
-            loss_qphi = 0.0
-
-            for _ in range(self.no_samples):
-                # first term
-                v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
-
-                im_moving_warped = self.registration_module(im_moving, warp_field)
-                im_out = self.enc(im_fixed, im_moving_warped)
-
-                data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-                loss_qphi += data_term_sample
-
-                # second term
-                for _ in range(self.no_samples):
-                    f_sample = sample_qf(im_fixed, log_var_f, u_f)
-                    im_out = self.enc(f_sample, im_moving_warped)
-
-                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
-                    loss_qphi -= data_term_sample
-
-            loss_qphi.backward()
-            optimizer_f.step()
-            self.optimizer_phi.step()
-
-            total_loss += loss_qphi.item()
 
             log_var_f.requires_grad_(False)
             u_f.requires_grad_(False)
@@ -210,11 +161,9 @@ class Trainer(BaseTrainer):
 
             with torch.no_grad():
                 warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
-
                 im_moving_warped = self.registration_module(im_moving, warp_field)
-                im_out = self.enc(im_fixed, im_moving_warped)
 
-                data_term = self.data_loss(im_out).mean()
+                data_term = self.data_loss(im_fixed, im_moving_warped).mean()
                 reg_term = self.reg_loss(mu_v).mean()
                 entropy_term = self.entropy(log_var_v, u_v).mean()
 
