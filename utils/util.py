@@ -37,6 +37,10 @@ def inf_loop(data_loader):
         yield from loader
 
 
+def compute_norm(v):
+    return torch.norm(v, p=2, dim=1, keepdim=True)
+
+
 def init_identity_grid_2d(nx, ny):
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)

@@ -48,6 +48,7 @@ class ConfigParser:
         self._deformation_field_dir = save_dir / 'images' / exper_name / run_id / 'deformation_field'
 
         self._images_dir = save_dir / 'images' / exper_name / run_id / 'images'
+        self._norms_dir = save_dir / 'images' / exper_name / run_id / 'norms'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
@@ -66,6 +67,7 @@ class ConfigParser:
         self.deformation_field_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.images_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -202,12 +204,16 @@ class ConfigParser:
         return self._images_dir
     
     @property
+    def norms_dir(self):
+        return self._norms_dir
+    
+    @property
     def save_dirs(self):
         return {'mu_v': self.mu_v_dir,
                 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
                 'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
                 'mu_v_field': self.mu_v_field_dir, 'deformation_field': self.deformation_field_dir,
-                'images': self.images_dir}
+                'images': self.images_dir, 'norms': self.norms_dir}
 
 
 # helper functions to update config dict with custom cli options

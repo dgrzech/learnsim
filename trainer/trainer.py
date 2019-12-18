@@ -1,7 +1,7 @@
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 from utils.sampler import sample_qv, sample_qf
-from utils.util import save_field_to_disk, save_im_to_disk
+from utils.util import compute_norm, save_field_to_disk, save_im_to_disk
 
 import numpy as np
 import os
@@ -35,7 +35,7 @@ class Trainer(BaseTrainer):
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
 
-    def _save_images(self, im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped, log_var_f=None, u_f=None):
+    def _save_images(self, im_pair_idxs, im_fixed, im_moving, im_moving_warped, mu_v=None, log_var_v=None, u_v=None, log_var_f=None, u_f=None):
         im_pair_idxs = im_pair_idxs.tolist()
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -46,13 +46,25 @@ class Trainer(BaseTrainer):
             save_im_to_disk(im_moving_warped, os.path.join(self.data_loader.save_dirs['images'],
                                               'im_moving_warped_' + str(im_pair_idx) + '.nii.gz'))
 
-            save_field_to_disk(mu_v, os.path.join(self.data_loader.save_dirs['mu_v_field'],
-                                     'mu_v_' + str(im_pair_idx) + '.nii.gz'))
-
             save_im_to_disk(log_var_f, os.path.join(self.data_loader.save_dirs['images'],
                                                     'log_var_f_' + str(im_pair_idx) + '.nii.gz'))
             save_im_to_disk(u_f, os.path.join(self.data_loader.save_dirs['images'],
                                               'u_f_' + str(im_pair_idx) + '.nii.gz'))
+            
+            save_field_to_disk(mu_v, os.path.join(self.data_loader.save_dirs['mu_v_field'],
+                                     'mu_v_' + str(im_pair_idx) + '.nii.gz'))
+
+            mu_v_norm = compute_norm(mu_v)
+            log_var_v_norm = compute_norm(log_var_v)
+            u_v_norm = compute_norm(u_v)
+
+            save_im_to_disk(mu_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
+                                                    'mu_v_norm_' + str(im_pair_idx) + '.nii.gz'))
+            save_im_to_disk(log_var_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
+                                                         'log_var_v_norm_' + str(im_pair_idx) + '.nii.gz'))
+            save_im_to_disk(u_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
+                                                   'u_v_norm_' + str(im_pair_idx) + '.nii.gz'))
+
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         mu_v = mu_v.cpu()
@@ -214,7 +226,7 @@ class Trainer(BaseTrainer):
                 save the images
                 """
 
-                self._save_images(im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped, log_var_f, u_f)
+                self._save_images(im_pair_idxs, im_fixed, im_moving, im_moving_warped, mu_v, log_var_v, u_v, log_var_f, u_f)
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(

@@ -1,7 +1,8 @@
 from utils.plots import plot_2d, plot_3d
 from utils.transformation import SVF
-from utils.util import init_identity_grid_3d, init_identity_grid_2d, pixel_to_normalised_3d, pixel_to_normalised_2d
+from utils.util import compute_norm, init_identity_grid_3d, init_identity_grid_2d, pixel_to_normalised_3d, pixel_to_normalised_2d
 
+import math
 import torch
 import unittest
 
@@ -26,6 +27,14 @@ class UtilsTestMethods(unittest.TestCase):
 
         self.identity_grid_2d = init_identity_grid_2d(self.dim_x, self.dim_y)
         self.identity_grid_3d = init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z)
+
+    def test_norm(self):
+        v = torch.ones((1, 3, self.dim_x, self.dim_y, self.dim_z))
+
+        v_norm = compute_norm(v)
+        val_true = math.sqrt(3) * torch.ones((1, 3, self.dim_x, self.dim_y, self.dim_z))
+
+        assert torch.all(torch.eq(v_norm, val_true))
 
     def test_scaling_and_squaring_2d_translation(self):
         transformation = SVF()
