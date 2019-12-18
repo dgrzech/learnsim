@@ -10,6 +10,30 @@ import SimpleITK as sitk
 import torch
 
 
+def init_mu_v(dims):
+    return torch.zeros(dims)
+
+
+def init_log_var_v(dims):
+    dim_x = dims[1]
+    var_v = float(dim_x ** (-2)) * torch.ones(dims)
+
+    return torch.log(var_v)
+
+
+def init_u_v(dims):
+    return torch.zeros(dims)
+
+
+def init_log_var_f(dims):
+    var_f = (0.1 ** 2) * torch.ones(dims)
+    return torch.log(var_f)
+
+
+def init_u_f(dims):
+    return torch.zeros(dims)
+
+
 class BiobankDataset(Dataset):
     def __init__(self, scene_paths, save_paths):
         self.scene_paths = scene_paths
@@ -61,6 +85,12 @@ class BiobankDataset(Dataset):
 
         assert im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
+        im_fixed.unsqueeze_(0)
+        im_moving.unsqueeze_(0)
+
+        dims_im = (1, self.dim_x, self.dim_y, self.dim_z)
+        dims_v = (3, self.dim_x, self.dim_y, self.dim_z)
+
         """
         if already exist then load them from a file, otherwise initialise new ones
         """
@@ -69,35 +99,29 @@ class BiobankDataset(Dataset):
         if path.exists(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):
             mu_v = torch.load(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
         else:
-            mu_v = torch.zeros_like(im_fixed)
-            mu_v = torch.stack([mu_v, mu_v, mu_v], dim=0)
+            mu_v = init_mu_v(dims_v)
 
         # sigma_v
         if path.exists(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
             log_var_v = torch.load(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
         else:
-            var_v = float(self.dim_x ** (-2)) * torch.ones_like(mu_v)
-            log_var_v = torch.log(var_v)
+            log_var_v = init_log_var_v(dims_v)
         # u_v
         if path.exists(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
             u_v = torch.load(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
         else:
-            u_v = torch.zeros_like(mu_v)
-
-        im_fixed.unsqueeze_(0)
-        im_moving.unsqueeze_(0)
+            u_v = init_u_v(dims_v)
 
         # sigma_f
         if path.exists(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
             log_var_f = torch.load(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
         else:
-            var_f = (0.1 ** 2) * torch.ones_like(im_fixed)
-            log_var_f = torch.log(var_f)
+            log_var_f = init_log_var_f(dims_im)
         # u_f
         if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
             u_f = torch.load(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
         else:
-            u_f = torch.zeros_like(im_fixed)
+            u_f = init_u_f(dims_im)
 
         # identity grid
         if self.identity_grid is None and len(im_fixed.shape) == 3:
@@ -146,9 +170,15 @@ class RGBDDataset(Dataset):
 
         assert im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
-        dim_x = im_fixed.shape[2]
-        dim_y = im_fixed.shape[1]
-        dim_z = im_fixed.shape[0]
+        im_fixed.unsqueeze_(0)
+        im_moving.unsqueeze_(0)
+
+        dim_x = im_fixed.shape[3]
+        dim_y = im_fixed.shape[2]
+        dim_z = im_fixed.shape[1]
+
+        dims_im = (1, dim_x, dim_y, dim_z)
+        dims_v = (3, dim_x, dim_y, dim_z)
 
         """
         if already exist then load them from a file, otherwise initialise new ones
@@ -158,35 +188,30 @@ class RGBDDataset(Dataset):
         if path.exists(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):
             mu_v = torch.load(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
         else:
-            mu_v = torch.zeros_like(im_fixed)
-            mu_v = torch.stack([mu_v, mu_v, mu_v], dim=0)
+            mu_v = init_mu_v(dims_v)
 
         # sigma_v
         if path.exists(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
             log_var_v = torch.load(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
         else:
-            var_v = float(dim_x ** (-2)) * torch.ones_like(mu_v)
-            log_var_v = torch.log(var_v)
+            log_var_v = init_log_var_v(dims_v)
+
         # u_v
         if path.exists(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
             u_v = torch.load(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
         else:
-            u_v = torch.zeros_like(mu_v)
-
-        im_fixed.unsqueeze_(0)
-        im_moving.unsqueeze_(0)
+            u_v = init_u_v(dims_v)
 
         # sigma_f
         if path.exists(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
             log_var_f = torch.load(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
         else:
-            var_f = (0.1 ** 2) * torch.ones_like(im_fixed)
-            log_var_f = torch.log(var_f)
+            log_var_f = init_log_var_f(dims_im)
         # u_f
         if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
             u_f = torch.load(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
         else:
-            u_f = torch.zeros_like(im_fixed)
+            u_f = init_u_f(dims_im)
 
         # identity grid
         if self.identity_grid is None:
