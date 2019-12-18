@@ -1,5 +1,6 @@
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
+from utils.sampler import sample_qv, sample_qf
 from utils.util import save_field_to_disk, save_im_to_disk
 
 import numpy as np
@@ -34,7 +35,7 @@ class Trainer(BaseTrainer):
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
 
-    def _save_images(self, im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped):
+    def _save_images(self, im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped, log_var_f=None, u_f=None):
         im_pair_idxs = im_pair_idxs.tolist()
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -47,6 +48,11 @@ class Trainer(BaseTrainer):
 
             save_field_to_disk(mu_v, os.path.join(self.data_loader.save_dirs['mu_v_field'],
                                      'mu_v_' + str(im_pair_idx) + '.nii.gz'))
+
+            save_im_to_disk(log_var_f, os.path.join(self.data_loader.save_dirs['images'],
+                                                    'log_var_f_' + str(im_pair_idx) + '.nii.gz'))
+            save_im_to_disk(u_f, os.path.join(self.data_loader.save_dirs['images'],
+                                              'u_f_' + str(im_pair_idx) + '.nii.gz'))
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         mu_v = mu_v.cpu()
@@ -101,15 +107,16 @@ class Trainer(BaseTrainer):
                 im_moving_warped = self.registration_module(im_moving, warp_field)
 
                 print(f'\nBATCH IDX: ' + str(batch_idx) + ', PRE-REGISTRATION: ' +
-                      f'{self.data_loss(im_fixed, im_moving).item():.5f}' +
-                      f', {self.data_loss(im_fixed, im_moving_warped).item():.5f}\n'
+                      f'{self.data_loss(im_fixed - im_moving).item():.5f}' +
+                      f', {self.data_loss(im_fixed - im_moving_warped).item():.5f}\n'
                       )
 
             """
-            initialise the optimiser
+            initialise the optimisers
             """
 
-            optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v])
+            optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
+            optimizer_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
 
             """
             q_v
@@ -117,11 +124,16 @@ class Trainer(BaseTrainer):
 
             for iter_no in range(self.no_steps_v):
                 optimizer_v.zero_grad()
+                data_term = 0.0
 
-                warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
-                im_moving_warped = self.registration_module(im_moving, warp_field)
+                for _ in range(self.no_samples):
+                    v_sample = sample_qv(mu_v, log_var_v, u_v)
+                    warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
 
-                data_term = self.data_loss(im_fixed, im_moving_warped)
+                    im_moving_warped = self.registration_module(im_moving, warp_field)
+                    data_term_sample = self.data_loss(im_fixed - im_moving_warped).sum() / float(self.no_samples)
+                    data_term += data_term_sample
+
                 reg_term = self.reg_loss(mu_v).sum()
                 entropy_term = self.entropy(log_var_v, u_v).sum()
 
@@ -131,17 +143,44 @@ class Trainer(BaseTrainer):
 
                 if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
                     print(f'ITERATION ' + str(iter_no) + '/' + str(self.no_steps_v - 1) +
-                            f', TOTAL ENERGY: {loss_qv.item():.5f}' +
-                            f'\ndata: {data_term.item():.5f}' +
-                            f', regularisation: {reg_term.item():.5f}' +
-                            f', entropy: {entropy_term.item():.5f}'
-                         )
+                          f', TOTAL ENERGY: {loss_qv.item():.5f}' +
+                          f'\ndata: {data_term.item():.5f}' +
+                          f', regularisation: {reg_term.item():.5f}' +
+                          f', entropy: {entropy_term.item():.5f}'
+                          )
 
                 total_loss += (loss_qv.item() / float(self.no_steps_v))
 
             mu_v.requires_grad_(False)
             log_var_v.requires_grad_(False)
             u_v.requires_grad_(False)
+
+            """
+            q_phi
+            """
+
+            optimizer_f.zero_grad()
+            loss_qphi = 0.0
+
+            for _ in range(self.no_samples):
+                # first term
+                v_sample = sample_qv(mu_v, log_var_v, u_v)
+                warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
+
+                im_moving_warped = self.registration_module(im_moving, warp_field)
+                data_term_sample = self.data_loss(im_fixed - im_moving_warped).sum() / float(self.no_samples)
+                loss_qphi += data_term_sample
+
+                # second term
+                for _ in range(self.no_samples):
+                    f_sample = sample_qf(im_fixed, log_var_f, u_f)
+                    data_term_sample = self.data_loss(f_sample - im_moving_warped).sum() / float(self.no_samples ** 2)
+                    loss_qphi -= data_term_sample
+
+            loss_qphi.backward()
+            optimizer_f.step()
+
+            total_loss += loss_qphi.item()
 
             log_var_f.requires_grad_(False)
             u_f.requires_grad_(False)
@@ -163,7 +202,7 @@ class Trainer(BaseTrainer):
                 warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
                 im_moving_warped = self.registration_module(im_moving, warp_field)
 
-                data_term = self.data_loss(im_fixed, im_moving_warped).mean()
+                data_term = self.data_loss(im_fixed - im_moving_warped).mean()
                 reg_term = self.reg_loss(mu_v).mean()
                 entropy_term = self.entropy(log_var_v, u_v).mean()
 
@@ -175,7 +214,7 @@ class Trainer(BaseTrainer):
                 save the images
                 """
 
-                self._save_images(im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped)
+                self._save_images(im_pair_idxs, mu_v, im_fixed, im_moving, im_moving_warped, log_var_f, u_f)
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
