@@ -72,8 +72,8 @@ class WarpingTestMethods(unittest.TestCase):
         save the images to disk
         """
 
-        save_im_to_disk(im_moving, './temp/moving.nii.gz')
-        save_im_to_disk(im_moving_warped, './temp/moving_warped.nii.gz')
+        save_im_to_disk(im_moving[0, :, :, :, :], './temp/moving.nii.gz')
+        save_im_to_disk(im_moving_warped[0, :, :, :, :], './temp/moving_warped.nii.gz')
 
     def test_sphere_translation_large(self):
         """
@@ -104,8 +104,8 @@ class WarpingTestMethods(unittest.TestCase):
         save the images to disk
         """
 
-        save_im_to_disk(im_moving, './temp/moving.nii.gz')
-        save_im_to_disk(im_moving_warped, './temp/moving_warped_large.nii.gz')
+        save_im_to_disk(im_moving[0, :, :, :, :], './temp/moving.nii.gz')
+        save_im_to_disk(im_moving_warped[0, :, :, :, :], './temp/moving_warped_large.nii.gz')
 
     def test_brain_rotation(self):
         """
@@ -160,5 +160,5 @@ class WarpingTestMethods(unittest.TestCase):
         save the images to disk
         """
 
-        save_im_to_disk(im_moving, './temp/brain_moving.nii.gz')
-        save_im_to_disk(im_moving_warped, './temp/brain_moving_warped.nii.gz')
+        save_im_to_disk(im_moving[0, :, :, :, :], './temp/brain_moving.nii.gz')
+        save_im_to_disk(im_moving_warped[0, :, :, :, :], './temp/brain_moving_warped.nii.gz')

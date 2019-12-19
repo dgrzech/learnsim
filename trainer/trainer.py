@@ -39,24 +39,24 @@ class Trainer(BaseTrainer):
         im_pair_idxs = im_pair_idxs.tolist()
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            save_im_to_disk(im_fixed, os.path.join(self.data_loader.save_dirs['images'],
+            save_im_to_disk(im_fixed[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
                                       'im_fixed_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(im_moving, os.path.join(self.data_loader.save_dirs['images'],
+            save_im_to_disk(im_moving[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
                                       'im_moving_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(im_moving_warped, os.path.join(self.data_loader.save_dirs['images'],
+            save_im_to_disk(im_moving_warped[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
                                               'im_moving_warped_' + str(im_pair_idx) + '.nii.gz'))
 
-            save_im_to_disk(log_var_f, os.path.join(self.data_loader.save_dirs['images'],
+            save_im_to_disk(log_var_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
                                                     'log_var_f_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(u_f, os.path.join(self.data_loader.save_dirs['images'],
+            save_im_to_disk(u_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
                                               'u_f_' + str(im_pair_idx) + '.nii.gz'))
             
-            save_field_to_disk(mu_v, os.path.join(self.data_loader.save_dirs['mu_v_field'],
+            save_field_to_disk(mu_v[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['mu_v_field'],
                                      'mu_v_' + str(im_pair_idx) + '.nii.gz'))
 
-            mu_v_norm = compute_norm(mu_v)
-            log_var_v_norm = compute_norm(log_var_v)
-            u_v_norm = compute_norm(u_v)
+            mu_v_norm = compute_norm(mu_v[loop_idx, :, :, :, :])
+            log_var_v_norm = compute_norm(log_var_v[loop_idx, :, :, :, :])
+            u_v_norm = compute_norm(u_v[loop_idx, :, :, :, :])
 
             save_im_to_disk(mu_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
                                                     'mu_v_norm_' + str(im_pair_idx) + '.nii.gz'))

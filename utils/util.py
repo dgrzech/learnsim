@@ -38,7 +38,7 @@ def inf_loop(data_loader):
 
 
 def compute_norm(v):
-    return torch.norm(v, p=2, dim=1, keepdim=True)
+    return torch.norm(v, p=2, dim=0, keepdim=True)
 
 
 def init_identity_grid_2d(nx, ny):
@@ -121,13 +121,13 @@ def standardise_im(im):
 
 
 def save_im_to_disk(im, file_path):
-    im = im[0, 0, :, :, :].cpu().numpy()
+    im = im[0, :, :, :].cpu().numpy()
     im = nib.Nifti1Image(im, np.eye(4))
     im.to_filename(file_path)
 
 
 def save_field_to_disk(field, file_path):
-    field = field[0, :, :, :, :].cpu().numpy()
+    field = field.cpu().numpy()
     field = nib.Nifti1Image(field, np.eye(4))
     field.to_filename(file_path)
 

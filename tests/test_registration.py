@@ -90,8 +90,8 @@ class RegistrationTestMethods(unittest.TestCase):
         save the volumetric images to disk
         """
 
-        save_im_to_disk(im_fixed, './temp/fixed.nii.gz')
-        save_im_to_disk(im_moving, './temp/moving.nii.gz')
+        save_im_to_disk(im_fixed[0, :, :, :, :], './temp/fixed.nii.gz')
+        save_im_to_disk(im_moving[0, :, :, :, :], './temp/moving.nii.gz')
 
         """
         loss, parameters to learn, and optimiser
@@ -151,7 +151,7 @@ class RegistrationTestMethods(unittest.TestCase):
             warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
             im_moving_warped = self.registration_module(im_moving, warp_field)
 
-            save_im_to_disk(im_moving_warped, './temp/moving_warped_LCC_data_only.nii.gz')
+            save_im_to_disk(im_moving_warped[0, :, :, :, :], './temp/moving_warped_LCC_data_only.nii.gz')
 
     def test_sphere_translation_SSD_full(self):
         """
@@ -313,4 +313,4 @@ class RegistrationTestMethods(unittest.TestCase):
             warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
             im_moving_warped = self.registration_module(im_moving, warp_field)
 
-            save_im_to_disk(im_moving_warped, './temp/moving_warped_SSD_all.nii.gz')
+            save_im_to_disk(im_moving_warped[0, :, :, :, :], './temp/moving_warped_SSD_all.nii.gz')

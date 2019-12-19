@@ -85,9 +85,9 @@ def main(config):
         identity_grid = identity_grid.to(device, non_blocking=True)
 
         file_path = os.path.join(data_loader.save_dirs['images'], 'im_fixed_' + str(batch_idx) + '.nii.gz')
-        save_im_to_disk(im_fixed, file_path)
+        save_im_to_disk(im_fixed[0, :, :, :, :], file_path)
         file_path = os.path.join(data_loader.save_dirs['images'], 'im_moving_' + str(batch_idx) + '.nii.gz')
-        save_im_to_disk(im_moving, file_path)
+        save_im_to_disk(im_moving[0, :, :, :, :], file_path)
 
         """
         initialise the optimiser
@@ -138,15 +138,15 @@ def main(config):
 
                 file_path = os.path.join(data_loader.save_dirs['images'],
                                          'im_moving_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_im_to_disk(im_moving_warped, file_path)
+                save_im_to_disk(im_moving_warped[0, :, :, :, :], file_path)
 
                 file_path = os.path.join(data_loader.save_dirs['mu_v_field'],
                                          'mu_v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_field_to_disk(mu_v, file_path)
+                save_field_to_disk(mu_v[0, :, :, :, :], file_path)
 
                 file_path = os.path.join(data_loader.save_dirs['deformation_field'],
                                          'deformation_field_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_field_to_disk(warp_field, file_path)
+                save_field_to_disk(warp_field[0, :, :, :, :], file_path)
 
     """
     calculate the metrics
