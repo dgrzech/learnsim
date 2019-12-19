@@ -116,7 +116,7 @@ def main(config):
             reg_term = reg_loss(mu_v).sum()
             entropy_term = entropy(log_var_v, u_v).sum()
 
-            loss_qv = data_term + reg_term - entropy_term
+            loss_qv = data_term + reg_term + entropy_term
             loss_qv.backward()
             optimizer_v.step()
 
@@ -161,7 +161,7 @@ def main(config):
         reg_term = reg_loss(mu_v).sum()
         entropy_term = entropy(log_var_v, u_v).sum()
 
-    total_loss = data_term + reg_term - entropy_term
+    total_loss = data_term + reg_term + entropy_term
     log = {'loss': total_loss.item(), 'SSD': data_term.item(), 'reg': reg_term.item(), 'entropy': entropy_term.item()}
     logger.info(log)
 

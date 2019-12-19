@@ -44,7 +44,7 @@ class LossTestMethods(unittest.TestCase):
 
         # calculate the entropy
         val = entropy.forward(log_var_v, u_v).item()
-        val_true = 0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
+        val_true = -0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
 
         assert pytest.approx(val, 0.01) == val_true
 
