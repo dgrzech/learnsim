@@ -81,7 +81,7 @@ class LCC(DataLoss):
         im_moving_warped = F.pad(im_moving_warped, self.padding, mode='replicate')
 
         cross, F_var, M_var = self.compute_local_sums(im_fixed, im_moving_warped)
-        lcc = cross * cross / (F_var * M_var + 1e-5)
+        lcc = cross * cross / (F_var * M_var + 1e-1)
 
         return -1.0 * torch.sum(lcc)
 

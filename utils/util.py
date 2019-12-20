@@ -41,6 +41,11 @@ def compute_norm(v):
     return torch.norm(v, p=2, dim=0, keepdim=True)
 
 
+def grid_to_deformation_field(identity_grid, grid):
+    deformation_field = grid - identity_grid.permute([0, 4, 1, 2, 3])
+    return deformation_field
+
+
 def init_identity_grid_2d(nx, ny):
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
