@@ -28,6 +28,20 @@ class DataLoss(nn.Module, ABC):
         pass
 
 
+class LCC(DataLoss):
+    def __init__(self):
+        super(LCC, self).__init__()
+
+    def forward(self, z):
+        return self.reduce(z)
+
+    def map(self, im_fixed, im_moving):
+        pass
+
+    def reduce(self, z):
+        return -1.0 * torch.sum(z)
+
+
 class SSD(DataLoss):
     def __init__(self):
         super(SSD, self).__init__()
@@ -40,50 +54,6 @@ class SSD(DataLoss):
 
     def reduce(self, z):
         return 0.5 * torch.sum(torch.pow(z, 2))
-
-
-class LCC(DataLoss):
-    def __init__(self, s):
-        super(LCC, self).__init__()
-
-        kernel_size = s * 2 + 1
-        kernel = torch.ones([kernel_size, kernel_size, kernel_size])
-        kernel.unsqueeze_(0).unsqueeze_(0)
-
-        self.padding = (s, s, s, s, s, s)
-        self.sz = float(kernel_size ** 3)
-        self.kernel = kernel.to('cuda:0')
-
-    def compute_local_means(self, im_fixed, im_moving_warped):
-        return F.conv3d(im_fixed, self.kernel) / self.sz, F.conv3d(im_moving_warped, self.kernel) / self.sz
-
-    def compute_local_sums(self, im_fixed, im_moving_warped):
-        F2 = im_fixed * im_fixed
-        M2 = im_moving_warped * im_moving_warped
-        FM = im_fixed * im_moving_warped
-
-        u_F, u_M = self.compute_local_means(im_fixed, im_moving_warped)
-
-        cross = F.conv3d(FM, self.kernel) - u_F * u_M * self.sz
-        F_var = F.conv3d(F2, self.kernel) - u_F * u_F * self.sz
-        M_var = F.conv3d(M2, self.kernel) - u_M * u_M * self.sz
-
-        return cross, F_var, M_var
-    
-    def forward(self, im_fixed, im_moving_warped):
-        return self.reduce(im_fixed, im_moving_warped)
-
-    def map(self, im_fixed, im_moving):
-        pass
-
-    def reduce(self, im_fixed, im_moving_warped):
-        im_fixed = F.pad(im_fixed, self.padding, mode='replicate')
-        im_moving_warped = F.pad(im_moving_warped, self.padding, mode='replicate')
-
-        cross, F_var, M_var = self.compute_local_sums(im_fixed, im_moving_warped)
-        lcc = cross * cross / (F_var * M_var + 1e-1)
-
-        return -1.0 * torch.sum(lcc)
 
 
 """

@@ -92,12 +92,18 @@ class RegistrationTestMethods(unittest.TestCase):
 
         save_im_to_disk(im_fixed[0, :, :, :, :], './temp/fixed.nii.gz')
         save_im_to_disk(im_moving[0, :, :, :, :], './temp/moving.nii.gz')
+        
+        """
+        encoding function
+        """
+
+        enc = SimEnc('LCC', self.s).to('cuda:0')
 
         """
         loss, parameters to learn, and optimiser
         """
 
-        data_loss = LCC(self.s_LCC).to('cuda:0')
+        data_loss = LCC().to('cuda:0')
         mu_v = torch.zeros(self.dims_v).to('cuda:0').requires_grad_(True)
         optimizer_v = Adam([mu_v], lr=1e-3)
 
@@ -111,25 +117,32 @@ class RegistrationTestMethods(unittest.TestCase):
             warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
             im_moving_warped = self.registration_module(im_moving, warp_field)
 
+            im_out_unwarped = enc(im_fixed, im_moving)
+            im_out = enc(im_fixed, im_moving_warped)
+
             print(f'PRE-REGISTRATION: ' +
-                  f'{data_loss(im_fixed, im_moving).item():.2f}' +
-                  f', {data_loss(im_fixed, im_moving_warped).item():.2f}\n'
+                  f'{data_loss(im_out_unwarped).item():.2f}' +
+                  f', {data_loss(im_out).item():.2f}\n'
                   )
 
         """
         q_v
         """
 
+        enc.eval()
+        enc.set_grad_enabled(False)
+
         for iter_no in range(self.no_steps_v):
             optimizer_v.zero_grad()
 
             warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
             im_moving_warped = self.registration_module(im_moving, warp_field)
+            im_out = enc(im_fixed, im_moving_warped)
 
-            data_term = data_loss(im_fixed, im_moving_warped)
+            data_term = data_loss(im_out)
             reg_term = self.reg_loss(mu_v).sum()
-
             loss_qv = data_term + reg_term
+
             loss_qv.backward()
             optimizer_v.step()
 
@@ -193,7 +206,7 @@ class RegistrationTestMethods(unittest.TestCase):
         encoding function
         """
 
-        enc = SimEnc(self.s).to('cuda:0')
+        enc = SimEnc('SSD', self.s).to('cuda:0')
 
         """
         data loss

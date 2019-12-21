@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 import torch
+import torch.nn.functional as F
 
 
 def ensure_dir(dirname):
@@ -35,6 +36,40 @@ def inf_loop(data_loader):
 
     for loader in repeat(data_loader):
         yield from loader
+
+
+def compute_local_means(im, kernel, sz):
+    return F.conv3d(im, kernel) / sz
+
+
+def compute_local_corrs(im1, im2, kernel, sz):
+    u_im1 = compute_local_means(im1, kernel, sz)
+    u_im2 = compute_local_means(im2, kernel, sz)
+
+    im_prod = im1 * im2
+
+    return F.conv3d(im_prod, kernel) - u_im1 * u_im2 * sz
+
+
+def compute_lcc(im1, im2, s=5):
+    kernel_size = s * 2 + 1
+    sz = float(kernel_size ** 3)
+
+    kernel = torch.ones([kernel_size, kernel_size, kernel_size])
+    kernel.unsqueeze_(0).unsqueeze_(0)
+    kernel = kernel.to('cuda:0')
+
+    padding = (s, s, s, s, s, s)
+
+    im1 = F.pad(im1, padding, mode='replicate')
+    im2 = F.pad(im2, padding, mode='replicate')
+
+    cross = compute_local_corrs(im1, im2, kernel, sz)
+    F_var = compute_local_corrs(im1, im1, kernel, sz)
+    M_var = compute_local_corrs(im2, im2, kernel, sz)
+
+    lcc = cross * cross / (F_var * M_var + 1e-1)
+    return -1.0 * torch.sum(lcc)
 
 
 def compute_norm(v):

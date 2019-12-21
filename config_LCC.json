@@ -5,15 +5,14 @@
     "arch": {
         "type": "SimEnc",
         "args": {
-            "s": 3
+	    "init_type": "LCC",
+            "s": 4
         }
     },
 
     "data_loss": {
         "type": "LCC",
-        "args": {
-            "s": 4
-        }
+        "args": {}
     },
     "reg_loss": {
         "type": "RegLossL2",
@@ -44,13 +43,13 @@
     "optimizer_f": {
         "type": "SGD",
         "args": {
-            "lr": 0.001
+            "lr": 5e-4
         }
     },
     "optimizer_phi": {
         "type": "Adam",
         "args": {
-            "lr": 0.0001,
+            "lr": 5e-4,
             "weight_decay": 0,
             "amsgrad": true
         }
@@ -60,15 +59,15 @@
         "type": "LearnSimDataLoader",
         "args":{
             "data_dir": "/vol/bitbucket/dig15/biobank_test/",
-            "batch_size": 1,
-            "num_workers": 1,
+            "batch_size": 2,
+            "num_workers": 6,
             "shuffle": true
         }
     },
 
     "trainer": {
-        "epochs": 4096,
-        "no_samples": 1,
+        "epochs": 1000,
+        "no_samples": 4,
 	    "no_steps_v": 128,
 
         "save_dir": "saved/",
