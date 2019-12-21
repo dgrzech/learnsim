@@ -105,9 +105,9 @@ def main(config):
 
             for _ in range(no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = transformation_model.forward_3d(identity_grid, v_sample)
+                transformation = transformation_model.forward_3d(identity_grid, v_sample)
 
-                im_moving_warped = registration_module(im_moving, warp_field)
+                im_moving_warped = registration_module(im_moving, transformation)
                 im_out = enc(im_fixed, im_moving_warped)
 
                 data_term_sample = data_loss(im_out).sum() / float(no_samples)
@@ -133,8 +133,8 @@ def main(config):
             """
 
             with torch.no_grad():
-                warp_field = transformation_model.forward_3d(identity_grid, mu_v)
-                im_moving_warped = registration_module(im_moving, warp_field)
+                transformation = transformation_model.forward_3d(identity_grid, mu_v)
+                im_moving_warped = registration_module(im_moving, transformation)
 
                 file_path = os.path.join(data_loader.save_dirs['images'],
                                          'im_moving_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
@@ -146,15 +146,15 @@ def main(config):
 
                 file_path = os.path.join(data_loader.save_dirs['deformation_field'],
                                          'deformation_field_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_field_to_disk(warp_field[0, :, :, :, :], file_path)
+                save_field_to_disk(transformation[0, :, :, :, :], file_path)
 
     """
     calculate the metrics
     """
 
     with torch.no_grad():
-        warp_field = transformation_model.forward_3d(identity_grid, mu_v)
-        im_moving_warped = registration_module(im_moving, warp_field)
+        transformation = transformation_model.forward_3d(identity_grid, mu_v)
+        im_moving_warped = registration_module(im_moving, transformation)
         im_out = enc(im_fixed, im_moving_warped)
 
         data_term = data_loss(im_out).sum()

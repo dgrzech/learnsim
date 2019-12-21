@@ -114,8 +114,8 @@ class RegistrationTestMethods(unittest.TestCase):
         total_loss = 0.0
 
         with torch.no_grad():
-            warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
-            im_moving_warped = self.registration_module(im_moving, warp_field)
+            transformation = self.transformation_model.forward_3d(self.identity_grid, mu_v)
+            im_moving_warped = self.registration_module(im_moving, transformation)
 
             im_out_unwarped = enc(im_fixed, im_moving)
             im_out = enc(im_fixed, im_moving_warped)
@@ -135,8 +135,8 @@ class RegistrationTestMethods(unittest.TestCase):
         for iter_no in range(self.no_steps_v):
             optimizer_v.zero_grad()
 
-            warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
-            im_moving_warped = self.registration_module(im_moving, warp_field)
+            transformation = self.transformation_model.forward_3d(self.identity_grid, mu_v)
+            im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = enc(im_fixed, im_moving_warped)
 
             data_term = data_loss(im_out)
@@ -161,8 +161,8 @@ class RegistrationTestMethods(unittest.TestCase):
         """
 
         with torch.no_grad():
-            warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
-            im_moving_warped = self.registration_module(im_moving, warp_field)
+            transformation = self.transformation_model.forward_3d(self.identity_grid, mu_v)
+            im_moving_warped = self.registration_module(im_moving, transformation)
 
             save_im_to_disk(im_moving_warped[0, :, :, :, :], './temp/moving_warped_LCC_data_only.nii.gz')
 
@@ -229,8 +229,8 @@ class RegistrationTestMethods(unittest.TestCase):
         total_loss = 0.0
 
         with torch.no_grad():
-            warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
-            im_moving_warped = self.registration_module(im_moving, warp_field)
+            transformation = self.transformation_model.forward_3d(self.identity_grid, mu_v)
+            im_moving_warped = self.registration_module(im_moving, transformation)
 
             print(f'PRE-REGISTRATION: ' +
                   f'{data_loss(im_fixed - im_moving).item():.2f}' +
@@ -250,9 +250,9 @@ class RegistrationTestMethods(unittest.TestCase):
 
             for _ in range(self.no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = self.transformation_model.forward_3d(self.identity_grid, v_sample)
+                transformation = self.transformation_model.forward_3d(self.identity_grid, v_sample)
 
-                im_moving_warped = self.registration_module(im_moving, warp_field)
+                im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = enc(im_fixed, im_moving_warped)
 
                 data_term_sample = data_loss(im_out).sum() / float(self.no_samples)
@@ -293,9 +293,9 @@ class RegistrationTestMethods(unittest.TestCase):
         for _ in range(self.no_samples):
             # first term
             v_sample = sample_qv(mu_v, log_var_v, u_v)
-            warp_field = self.transformation_model.forward_3d(self.identity_grid, v_sample)
+            transformation = self.transformation_model.forward_3d(self.identity_grid, v_sample)
 
-            im_moving_warped = self.registration_module(im_moving, warp_field)
+            im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = enc(im_fixed, im_moving_warped)
 
             data_term_sample = data_loss(im_out).sum() / float(self.no_samples)
@@ -323,7 +323,7 @@ class RegistrationTestMethods(unittest.TestCase):
         """
 
         with torch.no_grad():
-            warp_field = self.transformation_model.forward_3d(self.identity_grid, mu_v)
-            im_moving_warped = self.registration_module(im_moving, warp_field)
+            transformation = self.transformation_model.forward_3d(self.identity_grid, mu_v)
+            im_moving_warped = self.registration_module(im_moving, transformation)
 
             save_im_to_disk(im_moving_warped[0, :, :, :, :], './temp/moving_warped_SSD_all.nii.gz')

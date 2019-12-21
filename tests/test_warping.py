@@ -65,8 +65,10 @@ class WarpingTestMethods(unittest.TestCase):
 
         offset = 5.0
 
-        warp_field = self.identity_grid.permute([0, 4, 1, 2, 3]) + offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
-        im_moving_warped = self.registration_module(im_moving, warp_field)
+        warp_field = offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
+        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
+
+        im_moving_warped = self.registration_module(im_moving, transformation)
 
         """"
         save the images to disk
@@ -96,9 +98,11 @@ class WarpingTestMethods(unittest.TestCase):
         """
 
         offset = 20
+    
+        warp_field = offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
+        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
 
-        warp_field = self.identity_grid.permute([0, 4, 1, 2, 3]) + offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
-        im_moving_warped = self.registration_module(im_moving, warp_field)
+        im_moving_warped = self.registration_module(im_moving, transformation)
 
         """"
         save the images to disk
@@ -128,15 +132,15 @@ class WarpingTestMethods(unittest.TestCase):
         dim_z = 128
 
         identity_grid = init_identity_grid_3d(dim_x, dim_y, dim_z).to('cuda:0')
-        warp_field = identity_grid.permute([0, 4, 1, 2, 3])
+        transformation = identity_grid.permute([0, 4, 1, 2, 3])
 
-        for idx_z in range(warp_field.shape[2]):
-            for idx_y in range(warp_field.shape[3]):
-                for idx_x in range(warp_field.shape[4]):
-                    p = warp_field[0, :, idx_z, idx_y, idx_x]
+        for idx_z in range(transformation.shape[2]):
+            for idx_y in range(transformation.shape[3]):
+                for idx_x in range(transformation.shape[4]):
+                    p = transformation[0, :, idx_z, idx_y, idx_x]
 
                     p_new = torch.mv(R, p)
-                    warp_field[0, :, idx_z, idx_y, idx_x] = p_new
+                    transformation[0, :, idx_z, idx_y, idx_x] = p_new
 
         """
         load image and warp it
@@ -154,7 +158,7 @@ class WarpingTestMethods(unittest.TestCase):
         im_moving.unsqueeze_(0).unsqueeze_(0)
         im_moving = im_moving.to('cuda:0')
 
-        im_moving_warped = self.registration_module(im_moving, warp_field)
+        im_moving_warped = self.registration_module(im_moving, transformation)
 
         """"
         save the images to disk

@@ -119,9 +119,9 @@ class Trainer(BaseTrainer):
             total_loss = 0.0
 
             with torch.no_grad():
-                warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
+                transformation = self.transformation_model.forward_3d(identity_grid, mu_v)
 
-                im_moving_warped = self.registration_module(im_moving, warp_field)
+                im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out_unwarped = self.enc(im_fixed, im_moving)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
@@ -150,9 +150,9 @@ class Trainer(BaseTrainer):
 
                 for _ in range(self.no_samples):
                     v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
+                    transformation = self.transformation_model.forward_3d(identity_grid, v_sample)
 
-                    im_moving_warped = self.registration_module(im_moving, warp_field)
+                    im_moving_warped = self.registration_module(im_moving, transformation)
                     im_out = self.enc(im_fixed, im_moving_warped)
 
                     data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
@@ -192,9 +192,9 @@ class Trainer(BaseTrainer):
             for _ in range(self.no_samples):
                 # first term
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                warp_field = self.transformation_model.forward_3d(identity_grid, v_sample)
+                transformation = self.transformation_model.forward_3d(identity_grid, v_sample)
 
-                im_moving_warped = self.registration_module(im_moving, warp_field)
+                im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
                 data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
@@ -230,9 +230,9 @@ class Trainer(BaseTrainer):
             self.train_metrics.update('loss', total_loss)
 
             with torch.no_grad():
-                warp_field = self.transformation_model.forward_3d(identity_grid, mu_v)
+                transformation = self.transformation_model.forward_3d(identity_grid, mu_v)
 
-                im_moving_warped = self.registration_module(im_moving, warp_field)
+                im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
                 data_term = self.data_loss(im_out).mean()
@@ -247,7 +247,7 @@ class Trainer(BaseTrainer):
                 save the images
                 """
 
-                warp_field = grid_to_deformation_field(identity_grid, warp_field)
+                warp_field = grid_to_deformation_field(identity_grid, transformation)
                 self._save_images(im_pair_idxs, im_fixed, im_moving, im_moving_warped, 
                                   mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
 

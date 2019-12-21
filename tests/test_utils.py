@@ -40,25 +40,25 @@ class UtilsTestMethods(unittest.TestCase):
         transformation = SVF()
 
         # v = torch.zeros(1, 2, self.dim_x, self.dim_y)
-        # warp_field = transformation.forward_2d(self.identity_grid_2d, v)
-        # print('zero velocity field\n', warp_field)
+        # transformation = transformation.forward_2d(self.identity_grid_2d, v)
+        # print('zero velocity field\n', transformation)
 
         v = 0.2 * torch.ones(1, 2, self.dim_x, self.dim_y)
-        warp_field = transformation.forward_2d(self.identity_grid_2d, v)
-        # print('uniform velocity field\n', warp_field)
-        plot_2d(v, warp_field)
+        transformation = transformation.forward_2d(self.identity_grid_2d, v)
+        # print('uniform velocity field\n', transformation)
+        plot_2d(v, transformation)
 
     def test_scaling_and_squaring_3d_translation(self):
         transformation = SVF()
 
         # v = torch.zeros(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        # warp_field = transformation.forward_3d(self.identity_grid_3d, v)
-        # print('zero velocity field\n', warp_field)
+        # transformation = transformation.forward_3d(self.identity_grid_3d, v)
+        # print('zero velocity field\n', transformation)
 
         v = 0.2 * torch.ones(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        warp_field = transformation.forward_3d(self.identity_grid_3d, v)
-        # print('uniform velocity field\n', warp_field)
-        plot_3d(v, warp_field)
+        transformation = transformation.forward_3d(self.identity_grid_3d, v)
+        # print('uniform velocity field\n', transformation)
+        plot_3d(v, transformation)
 
     def test_scaling_and_squaring_2d_rotation(self):
         transformation = SVF()
@@ -71,9 +71,9 @@ class UtilsTestMethods(unittest.TestCase):
                 v[0, 0, idx_x, idx_y] = y
                 v[0, 1, idx_x, idx_y] = -1.0 * x
 
-        warp_field = transformation.forward_2d(self.identity_grid_2d, v)
-        # print(warp_field)
-        plot_2d(v, warp_field)
+        transformation = transformation.forward_2d(self.identity_grid_2d, v)
+        # print(transformation)
+        plot_2d(v, transformation)
 
     def test_scaling_and_squaring_3d_rotation(self):
         transformation = SVF()
@@ -88,6 +88,6 @@ class UtilsTestMethods(unittest.TestCase):
                     v[0, 1, idx_x, idx_y, idx_z] = -1.0 * x
                     v[0, 2, idx_x, idx_y, idx_z] = 0.0
 
-        warp_field = transformation.forward_3d(self.identity_grid_3d, v)
-        # print(warp_field)
-        plot_3d(v, warp_field)
+        transformation = transformation.forward_3d(self.identity_grid_3d, v)
+        # print(transformation)
+        plot_3d(v, transformation)

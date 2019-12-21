@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_2d(v, warp_field):
+def plot_2d(v, transformation):
     # initialise the grid
-    nx = warp_field.shape[3]
-    ny = warp_field.shape[2]
+    nx = transformation.shape[3]
+    ny = transformation.shape[2]
 
     x = np.linspace(-1.0, 1.0, nx)
     y = np.linspace(-1.0, 1.0, ny)
@@ -32,7 +32,7 @@ def plot_2d(v, warp_field):
 
     # get the displacement vectors
     identity_grid = init_identity_grid_2d(nx, ny)
-    displacement_field = warp_field - identity_grid.permute([0, 3, 1, 2])
+    displacement_field = transformation - identity_grid.permute([0, 3, 1, 2])
 
     u = displacement_field[0, 0, :, :]
     v = displacement_field[0, 1, :, :]
@@ -49,11 +49,11 @@ def plot_2d(v, warp_field):
     plt.show()
 
 
-def plot_3d(v, warp_field):
+def plot_3d(v, transformation):
     # initialise the grid
-    nx = warp_field.shape[4]
-    ny = warp_field.shape[3]
-    nz = warp_field.shape[2]
+    nx = transformation.shape[4]
+    ny = transformation.shape[3]
+    nz = transformation.shape[2]
 
     x = np.linspace(-1.0, 1.0, nx)
     y = np.linspace(-1.0, 1.0, ny)
@@ -82,7 +82,7 @@ def plot_3d(v, warp_field):
 
     # get the displacement vectors
     identity_grid = init_identity_grid_3d(nx, ny, nz)
-    displacement_field = warp_field - identity_grid.permute([0, 4, 1, 2, 3])
+    displacement_field = transformation - identity_grid.permute([0, 4, 1, 2, 3])
 
     u = displacement_field[0, 0, :, :, :]
     v = displacement_field[0, 1, :, :, :]
