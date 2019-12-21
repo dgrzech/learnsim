@@ -31,7 +31,7 @@ class CNN_LCC(BaseModel):
 
     def encode(self, im_fixed, im_moving_warped):
         im_fixed, im_moving_warped = F.pad(im_fixed, self.padding, mode='replicate'), F.pad(im_moving_warped, self.padding, mode='replicate')
-        im_fixed, im_moving_warped = self.conv1(im_fixed), self.conv1(im_moving_warped)
+        # im_fixed, im_moving_warped = self.conv1(im_fixed), self.conv1(im_moving_warped)
 
         F2 = im_fixed * im_fixed
         M2 = im_moving_warped * im_moving_warped
@@ -54,23 +54,23 @@ class CNN_SSD(BaseModel):
     def __init__(self, s):
         super(CNN_SSD, self).__init__()
 
-        self.s = s
-        self.padding = math.floor(s / 2)
+        self.kernel_size = 2 * s + 1
+        n = self.kernel_size ** 3
 
-        self.conv1 = nn.Conv3d(1, 1, kernel_size=s, stride=1, padding=self.padding, bias=False)
-        self.conv2 = nn.Conv3d(1, 1, kernel_size=s, stride=1, padding=self.padding, bias=False)
+        self.conv1 = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, padding=s, bias=False)
+        self.conv2 = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, padding=s, bias=False)
 
         # initialise kernels to identity
         nn.init.zeros_(self.conv1.weight)
         nn.init.zeros_(self.conv2.weight)
 
-        w1 = self.conv1.weight.view(s ** 3)
-        w1[math.floor((s ** 3) / 2)] = 1.0
-        w1 = w1.view(1, 1, s, s, s)
+        w1 = self.conv1.weight.view(n)
+        w1[math.floor(n / 2)] = 1.0
+        w1 = w1.view(1, 1, self.kernel_size, self.kernel_size, self.kernel_size)
 
-        w2 = self.conv2.weight.view(s ** 3)
-        w2[math.floor((s ** 3) / 2)] = 1.0
-        w2 = w2.view(1, 1, s, s, s)
+        w2 = self.conv2.weight.view(n)
+        w2[math.floor(n / 2)] = 1.0
+        w2 = w2.view(1, 1, self.kernel_size, self.kernel_size, self.kernel_size)
 
         with torch.no_grad():
             self.conv1.weight = nn.Parameter(w1, requires_grad=True)

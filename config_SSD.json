@@ -6,7 +6,7 @@
         "type": "SimEnc",
         "args": {
 	    "init_type": "SSD",
-            "s": 3
+            "s": 1
         }
     },
 

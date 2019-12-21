@@ -4,7 +4,6 @@ from torch import nn
 from utils.diff_op import GradientOperator
 
 import torch
-import torch.nn.functional as F
 
 """
 data loss
