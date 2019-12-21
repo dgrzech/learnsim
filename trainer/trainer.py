@@ -3,6 +3,8 @@ from utils import inf_loop, MetricTracker
 from utils.sampler import sample_qv, sample_qf
 from utils.util import compute_norm, grid_to_deformation_field, save_field_to_disk, save_im_to_disk
 
+from torch import nn
+
 import numpy as np
 import os
 import torch
@@ -119,15 +121,15 @@ class Trainer(BaseTrainer):
             total_loss = 0.0
 
             with torch.no_grad():
-                transformation = self.transformation_model.forward_3d(identity_grid, mu_v)
+                transformation = self.transformation_model(identity_grid, mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out_unwarped = self.enc(im_fixed, im_moving)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
                 print(f'\nBATCH IDX: ' + str(batch_idx) + ', PRE-REGISTRATION: ' +
-                      f'{self.data_loss(im_out_unwarped).item():.5f}' +
-                      f', {self.data_loss(im_out).item():.5f}\n'
+                      f'{self.data_loss(im_out_unwarped).mean().item():.5f}' +
+                      f', {self.data_loss(im_out).mean().item():.5f}\n'
                       )
 
             """
@@ -142,7 +144,11 @@ class Trainer(BaseTrainer):
             """
 
             self.enc.eval()
-            self.enc.set_grad_enabled(False)
+            
+            if isinstance(self.enc, nn.DataParallel):
+                self.enc.module.set_grad_enabled(False)
+            else:
+                self.enc.set_grad_enabled(False)
 
             for iter_no in range(self.no_steps_v):
                 optimizer_v.zero_grad()
@@ -150,7 +156,7 @@ class Trainer(BaseTrainer):
 
                 for _ in range(self.no_samples):
                     v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    transformation = self.transformation_model.forward_3d(identity_grid, v_sample)
+                    transformation = self.transformation_model(identity_grid, v_sample)
 
                     im_moving_warped = self.registration_module(im_moving, transformation)
                     im_out = self.enc(im_fixed, im_moving_warped)
@@ -184,7 +190,11 @@ class Trainer(BaseTrainer):
             """
             
             self.enc.train()
-            self.enc.set_grad_enabled(True)
+            
+            if isinstance(self.enc, nn.DataParallel):
+                self.enc.module.set_grad_enabled(True)
+            else:
+                self.enc.set_grad_enabled(True)
 
             optimizer_f.zero_grad()
             loss_qphi = 0.0
@@ -192,7 +202,7 @@ class Trainer(BaseTrainer):
             for _ in range(self.no_samples):
                 # first term
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation = self.transformation_model.forward_3d(identity_grid, v_sample)
+                transformation = self.transformation_model(identity_grid, v_sample)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = self.enc(im_fixed, im_moving_warped)
@@ -230,7 +240,7 @@ class Trainer(BaseTrainer):
             self.train_metrics.update('loss', total_loss)
 
             with torch.no_grad():
-                transformation = self.transformation_model.forward_3d(identity_grid, mu_v)
+                transformation = self.transformation_model(identity_grid, mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = self.enc(im_fixed, im_moving_warped)

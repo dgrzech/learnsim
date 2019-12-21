@@ -20,6 +20,9 @@ class TransformationModel(nn.Module, ABC):
     def forward_3d(self, identity_grid, v):
         pass
 
+    def forward(self, identity_grid, v):
+        return self.forward_3d(identity_grid, v)
+
 
 class SVF(TransformationModel):
     """

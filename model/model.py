@@ -31,7 +31,7 @@ class CNN_LCC(BaseModel):
 
     def encode(self, im_fixed, im_moving_warped):
         im_fixed, im_moving_warped = F.pad(im_fixed, self.padding, mode='replicate'), F.pad(im_moving_warped, self.padding, mode='replicate')
-        # im_fixed, im_moving_warped = self.conv1(im_fixed), self.conv1(im_moving_warped)
+        im_fixed, im_moving_warped = self.conv1(im_fixed), self.conv1(im_moving_warped)
 
         F2 = im_fixed * im_fixed
         M2 = im_moving_warped * im_moving_warped
