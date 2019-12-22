@@ -23,6 +23,9 @@ class Trainer(BaseTrainer):
         self.config = config
         self.data_loader = data_loader
 
+        self.learn_var_params = config['trainer']['learn_var_params']  # whether to learn the variational parameters
+        self.learn_sim_metric = config['trainer']['learn_sim_metric']  # whether to learn the similarity metric
+
         if len_epoch is None:
             # epoch-based training
             self.len_epoch = len(self.data_loader)
@@ -39,6 +42,10 @@ class Trainer(BaseTrainer):
 
     def _save_images(self, im_pair_idxs, im_fixed, im_moving, im_moving_warped, 
                      mu_v=None, log_var_v=None, u_v=None, log_var_f=None, u_f=None, deformation_field=None):
+        """
+        save the input and output images as well as norms of vectors in the vector fields to disk
+        """
+
         im_pair_idxs = im_pair_idxs.tolist()
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -54,25 +61,27 @@ class Trainer(BaseTrainer):
             save_im_to_disk(u_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
                                               'u_f_' + str(im_pair_idx) + '.nii.gz'))
             
-            save_field_to_disk(mu_v[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['mu_v_field'],
-                                     'mu_v_' + str(im_pair_idx) + '.nii.gz'))
-
             mu_v_norm = compute_norm(mu_v[loop_idx, :, :, :, :])
             log_var_v_norm = compute_norm(log_var_v[loop_idx, :, :, :, :])
             u_v_norm = compute_norm(u_v[loop_idx, :, :, :, :])
+            deformation_field_norm = compute_norm(deformation_field[loop_idx, :, :, :, :])
 
+            save_field_to_disk(mu_v[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['mu_v_field'],
+                                     'mu_v_' + str(im_pair_idx) + '.nii.gz'))
             save_im_to_disk(mu_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
                                                     'mu_v_norm_' + str(im_pair_idx) + '.nii.gz'))
             save_im_to_disk(log_var_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
                                                          'log_var_v_norm_' + str(im_pair_idx) + '.nii.gz'))
             save_im_to_disk(u_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
                                                    'u_v_norm_' + str(im_pair_idx) + '.nii.gz'))
-
-            deformation_field_norm = compute_norm(deformation_field[loop_idx, :, :, :, :])
             save_im_to_disk(deformation_field_norm, os.path.join(self.data_loader.save_dirs['norms'],
                                                     'deformation_field_norm_' + str(im_pair_idx) + '.nii.gz'))
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
+        """
+        save the variational parameters to disk in order to load at the next epoch
+        """
+
         mu_v = mu_v.cpu()
 
         log_var_v, u_v = log_var_v.cpu(), u_v.cpu()
@@ -107,19 +116,20 @@ class Trainer(BaseTrainer):
         for batch_idx, (im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
                 in enumerate(self.data_loader):
             im_fixed, im_moving = im_fixed.to(self.device, non_blocking=True), \
-                                  im_moving.to(self.device, non_blocking=True)
+                                  im_moving.to(self.device, non_blocking=True)  # images to register
 
-            mu_v = mu_v.to(self.device, non_blocking=True).requires_grad_(True)
+            mu_v = mu_v.to(self.device, non_blocking=True).requires_grad_(True)  # mean velocity field
 
             log_var_v, u_v = log_var_v.to(self.device, non_blocking=True).requires_grad_(True), \
                              u_v.to(self.device, non_blocking=True).requires_grad_(True)
             log_var_f, u_f = log_var_f.to(self.device, non_blocking=True).requires_grad_(True), \
-                             u_f.to(self.device, non_blocking=True).requires_grad_(True)
+                             u_f.to(self.device, non_blocking=True).requires_grad_(True)  # variational parameters
 
             identity_grid = identity_grid.to(self.device, non_blocking=True).requires_grad_(False)
 
             total_loss = 0.0
 
+            # print value of the data term before registration
             with torch.no_grad():
                 transformation = self.transformation_model(identity_grid, mu_v)
 
@@ -127,20 +137,20 @@ class Trainer(BaseTrainer):
                 im_out_unwarped = self.enc(im_fixed, im_moving)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
-                print(f'\nBATCH IDX: ' + str(batch_idx) + ', PRE-REGISTRATION: ' +
-                      f'{self.data_loss(im_out_unwarped).mean().item():.5f}' +
-                      f', {self.data_loss(im_out).mean().item():.5f}\n'
+                print(f'\nPRE-REGISTRATION: ' +
+                      f'unwarped: {self.data_loss(im_out_unwarped).mean().item():.5f}' +
+                      f', warped w/ the current estimate: {self.data_loss(im_out).mean().item():.5f}\n'
                       )
 
-            """
-            initialise the optimisers
-            """
+            # initialise the optimisers
+            if self.learn_var_params:
+                optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
+                optimizer_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
+            else:
+                optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v])
 
-            optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
-            optimizer_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
-
             """
-            q_v
+            optimise q_v
             """
 
             self.enc.eval()
@@ -153,15 +163,24 @@ class Trainer(BaseTrainer):
             for iter_no in range(self.no_steps_v):
                 optimizer_v.zero_grad()
                 data_term = 0.0
+                
+                if self.learn_var_params:
+                    for _ in range(self.no_samples):  # draw samples from q_v
+                        v_sample = sample_qv(mu_v, log_var_v, u_v)
+                        transformation = self.transformation_model(identity_grid, v_sample)
 
-                for _ in range(self.no_samples):
-                    v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    transformation = self.transformation_model(identity_grid, v_sample)
+                        im_moving_warped = self.registration_module(im_moving, transformation)
+                        im_out = self.enc(im_fixed, im_moving_warped)
+
+                        data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                        data_term += data_term_sample
+                else:
+                    transformation = self.transformation_model(identity_grid, mu_v)
 
                     im_moving_warped = self.registration_module(im_moving, transformation)
                     im_out = self.enc(im_fixed, im_moving_warped)
 
-                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                    data_term_sample = self.data_loss(im_out).sum()
                     data_term += data_term_sample
 
                 reg_term = self.reg_loss(mu_v).sum()
@@ -186,56 +205,48 @@ class Trainer(BaseTrainer):
             u_v.requires_grad_(False)
 
             """
-            q_phi
+            optimise q_phi
             """
             
-            self.enc.train()
-            
-            if isinstance(self.enc, nn.DataParallel):
-                self.enc.module.set_grad_enabled(True)
-            else:
-                self.enc.set_grad_enabled(True)
+            if self.learn_sim_metric:
+                self.enc.train()
+                
+                if isinstance(self.enc, nn.DataParallel):
+                    self.enc.module.set_grad_enabled(True)
+                else:
+                    self.enc.set_grad_enabled(True)
 
-            optimizer_f.zero_grad()
-            loss_qphi = 0.0
+                optimizer_f.zero_grad()
+                loss_qphi = 0.0
 
-            for _ in range(self.no_samples):
-                # first term
-                v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation = self.transformation_model(identity_grid, v_sample)
+                for _ in range(self.no_samples):  # draw samples from q_v
+                    v_sample = sample_qv(mu_v, log_var_v, u_v)
+                    transformation = self.transformation_model(identity_grid, v_sample)
 
-                im_moving_warped = self.registration_module(im_moving, transformation)
-                im_out = self.enc(im_fixed, im_moving_warped)
+                    im_moving_warped = self.registration_module(im_moving, transformation)
+                    im_out = self.enc(im_fixed, im_moving_warped)
 
-                data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-                loss_qphi += data_term_sample
+                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                    loss_qphi += data_term_sample
 
-                # second term
-                for _ in range(self.no_samples):
-                    f_sample = sample_qf(im_fixed, log_var_f, u_f)
-                    im_out = self.enc(f_sample, im_moving_warped)
+                    for _ in range(self.no_samples):  # draw samples from q_f
+                        f_sample = sample_qf(im_fixed, log_var_f, u_f)
+                        im_out = self.enc(f_sample, im_moving_warped)
 
-                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
-                    loss_qphi -= data_term_sample
+                        data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
+                        loss_qphi -= data_term_sample
 
-            loss_qphi.backward()
-            optimizer_f.step()
+                loss_qphi.backward()
+                optimizer_f.step()
 
-            total_loss += loss_qphi.item()
+                total_loss += loss_qphi.item()
 
             log_var_f.requires_grad_(False)
             u_f.requires_grad_(False)
 
-            """
-            save the updated tensors
-            """
+            self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f)  # save the updated tensors
 
-            self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f)
-
-            """
-            metrics
-            """
-
+            # metrics
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', total_loss)
 
@@ -253,10 +264,7 @@ class Trainer(BaseTrainer):
                 self.train_metrics.update('reg_term', reg_term.item())
                 self.train_metrics.update('entropy_term', entropy_term.item())
 
-                """
-                save the images
-                """
-
+                # save the images
                 warp_field = grid_to_deformation_field(identity_grid, transformation)
                 self._save_images(im_pair_idxs, im_fixed, im_moving, im_moving_warped, 
                                   mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)

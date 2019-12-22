@@ -5,6 +5,10 @@ import torch.nn.functional as F
 
 
 class DifferentialOperator(nn.Module, ABC):
+    """
+    abstract class for defining a differential operator on a vector field
+    """
+
     def __init__(self):
         super(DifferentialOperator, self).__init__()
 
@@ -14,10 +18,14 @@ class DifferentialOperator(nn.Module, ABC):
 
 
 class GradientOperator(DifferentialOperator):
+    """
+    Jacobian differential operator
+    """
+
     def __init__(self):
         super(GradientOperator, self).__init__()
 
-        self.px = (1, 1, 0, 0, 0, 0)
+        self.px = (1, 1, 0, 0, 0, 0)  # paddings
         self.py = (0, 0, 1, 1, 0, 0)
         self.pz = (0, 0, 0, 0, 1, 1)
 

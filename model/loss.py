@@ -28,6 +28,10 @@ class DataLoss(nn.Module, ABC):
 
 
 class LCC(DataLoss):
+    """
+    local cross-correlation
+    """
+
     def __init__(self):
         super(LCC, self).__init__()
 
@@ -42,6 +46,10 @@ class LCC(DataLoss):
 
 
 class SSD(DataLoss):
+    """
+    sum of squared differences
+    """
+
     def __init__(self):
         super(SSD, self).__init__()
 
@@ -98,6 +106,10 @@ class Entropy(nn.Module, ABC):
 
 
 class EntropyMultivariateNormal(Entropy):
+    """
+    multivariate normal distribution
+    """
+
     def __init__(self):
         super(EntropyMultivariateNormal, self).__init__()
 

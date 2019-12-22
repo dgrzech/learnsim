@@ -1,5 +1,5 @@
 from mpl_toolkits.mplot3d import Axes3D
-from utils.util import init_identity_grid_2d, init_identity_grid_3d
+from utils.util import grid_to_deformation_field, init_identity_grid_2d, init_identity_grid_3d
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -82,7 +82,7 @@ def plot_3d(v, transformation):
 
     # get the displacement vectors
     identity_grid = init_identity_grid_3d(nx, ny, nz)
-    displacement_field = transformation - identity_grid.permute([0, 4, 1, 2, 3])
+    displacement_field = grid_to_deformation_field(identity_grid, transformation)
 
     u = displacement_field[0, 0, :, :, :]
     v = displacement_field[0, 1, :, :, :]

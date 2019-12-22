@@ -1,6 +1,6 @@
 {
     "name": "LearnSim",
-    "n_gpu": 1,
+    "n_gpu": 3,
 
     "arch": {
         "type": "SimEnc",
@@ -58,17 +58,20 @@
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
-            "data_dir": "/vol/bitbucket/dig15/biobank_test/",
-            "batch_size": 2,
-            "num_workers": 6,
+            "data_dir": "/vol/bitbucket/dig15/biobank_test_large/",
+            "batch_size": 6,
+            "num_workers": 18,
             "shuffle": true
         }
     },
 
     "trainer": {
         "epochs": 1000,
-        "no_samples": 4,
+        "no_samples": 3,
 	    "no_steps_v": 128,
+
+	"learn_var_params": true,
+	"learn_sim_metric": true,
 
         "save_dir": "saved/",
         "save_period": 1,

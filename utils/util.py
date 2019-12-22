@@ -52,6 +52,10 @@ def compute_local_corrs(im1, im2, kernel, sz):
 
 
 def compute_lcc(im1, im2, s=5):
+    """
+    calculate the value of LCC
+    """
+
     kernel_size = s * 2 + 1
     sz = float(kernel_size ** 3)
 
@@ -77,11 +81,19 @@ def compute_norm(v):
 
 
 def grid_to_deformation_field(identity_grid, grid):
+    """
+    get the displacement field from a transformation
+    """
+
     deformation_field = grid - identity_grid.permute([0, 4, 1, 2, 3])
     return deformation_field
 
 
 def init_identity_grid_2d(nx, ny):
+    """
+    initialise a 2D grid to use with grid_sample
+    """
+
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
 
@@ -95,6 +107,10 @@ def init_identity_grid_2d(nx, ny):
 
 
 def init_identity_grid_3d(nx, ny, nz):
+    """
+    initialise a 3D grid to use with grid_sample
+    """
+
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
     z = torch.linspace(-1, 1, steps=nz)
@@ -111,6 +127,10 @@ def init_identity_grid_3d(nx, ny, nz):
 
 
 def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
+    """
+    normalise the coordinates of a pixel to range (-1, 1)
+    """
+
     x = -1.0 + 2.0 * px_idx_x / (dim_x - 1.0)
     y = -1.0 + 2.0 * px_idx_y / (dim_y - 1.0)
 
@@ -118,6 +138,10 @@ def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
 
 
 def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
+    """
+    normalise the coordinates of a pixel to range (-1, 1)
+    """
+
     x = -1.0 + 2.0 * px_idx_x / (dim_x - 1.0)
     y = -1.0 + 2.0 * px_idx_y / (dim_y - 1.0)
     z = -1.0 + 2.0 * px_idx_z / (dim_z - 1.0)
@@ -145,6 +169,10 @@ def resample_im_to_be_isotropic(im):
 
 
 def rescale_im(im, range_min=-1.0, range_max=1.0):
+    """
+    rescale the intensity of image pixels to a given range
+    """
+
     im_min, im_max = torch.min(im), torch.max(im)
 
     im = (range_max - range_min) * (im - im_min) / (im_max - im_min) + range_min
@@ -152,6 +180,10 @@ def rescale_im(im, range_min=-1.0, range_max=1.0):
 
 
 def standardise_im(im):
+    """
+    standardise an image to zero mean and unit variance 
+    """
+
     im_mean, im_std = torch.mean(im), torch.std(im)
     
     im -= im_mean
@@ -167,6 +199,10 @@ def save_im_to_disk(im, file_path):
 
 
 def save_field_to_disk(field, file_path):
+    """
+    save a 3D vector field to disk
+    """
+
     field = field.cpu().numpy()
     field = nib.Nifti1Image(field, np.eye(4))
     field.to_filename(file_path)

@@ -21,7 +21,10 @@ class TransformationModel(nn.Module, ABC):
         pass
 
     def forward(self, identity_grid, v):
-        return self.forward_3d(identity_grid, v)
+        if len(v.shape) == 4:
+            return self.forward_2d(identity_grid, v)
+        elif len(v.shape) == 5:
+            return self.forward_3d(identity_grid, v)
 
 
 class SVF(TransformationModel):
@@ -34,6 +37,10 @@ class SVF(TransformationModel):
         self.no_steps = 16
 
     def forward_2d(self, identity_grid, v):
+        """
+        integrate a 2D stationary velocity field through scaling and squaring
+        """
+
         warp_field = v / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
@@ -45,6 +52,10 @@ class SVF(TransformationModel):
         return identity_grid.permute([0, 3, 1, 2]) + warp_field
 
     def forward_3d(self, identity_grid, v):
+        """
+        integrate a 3D stationary velocity field through scaling and squaring
+        """
+
         warp_field = v / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
