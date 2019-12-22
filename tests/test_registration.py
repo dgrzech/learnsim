@@ -2,10 +2,7 @@ from torch.optim import Adam, SGD
 
 from model.loss import LCC, SSD, RegLossL2, EntropyMultivariateNormal
 from model.model import SimEnc
-from utils.registration import RegistrationModule
-from utils.sampler import sample_qf, sample_qv
-from utils.transformation import SVF
-from utils.util import init_identity_grid_3d, pixel_to_normalised_3d, save_im_to_disk
+from utils import init_identity_grid_3d, pixel_to_normalised_3d, sample_qf, sample_qv, save_im_to_disk, RegistrationModule, SVF
 
 import numpy as np
 import torch

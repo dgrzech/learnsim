@@ -1,5 +1,5 @@
 from mpl_toolkits.mplot3d import Axes3D
-from utils.util import grid_to_deformation_field, init_identity_grid_2d, init_identity_grid_3d
+from utils import grid_to_deformation_field, init_identity_grid_2d, init_identity_grid_3d
 
 import matplotlib.pyplot as plt
 import numpy as np

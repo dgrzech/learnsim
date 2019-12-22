@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 from torch import nn
 
-from utils.diff_op import GradientOperator
+from utils import GradientOperator
 
 import torch
 

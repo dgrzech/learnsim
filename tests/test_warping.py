@@ -1,7 +1,6 @@
-from skimage import transform
+from utils import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, standardise_im, save_im_to_disk, RegistrationModule
 
-from utils.registration import RegistrationModule
-from utils.util import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, standardise_im, save_im_to_disk
+from skimage import transform
 
 import math
 import numpy as np

@@ -1,8 +1,8 @@
 from tqdm import tqdm
 
+from logger import save_images
 from parse_config import ConfigParser
-from utils.sampler import sample_qv
-from utils.util import save_field_to_disk, save_im_to_disk
+from utils import grid_to_deformation_field, sample_qv
 
 import argparse
 import os
@@ -12,40 +12,28 @@ import data_loader.data_loaders as module_data
 import model.loss as model_loss
 import model.model as module_arch
 import utils.registration as registration
-import utils.transformation as transformation
+import utils.transformation as transform
 
 
 def main(config):
     logger = config.get_logger('test')
 
-    """
-    setup data loader instance
-    """
-
+    # data loader instance
     data_loader = config.init_obj('data_loader', module_data, save_dirs=config.save_dirs)
 
-    """
-    build the model architecture
-    """
-
+    # build the model architecture
     enc = config.init_obj('arch', module_arch)
-    transformation_model = config.init_obj('transformation_model', transformation)
+    transformation_model = config.init_obj('transformation_model', transform)
     registration_module = config.init_obj('registration_module', registration)
 
     logger.info(enc)
 
-    """
-    initialise the losses
-    """
-
+    # initialise the losses
     data_loss = config.init_obj('data_loss', model_loss)
     reg_loss = config.init_obj('reg_loss', model_loss)
     entropy = config.init_obj('entropy', model_loss)
 
-    """
-    prepare model for testing
-    """
-
+    # prepare model for testing
     logger.info('loading checkpoint: {} ...'.format(config.resume))
     checkpoint = torch.load(config.resume)
     state_dict = checkpoint['state_dict']
@@ -76,27 +64,19 @@ def main(config):
     for batch_idx, (im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
             in enumerate(tqdm(data_loader)):
         im_fixed, im_moving = im_fixed.to(device, non_blocking=True), \
-                              im_moving.to(device, non_blocking=True)
+                              im_moving.to(device, non_blocking=True)  # images to register
 
-        mu_v = mu_v.to(device, non_blocking=True).requires_grad_(True)
+        mu_v = mu_v.to(device, non_blocking=True).requires_grad_(True)  # mean velocity field
         log_var_v, u_v = log_var_v.to(device, non_blocking=True).requires_grad_(True), \
-                         u_v.to(device, non_blocking=True).requires_grad_(True)
+                         u_v.to(device, non_blocking=True).requires_grad_(True)  # variational parameters
 
         identity_grid = identity_grid.to(device, non_blocking=True)
 
-        file_path = os.path.join(data_loader.save_dirs['images'], 'im_fixed_' + str(batch_idx) + '.nii.gz')
-        save_im_to_disk(im_fixed[0, :, :, :, :], file_path)
-        file_path = os.path.join(data_loader.save_dirs['images'], 'im_moving_' + str(batch_idx) + '.nii.gz')
-        save_im_to_disk(im_moving[0, :, :, :, :], file_path)
-
-        """
-        initialise the optimiser
-        """
-
+        # initialise the optimiser
         optimizer_v = config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
 
         """
-        optimise mu_v, log_var_v, and u_v on data
+        optimise q_v
         """
 
         for iter_no in range(no_steps_v):
@@ -105,7 +85,7 @@ def main(config):
 
             for _ in range(no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation = transformation_model.forward_3d(identity_grid, v_sample)
+                transformation = transformation_model(identity_grid, v_sample)
 
                 im_moving_warped = registration_module(im_moving, transformation)
                 im_out = enc(im_fixed, im_moving_warped)
@@ -120,40 +100,27 @@ def main(config):
             loss_qv.backward()
             optimizer_v.step()
 
-            # if iter_no == 0 or iter_no % 16 == 0 or iter_no == no_steps_v - 1:
-            print(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
-                  f', TOTAL ENERGY: {loss_qv.item():.2f}' +
-                  f'\ndata: {data_term.item():.2f}' +
-                  f', regularisation: {reg_term.item():.2f}' +
-                  f', entropy: {entropy_term.item():.2f}'
-                  )
+            if iter_no == 0 or iter_no % 16 == 0 or iter_no == no_steps_v - 1:
+                print(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
+                      f', TOTAL ENERGY: {loss_qv.item():.2f}' +
+                      f'\ndata: {data_term.item():.2f}' +
+                      f', regularisation: {reg_term.item():.2f}' +
+                      f', entropy: {entropy_term.item():.2f}'
+                      )
 
-            """
-            save the output images and fields to disk
-            """
+        # save the images
+        with torch.no_grad():
+            transformation = transformation_model(identity_grid, mu_v)
+            warp_field = grid_to_deformation_field(identity_grid, transformation)
+            im_moving_warped = registration_module(im_moving, transformation)
+            
+            save_images(im_pair_idxs, data_loader.save_dirs, im_fixed, im_moving, im_moving_warped,
+                        mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
+            print('\nsaved the output images and vector fields to disk\n')
 
-            with torch.no_grad():
-                transformation = transformation_model.forward_3d(identity_grid, mu_v)
-                im_moving_warped = registration_module(im_moving, transformation)
-
-                file_path = os.path.join(data_loader.save_dirs['images'],
-                                         'im_moving_warped_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_im_to_disk(im_moving_warped[0, :, :, :, :], file_path)
-
-                file_path = os.path.join(data_loader.save_dirs['mu_v_field'],
-                                         'mu_v_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_field_to_disk(mu_v[0, :, :, :, :], file_path)
-
-                file_path = os.path.join(data_loader.save_dirs['deformation_field'],
-                                         'deformation_field_' + str(batch_idx) + '_' + str(iter_no) + '.nii.gz')
-                save_field_to_disk(transformation[0, :, :, :, :], file_path)
-
-    """
-    calculate the metrics
-    """
-
+    # metrics
     with torch.no_grad():
-        transformation = transformation_model.forward_3d(identity_grid, mu_v)
+        transformation = transformation_model(identity_grid, mu_v)
         im_moving_warped = registration_module(im_moving, transformation)
         im_out = enc(im_fixed, im_moving_warped)
 
@@ -162,7 +129,7 @@ def main(config):
         entropy_term = entropy(log_var_v, u_v).sum()
 
     total_loss = data_term + reg_term + entropy_term
-    log = {'loss': total_loss.item(), 'SSD': data_term.item(), 'reg': reg_term.item(), 'entropy': entropy_term.item()}
+    log = {'loss': total_loss.item(), 'data': data_term.item(), 'reg': reg_term.item(), 'entropy': entropy_term.item()}
     logger.info(log)
 
 

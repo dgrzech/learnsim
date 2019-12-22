@@ -1,6 +1,6 @@
 from model.loss import LCC, SSD
 from model.model import CNN_LCC, CNN_SSD
-from utils.util import compute_lcc
+from utils import compute_lcc
 
 import numpy as np
 import pytest

@@ -1,6 +1,4 @@
-from utils.plots import plot_2d, plot_3d
-from utils.transformation import SVF
-from utils.util import compute_norm, init_identity_grid_3d, init_identity_grid_2d, pixel_to_normalised_3d, pixel_to_normalised_2d
+from utils import compute_norm, init_identity_grid_3d, init_identity_grid_2d, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d, SVF
 
 import math
 import torch

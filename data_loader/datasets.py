@@ -2,7 +2,7 @@ from os import listdir, path
 from skimage import io, transform
 from torch.utils.data import Dataset
 
-from utils.util import init_identity_grid_2d, init_identity_grid_3d, rescale_im, standardise_im
+from utils import init_identity_grid_2d, init_identity_grid_3d, rescale_im, standardise_im
 
 import numpy as np
 import os

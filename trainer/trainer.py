@@ -1,7 +1,6 @@
 from base import BaseTrainer
-from utils import inf_loop, MetricTracker
-from utils.sampler import sample_qv, sample_qf
-from utils.util import compute_norm, grid_to_deformation_field, save_field_to_disk, save_im_to_disk
+from logger import save_images
+from utils import grid_to_deformation_field, inf_loop, MetricTracker, sample_qv, sample_qf
 
 from torch import nn
 
@@ -39,43 +38,6 @@ class Trainer(BaseTrainer):
 
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
-
-    def _save_images(self, im_pair_idxs, im_fixed, im_moving, im_moving_warped, 
-                     mu_v=None, log_var_v=None, u_v=None, log_var_f=None, u_f=None, deformation_field=None):
-        """
-        save the input and output images as well as norms of vectors in the vector fields to disk
-        """
-
-        im_pair_idxs = im_pair_idxs.tolist()
-
-        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            save_im_to_disk(im_fixed[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
-                                      'im_fixed_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(im_moving[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
-                                      'im_moving_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(im_moving_warped[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
-                                              'im_moving_warped_' + str(im_pair_idx) + '.nii.gz'))
-
-            save_im_to_disk(log_var_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
-                                                    'log_var_f_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(u_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['images'],
-                                              'u_f_' + str(im_pair_idx) + '.nii.gz'))
-            
-            mu_v_norm = compute_norm(mu_v[loop_idx, :, :, :, :])
-            log_var_v_norm = compute_norm(log_var_v[loop_idx, :, :, :, :])
-            u_v_norm = compute_norm(u_v[loop_idx, :, :, :, :])
-            deformation_field_norm = compute_norm(deformation_field[loop_idx, :, :, :, :])
-
-            save_field_to_disk(mu_v[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['mu_v_field'],
-                                     'mu_v_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(mu_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
-                                                    'mu_v_norm_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(log_var_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
-                                                         'log_var_v_norm_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(u_v_norm, os.path.join(self.data_loader.save_dirs['norms'],
-                                                   'u_v_norm_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(deformation_field_norm, os.path.join(self.data_loader.save_dirs['norms'],
-                                                    'deformation_field_norm_' + str(im_pair_idx) + '.nii.gz'))
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         """
@@ -266,8 +228,10 @@ class Trainer(BaseTrainer):
 
                 # save the images
                 warp_field = grid_to_deformation_field(identity_grid, transformation)
-                self._save_images(im_pair_idxs, im_fixed, im_moving, im_moving_warped, 
-                                  mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
+
+                save_images(im_pair_idxs, self.data_loader.save_dirs, im_fixed, im_moving, im_moving_warped, 
+                            mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
+                print('\nsaved the output images and vector fields to disk\n')
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(

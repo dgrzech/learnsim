@@ -1,4 +1,4 @@
-from utils.diff_op import GradientOperator
+from utils import GradientOperator
 
 import numpy as np
 import pytest

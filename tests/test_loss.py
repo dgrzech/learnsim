@@ -1,5 +1,5 @@
 from model.loss import EntropyMultivariateNormal
-from utils.util import compute_lcc, compute_local_corrs, compute_local_means
+from utils import compute_lcc, compute_local_corrs, compute_local_means
 
 import math
 import numpy as np
