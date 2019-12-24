@@ -33,22 +33,22 @@ class ConfigParser:
 
         if run_id is None:  # use timestamp as default run-id
             run_id = datetime.now().strftime(r'%m%d_%H%M%S')
-
-        self._save_dir = save_dir / 'models' / exper_name / run_id
-        self._log_dir = save_dir / 'log' / exper_name / run_id
-        self._im_dir = save_dir / 'images' / exper_name / run_id
-
-        self._mu_v_dir = save_dir / 'models' / exper_name / run_id / 'mu_v'
-        self._log_var_v_dir = save_dir / 'models' / exper_name / run_id / 'log_var_v'
-        self._u_v_dir = save_dir / 'models' / exper_name / run_id / 'u_v'
-        self._log_var_f_dir = save_dir / 'models' / exper_name / run_id / 'log_var_f'
-        self._u_f_dir = save_dir / 'models' / exper_name / run_id / 'u_f'
         
-        self._mu_v_field_dir = save_dir / 'images' / exper_name / run_id / 'mu_v'
-        self._deformation_field_dir = save_dir / 'images' / exper_name / run_id / 'deformation_field'
+        self._save_dir = save_dir / exper_name / run_id / 'models'
+        self._log_dir = save_dir / exper_name / run_id / 'log'
+        self._im_dir = save_dir / exper_name / run_id / 'images'
 
-        self._images_dir = save_dir / 'images' / exper_name / run_id / 'images'
-        self._norms_dir = save_dir / 'images' / exper_name / run_id / 'norms'
+        self._mu_v_dir = save_dir / exper_name / run_id / 'models' / 'mu_v'
+        self._log_var_v_dir = save_dir / exper_name / run_id / 'models' / 'log_var_v'
+        self._u_v_dir = save_dir / exper_name / run_id / 'models' / 'u_v'
+        self._log_var_f_dir = save_dir / exper_name / run_id / 'models' / 'log_var_f'
+        self._u_f_dir = save_dir / exper_name / run_id / 'models' / 'u_f'
+        
+        self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
+        self._deformation_field_dir = save_dir / exper_name / run_id / 'fields' / 'deformation_field'
+        self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
+
+        self._images_dir = save_dir / exper_name / run_id / 'images'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
