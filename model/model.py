@@ -18,7 +18,7 @@ class CNN_LCC(BaseModel):
         self.sz = float(self.kernel_size ** 3)
 
         # convolutional layers
-        self.conv1 = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, padding=s, bias=False)
+        self.conv1 = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, bias=False)
         self.conv2 = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, bias=False)
 
         self.padding = (s, s, s, s, s, s)
@@ -35,24 +35,24 @@ class CNN_LCC(BaseModel):
             self.conv1.weight = nn.Parameter(w1, requires_grad=True)
 
     def encode(self, im_fixed, im_moving_warped):
-        im_fixed, im_moving_warped = F.pad(im_fixed, self.padding, mode='replicate'), F.pad(im_moving_warped, self.padding, mode='replicate')
-        im_fixed, im_moving_warped = self.conv1(im_fixed), self.conv1(im_moving_warped)
+        im_fixed, im_moving_warped = F.pad(im_fixed, self.padding, mode='replicate'), \
+                                     F.pad(im_moving_warped, self.padding, mode='replicate')
 
-        F2 = im_fixed * im_fixed
-        M2 = im_moving_warped * im_moving_warped
-        FM = im_fixed * im_moving_warped
+        im_fixed, im_moving_warped = F.pad(self.conv1(im_fixed), self.padding, mode='replicate'), \
+                                     F.pad(self.conv1(im_moving_warped), self.padding, mode='replicate')
 
-        u_F, u_M = self.conv2(im_fixed) / self.sz, self.conv2(im_moving_warped) / self.sz
+        u_F, u_M = F.pad(self.conv2(im_fixed), self.padding, mode='replicate') / self.sz, \
+                   F.pad(self.conv2(im_moving_warped), self.padding, mode='replicate') / self.sz
 
-        cross = self.conv2(FM) - u_F * u_M * self.sz
-        F_var = self.conv2(F2) - u_F * u_F * self.sz
-        M_var = self.conv2(M2) - u_M * u_M * self.sz
+        cross = self.conv2((im_fixed - u_F) * (im_moving_warped - u_M))
+        F_var = self.conv2((im_fixed - u_F) * (im_fixed - u_F))
+        M_var = self.conv2((im_moving_warped - u_M) * (im_moving_warped - u_M))
 
         return cross, F_var, M_var
 
     def forward(self, im_fixed, im_moving_warped):
         cross, F_var, M_var = self.encode(im_fixed, im_moving_warped)
-        return cross * cross / (F_var * M_var + 1e-1)
+        return cross * cross / (F_var * M_var + 1e-5)
 
 
 class CNN_SSD(BaseModel):

@@ -70,4 +70,5 @@ class EncInitTestMethods(unittest.TestCase):
         val = self.loss_LCC(z).item()
         val_true = compute_lcc(im_fixed, im_moving_warped).item()
 
+        assert -1.0 * val > 0.0
         assert pytest.approx(val, 0.01) == val_true
