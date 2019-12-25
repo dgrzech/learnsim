@@ -1,4 +1,5 @@
 from datetime import datetime
+from distutils.dir_util import copy_tree
 from functools import reduce, partial
 from operator import getitem
 from pathlib import Path
@@ -21,7 +22,6 @@ class ConfigParser:
         :param modification: Dict keychain:value, specifying position values to be replaced from config dict.
         :param run_id: Unique Identifier for training processes. Used to save checkpoints and training log. Timestamp is being used as default
         """
-
         # load config file and apply modification
         self._config = _update_config(config, modification)
         self.resume = resume
@@ -36,7 +36,7 @@ class ConfigParser:
         
         self._save_dir = save_dir / exper_name / run_id / 'models'
         self._log_dir = save_dir / exper_name / run_id / 'log'
-        self._im_dir = save_dir / exper_name / run_id / 'images'
+        self._images_dir = save_dir / exper_name / run_id / 'images'
 
         self._mu_v_dir = save_dir / exper_name / run_id / 'models' / 'mu_v'
         self._log_var_v_dir = save_dir / exper_name / run_id / 'models' / 'log_var_v'
@@ -46,16 +46,15 @@ class ConfigParser:
         
         self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
         self._deformation_field_dir = save_dir / exper_name / run_id / 'fields' / 'deformation_field'
+        
         self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
-
-        self._images_dir = save_dir / exper_name / run_id / 'images'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
 
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.images_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.mu_v_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_var_v_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -66,8 +65,23 @@ class ConfigParser:
         self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.deformation_field_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        self.images_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
+        
+        # copy values of variational parameters
+        if self.resume is not None: 
+            print('copying previous values of variational parameters..')
+            copy_tree((self.resume.parent / 'mu_v').absolute().as_posix(), 
+                       self._mu_v_dir.absolute().as_posix())
+            copy_tree((self.resume.parent / 'log_var_v').absolute().as_posix(), 
+                       self._log_var_v_dir.absolute().as_posix())
+            copy_tree((self.resume.parent / 'u_v').absolute().as_posix(), 
+                       self._u_v_dir.absolute().as_posix())
+
+            copy_tree((self.resume.parent / 'log_var_f').absolute().as_posix(), 
+                       self._log_var_f_dir.absolute().as_posix())
+            copy_tree((self.resume.parent / 'u_f').absolute().as_posix(), 
+                       self._u_f_dir.absolute().as_posix())
+            print('done!\n')
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -166,10 +180,6 @@ class ConfigParser:
     @property
     def log_dir(self):
         return self._log_dir
-
-    @property
-    def im_dir(self):
-        return self._im_dir
 
     @property
     def mu_v_dir(self):

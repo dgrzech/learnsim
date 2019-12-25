@@ -167,11 +167,11 @@ class BaseTrainer:
         }
         filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
         torch.save(state, filename)
-        self.logger.info("Saving checkpoint: {} ...".format(filename))
+        self.logger.info("saving checkpoint: {} ...".format(filename))
         if save_best:
             best_path = str(self.checkpoint_dir / 'model_best.pth')
             torch.save(state, best_path)
-            self.logger.info("Saving current best: model_best.pth ...")
+            self.logger.info("saving current best: model_best.pth ...")
 
     def _resume_checkpoint(self, resume_path):
         """
@@ -181,7 +181,7 @@ class BaseTrainer:
         """
 
         resume_path = str(resume_path)
-        self.logger.info("Loading checkpoint: {} ...".format(resume_path))
+        self.logger.info("\nloading checkpoint: {} ...".format(resume_path))
         
         checkpoint = torch.load(resume_path)
         self.start_epoch = checkpoint['epoch'] + 1
@@ -189,15 +189,15 @@ class BaseTrainer:
 
         # load architecture params from checkpoint.
         if checkpoint['config']['arch'] != self.config['arch']:
-            self.logger.warning("Warning: Architecture configuration given in config file is different from that of "
-                                "checkpoint. This may yield an exception while state_dict is being loaded.")
+            self.logger.warning("warning: architecture configuration given in config file is different from that of "
+                                "checkpoint; this may yield an exception while state_dict is being loaded.")
         self.enc.load_state_dict(checkpoint['state_dict'])
 
         # load optimizer state from checkpoint only when optimizer type is not changed.
         if checkpoint['config']['optimizer_phi']['type'] != self.config['optimizer_phi']['type']:
-            self.logger.warning("Warning: Optimizer type given in config file is different from that of checkpoint. "
-                                "Optimizer parameters not being resumed.")
+            self.logger.warning("warning: optimiser type given in config file is different from that of checkpoint; "
+                                "optimizer parameters not being resumed")
         else:
             self.optimizer_phi.load_state_dict(checkpoint['optimizer_phi'])
 
-        self.logger.info("Checkpoint loaded. Resume training from epoch {}".format(self.start_epoch))
+        self.logger.info("checkpoint loaded, resuming training from epoch {}\n".format(self.start_epoch))
