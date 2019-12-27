@@ -101,12 +101,12 @@ def main(config):
             optimizer_v.step()
 
             if iter_no == 0 or iter_no % 16 == 0 or iter_no == no_steps_v - 1:
-                print(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
-                      f', TOTAL ENERGY: {loss_qv.item():.2f}' +
-                      f'\ndata: {data_term.item():.2f}' +
-                      f', regularisation: {reg_term.item():.2f}' +
-                      f', entropy: {entropy_term.item():.2f}'
-                      )
+                logger.info(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
+                            f', TOTAL ENERGY: {loss_qv.item():.2f}' +
+                            f'\ndata: {data_term.item():.2f}' +
+                            f', regularisation: {reg_term.item():.2f}' +
+                            f', entropy: {entropy_term.item():.2f}'
+                            )
 
         # save the images
         with torch.no_grad():
@@ -116,7 +116,7 @@ def main(config):
             
             save_images(im_pair_idxs, data_loader.save_dirs, im_fixed, im_moving, im_moving_warped,
                         mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
-            print('\nsaved the output images and vector fields to disk\n')
+            logger.info('\nsaved the output images and vector fields to disk\n')
 
     # metrics
     with torch.no_grad():

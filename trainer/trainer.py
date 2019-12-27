@@ -22,7 +22,8 @@ class Trainer(BaseTrainer):
         self.config = config
         self.data_loader = data_loader
 
-        self.learn_var_params = config['trainer']['learn_var_params']  # whether to learn the variational parameters
+        self.learn_q_v = config['trainer']['learn_q_v']  # whether to learn the variational parameters of q_v
+        self.learn_q_f = config['trainer']['learn_q_f']  # whether to learn the variational parameters of q_f
         self.learn_sim_metric = config['trainer']['learn_sim_metric']  # whether to learn the similarity metric
 
         if len_epoch is None:
@@ -32,12 +33,27 @@ class Trainer(BaseTrainer):
             # iteration-based training
             self.data_loader = inf_loop(data_loader)
             self.len_epoch = len_epoch
-
+        
         self.valid_data_loader = valid_data_loader
         self.do_validation = self.valid_data_loader is not None
 
         self.log_step = int(np.sqrt(data_loader.batch_size))
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
+        
+        # optimisers
+        if isinstance(self.enc, nn.DataParallel):
+            self.enc.module.set_grad_enabled(True)
+        else:
+            self.enc.set_grad_enabled(True)
+
+        self.optimizer_q_f = None
+        self.optimizer_q_phi = self.config.init_obj('optimizer_phi', torch.optim, self.enc.parameters())
+        self.optimizer_q_v = None
+        
+        if isinstance(self.enc, nn.DataParallel):
+            self.enc.module.set_grad_enabled(False)
+        else:
+            self.enc.set_grad_enabled(False)
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         """
@@ -65,6 +81,179 @@ class Trainer(BaseTrainer):
             torch.save(u_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['u_f'],
                                                                'u_f_' + str(im_pair_idx) + '.pt'))
 
+    def _reg_print(self, iter_no, no_steps_v, curr_batch_size, loss_q_v, data_term, reg_term, entropy_term):
+        """
+        print value of the energy function at a given step of registration
+        """
+
+        loss_q_v /= curr_batch_size
+
+        data_term /= curr_batch_size
+        reg_term /= curr_batch_size
+        entropy_term /= curr_batch_size
+
+        self.logger.info(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
+                         f', TOTAL ENERGY: {loss_q_v:.5f}' +
+                         f'\ndata: {data_term:.5f}' +
+                         f', regularisation: {reg_term:.5f}' +
+                         f', entropy: {entropy_term:.5f}'
+                         )
+
+    def _step_q_v(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, identity_grid):
+        """
+        update parameters of q_v
+        """
+
+        loss_q_v = 0.0
+
+        if self.learn_q_v:
+            # enable gradients
+            mu_v.requires_grad_(True)
+            log_var_v.requires_grad_(True)
+            u_v.requires_grad_(True)
+
+            # initialise the optimiser
+            self.optimizer_q_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
+
+            # optimise q_v
+            for iter_no in range(self.no_steps_v):
+                self.optimizer_q_v.zero_grad()
+                data_term = 0.0
+
+                for _ in range(self.no_samples):
+                    v_sample = sample_qv(mu_v, log_var_v, u_v)
+                    transformation = self.transformation_model(identity_grid, v_sample)
+
+                    im_moving_warped = self.registration_module(im_moving, transformation)
+                    im_out = self.enc(im_fixed, im_moving_warped)
+
+                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                    data_term += data_term_sample
+
+                reg_term = self.reg_loss(mu_v).sum()
+                entropy_term = self.entropy(log_var_v, u_v).sum()
+
+                loss_q_v = data_term + reg_term + entropy_term
+                loss_q_v.backward()
+                self.optimizer_q_v.step()  # backprop
+
+                if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
+                    self._reg_print(iter_no, self.no_steps_v, curr_batch_size,
+                                    loss_q_v.item(), data_term.item(), reg_term.item(), entropy_term.item())
+            
+            # disable gradients
+            mu_v.requires_grad_(False)
+            log_var_v.requires_grad_(False)
+            u_v.requires_grad_(False)
+        else:
+            mu_v.requires_grad_(True)
+            self.optimizer_q_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v])
+
+            for iter_no in range(self.no_steps_v):
+                self.optimizer_q_v.zero_grad()
+                transformation = self.transformation_model(identity_grid, mu_v)
+
+                im_moving_warped = self.registration_module(im_moving, transformation)
+                im_out = self.enc(im_fixed, im_moving_warped)
+
+                data_term = self.data_loss(im_out).sum()
+                reg_term = self.reg_loss(mu_v).sum()
+
+                loss_q_v = data_term + reg_term
+                loss_q_v.backward()
+                self.optimizer_q_v.step()
+
+                if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
+                    entropy_term = self.entropy(log_var_v, u_v)
+                    self._reg_print(iter_no, self.no_steps_v, curr_batch_size,
+                                    loss_q_v.item(), data_term.item(), reg_term.item(), entropy_term.item())
+            
+            mu_v.requires_grad_(False)
+
+        return loss_q_v / curr_batch_size
+
+    def _step_q_f(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid):
+        """
+        update parameters of q_f
+        """
+
+        # enable gradients
+        log_var_f.requires_grad_(True)
+        u_f.requires_grad_(True)
+        
+        # initialise the optimiser
+        self.optimizer_q_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
+
+        # optimise q_f
+        self.optimizer_q_f.zero_grad()
+        loss_q_f = 0.0
+
+        for _ in range(self.no_samples):  
+            v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
+            transformation = self.transformation_model(identity_grid, v_sample)
+
+            im_moving_warped = self.registration_module(im_moving, transformation)
+            im_out = self.enc(im_fixed, im_moving_warped)
+
+            data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+            loss_q_f += data_term_sample
+
+            for _ in range(self.no_samples):
+                im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)  # draw a sample from q_f
+                im_out = self.enc(im_fixed_sample, im_moving_warped)
+
+                data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
+                loss_q_f -= data_term_sample
+
+        loss_q_f.backward()
+        self.optimizer_q_f.step()  # backprop
+
+        # disable gradients
+        log_var_f.requires_grad_(False)
+        u_f.requires_grad_(False)
+
+        return loss_q_f / curr_batch_size
+
+    def _step_q_phi(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid):
+        """
+        update parameters of q_phi
+        """
+
+        # enable gradients
+        self.enc.train()
+        if isinstance(self.enc, nn.DataParallel):
+            self.enc.module.set_grad_enabled(True)
+        else:
+            self.enc.set_grad_enabled(True)
+        
+        # optimise the encoding function
+        self.optimizer_q_phi.zero_grad()
+        loss_q_phi = 0.0
+        
+        for _ in range(self.no_samples):
+            v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
+            transformation = self.transformation_model(identity_grid, v_sample)
+
+            im_moving_warped = self.registration_module(im_moving, transformation)
+            im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)  # draw a sample from q_f
+            im_out = self.enc(im_fixed_sample, im_moving_warped)
+
+            data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+            loss_q_phi += data_term_sample
+
+        loss_q_phi /= curr_batch_size
+        loss_q_phi.backward()
+        self.optimizer_q_phi.step()  # backprop
+        
+        # disable gradients
+        self.enc.eval()
+        if isinstance(self.enc, nn.DataParallel):
+            self.enc.module.set_grad_enabled(False)
+        else:
+            self.enc.set_grad_enabled(False)
+
+        return loss_q_phi
+
     def _train_epoch(self, epoch):
         """
         training logic for an epoch
@@ -80,16 +269,15 @@ class Trainer(BaseTrainer):
             im_fixed, im_moving = im_fixed.to(self.device, non_blocking=True), \
                                   im_moving.to(self.device, non_blocking=True)  # images to register
 
-            mu_v = mu_v.to(self.device, non_blocking=True).requires_grad_(True)  # mean velocity field
+            mu_v = mu_v.to(self.device, non_blocking=True)  # mean velocity field
 
-            log_var_v, u_v = log_var_v.to(self.device, non_blocking=True).requires_grad_(True), \
-                             u_v.to(self.device, non_blocking=True).requires_grad_(True)
-            log_var_f, u_f = log_var_f.to(self.device, non_blocking=True).requires_grad_(True), \
-                             u_f.to(self.device, non_blocking=True).requires_grad_(True)  # variational parameters
+            log_var_v, u_v = log_var_v.to(self.device, non_blocking=True), \
+                             u_v.to(self.device, non_blocking=True)
+            log_var_f, u_f = log_var_f.to(self.device, non_blocking=True), \
+                             u_f.to(self.device, non_blocking=True)  # variational parameters
 
-            identity_grid = identity_grid.to(self.device, non_blocking=True).requires_grad_(False)
-
-            total_loss = 0.0
+            identity_grid = identity_grid.to(self.device, non_blocking=True)
+            curr_batch_size = float(im_pair_idxs.numel())
 
             # print value of the data term before registration
             with torch.no_grad():
@@ -98,115 +286,41 @@ class Trainer(BaseTrainer):
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out_unwarped = self.enc(im_fixed, im_moving)
                 im_out = self.enc(im_fixed, im_moving_warped)
-
-                print(f'\nPRE-REGISTRATION: ' +
-                      f'unwarped: {self.data_loss(im_out_unwarped).mean().item():.5f}' +
-                      f', warped w/ the current estimate: {self.data_loss(im_out).mean().item():.5f}\n'
-                      )
-
-            # initialise the optimisers
-            if self.learn_var_params:
-                optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
-                optimizer_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
-            else:
-                optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v])
-
-            """
-            optimise q_v
-            """
-
-            self.enc.eval()
-            
-            if isinstance(self.enc, nn.DataParallel):
-                self.enc.module.set_grad_enabled(False)
-            else:
-                self.enc.set_grad_enabled(False)
-
-            for iter_no in range(self.no_steps_v):
-                optimizer_v.zero_grad()
-                data_term = 0.0
                 
-                if self.learn_var_params:
-                    for _ in range(self.no_samples):  # draw samples from q_v
-                        v_sample = sample_qv(mu_v, log_var_v, u_v)
-                        transformation = self.transformation_model(identity_grid, v_sample)
+                loss_unwarped = self.data_loss(im_out_unwarped).sum() / curr_batch_size
+                loss_warped = self.data_loss(im_out).sum() / curr_batch_size
 
-                        im_moving_warped = self.registration_module(im_moving, transformation)
-                        im_out = self.enc(im_fixed, im_moving_warped)
-
-                        data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-                        data_term += data_term_sample
-                else:
-                    transformation = self.transformation_model(identity_grid, mu_v)
-
-                    im_moving_warped = self.registration_module(im_moving, transformation)
-                    im_out = self.enc(im_fixed, im_moving_warped)
-
-                    data_term_sample = self.data_loss(im_out).sum()
-                    data_term += data_term_sample
-
-                reg_term = self.reg_loss(mu_v).sum()
-                entropy_term = self.entropy(log_var_v, u_v).sum()
-
-                loss_qv = data_term + reg_term + entropy_term
-                loss_qv.backward()
-                optimizer_v.step()
-
-                if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
-                    print(f'ITERATION ' + str(iter_no) + '/' + str(self.no_steps_v - 1) +
-                          f', TOTAL ENERGY: {loss_qv.item():.5f}' +
-                          f'\ndata: {data_term.item():.5f}' +
-                          f', regularisation: {reg_term.item():.5f}' +
-                          f', entropy: {entropy_term.item():.5f}'
-                          )
-
-                total_loss += (loss_qv.item() / float(self.no_steps_v))
-
-            mu_v.requires_grad_(False)
-            log_var_v.requires_grad_(False)
-            u_v.requires_grad_(False)
+                self.logger.info(f'\nPRE-REGISTRATION: ' +
+                                 f'unwarped: {loss_unwarped:.5f}' +
+                                 f', warped w/ the current estimate: {loss_warped:.5f}\n'
+                                 )
 
             """
-            optimise q_phi
+            training
             """
-            
+
+            total_loss = 0.0
+            loss_q_f = 0.0
+            loss_q_phi = 0.0
+
+            loss_q_v = self._step_q_v(curr_batch_size, im_fixed, im_moving,
+                                      mu_v, log_var_v, u_v, identity_grid)  # q_v
+            total_loss += loss_q_v
+
+            if self.learn_q_f:
+                self.logger.info('\noptimising q_f..')
+                loss_q_f = self._step_q_f(curr_batch_size, im_fixed, im_moving, 
+                                          mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid)  # q_f
+                total_loss += loss_q_f
+
             if self.learn_sim_metric:
-                self.enc.train()
-                
-                if isinstance(self.enc, nn.DataParallel):
-                    self.enc.module.set_grad_enabled(True)
-                else:
-                    self.enc.set_grad_enabled(True)
+                self.logger.info('\noptimising q_phi..')
+                loss_q_phi = self._step_q_phi(curr_batch_size, im_fixed, im_moving, 
+                                              mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid)  # q_phi
+                total_loss += loss_q_phi
 
-                optimizer_f.zero_grad()
-                loss_qphi = 0.0
-
-                for _ in range(self.no_samples):  # draw samples from q_v
-                    v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    transformation = self.transformation_model(identity_grid, v_sample)
-
-                    im_moving_warped = self.registration_module(im_moving, transformation)
-                    im_out = self.enc(im_fixed, im_moving_warped)
-
-                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-                    loss_qphi += data_term_sample
-
-                    for _ in range(self.no_samples):  # draw samples from q_f
-                        f_sample = sample_qf(im_fixed, log_var_f, u_f)
-                        im_out = self.enc(f_sample, im_moving_warped)
-
-                        data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
-                        loss_qphi -= data_term_sample
-
-                loss_qphi.backward()
-                optimizer_f.step()
-
-                total_loss += loss_qphi.item()
-
-            log_var_f.requires_grad_(False)
-            u_f.requires_grad_(False)
-
-            self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f)  # save the updated tensors
+            # save the updated tensors
+            self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f) 
 
             # metrics
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
@@ -218,9 +332,9 @@ class Trainer(BaseTrainer):
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
-                data_term = self.data_loss(im_out).mean()
-                reg_term = self.reg_loss(mu_v).mean()
-                entropy_term = self.entropy(log_var_v, u_v).mean()
+                data_term = self.data_loss(im_out).sum() / curr_batch_size
+                reg_term = self.reg_loss(mu_v).sum() / curr_batch_size
+                entropy_term = self.entropy(log_var_v, u_v).sum() / curr_batch_size
 
                 self.train_metrics.update('data_term', data_term.item())
                 self.train_metrics.update('reg_term', reg_term.item())
@@ -231,11 +345,14 @@ class Trainer(BaseTrainer):
 
                 save_images(im_pair_idxs, self.data_loader.save_dirs, im_fixed, im_moving, im_moving_warped, 
                             mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
-                print('\nsaved the output images and vector fields to disk\n')
+                self.logger.info('\nsaved the output images and vector fields to disk\n')
 
             if batch_idx % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
-                    epoch, self._progress(batch_idx), total_loss / self.data_loader.batch_size))
+                self.logger.info(
+                        'train epoch: {} {}'.format(epoch, self._progress(batch_idx)) +
+                        '\nloss: {:.5f}'.format(total_loss) + 
+                        '\nloss_q_v: {:.5f}, loss_q_f: {:.5f}, loss_q_phi: {:.5f}'.format(loss_q_v, loss_q_f, loss_q_phi)
+                                )
 
             if batch_idx == self.len_epoch:
                 break
