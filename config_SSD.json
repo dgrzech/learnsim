@@ -37,13 +37,15 @@
     "optimizer_v": {
         "type": "Adam",
         "args": {
-            "lr": 5e-4
+            "lr": 5e-4,
+	    "amsgrad": true
         }
     },
     "optimizer_f": {
         "type": "Adam",
         "args": {
-            "lr": 5e-4
+            "lr": 5e-4,
+	    "amsgrad": true
         }
     },
     "optimizer_phi": {
