@@ -59,9 +59,9 @@
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
-            "data_dir": "/vol/bitbucket/dig15/biobank_test_large/",
+            "data_dir": "/vol/bitbucket/dig15/learnsim_biobank_train/biobank_2/",
             "batch_size": 2,
-            "num_workers": 6,
+            "num_workers": 2,
             "shuffle": true
         }
     },
@@ -72,7 +72,6 @@
 	    "no_steps_v": 128,
 
 	"learn_q_v": true,
-	"learn_q_f": true,
 	"learn_sim_metric": true,
 
         "save_dir": "saved/",

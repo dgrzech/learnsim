@@ -23,7 +23,6 @@ class Trainer(BaseTrainer):
         self.data_loader = data_loader
 
         self.learn_q_v = config['trainer']['learn_q_v']  # whether to learn the variational parameters of q_v
-        self.learn_q_f = config['trainer']['learn_q_f']  # whether to learn the variational parameters of q_f
         self.learn_sim_metric = config['trainer']['learn_sim_metric']  # whether to learn the similarity metric
 
         if len_epoch is None:
@@ -172,23 +171,31 @@ class Trainer(BaseTrainer):
 
         return loss_q_v / curr_batch_size
 
-    def _step_q_f(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid):
+    def _step_q_f_q_phi(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid):
         """
-        update parameters of q_f
+        update parameters of q_f and q_phi
         """
 
         # enable gradients
         log_var_f.requires_grad_(True)
         u_f.requires_grad_(True)
+
+        self.enc.train()
+        if isinstance(self.enc, nn.DataParallel):
+            self.enc.module.set_grad_enabled(True)
+        else:
+            self.enc.set_grad_enabled(True)
         
         # initialise the optimiser
         self.optimizer_q_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
 
-        # optimise q_f
+        # optimise the encoding function
         self.optimizer_q_f.zero_grad()
-        loss_q_f = 0.0
+        self.optimizer_q_phi.zero_grad()
 
-        for _ in range(self.no_samples):  
+        loss_q_f_q_phi = 0.0
+        
+        for _ in range(self.no_samples):
             v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
             transformation = self.transformation_model(identity_grid, v_sample)
 
@@ -196,63 +203,32 @@ class Trainer(BaseTrainer):
             im_out = self.enc(im_fixed, im_moving_warped)
 
             data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-            loss_q_f += data_term_sample
-
+            loss_q_f_q_phi += data_term_sample
+            
             for _ in range(self.no_samples):
                 im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)  # draw a sample from q_f
                 im_out = self.enc(im_fixed_sample, im_moving_warped)
 
                 data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
-                loss_q_f -= data_term_sample
+                loss_q_f_q_phi -= data_term_sample
 
-        loss_q_f.backward()
+        loss_q_f_q_phi /= curr_batch_size
+        loss_q_f_q_phi.backward()
+
         self.optimizer_q_f.step()  # backprop
-
+        self.optimizer_q_phi.step()  
+        
         # disable gradients
         log_var_f.requires_grad_(False)
         u_f.requires_grad_(False)
 
-        return loss_q_f / curr_batch_size
-
-    def _step_q_phi(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid):
-        """
-        update parameters of q_phi
-        """
-
-        # enable gradients
-        self.enc.train()
-        if isinstance(self.enc, nn.DataParallel):
-            self.enc.module.set_grad_enabled(True)
-        else:
-            self.enc.set_grad_enabled(True)
-        
-        # optimise the encoding function
-        self.optimizer_q_phi.zero_grad()
-        loss_q_phi = 0.0
-        
-        for _ in range(self.no_samples):
-            v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
-            transformation = self.transformation_model(identity_grid, v_sample)
-
-            im_moving_warped = self.registration_module(im_moving, transformation)
-            im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)  # draw a sample from q_f
-            im_out = self.enc(im_fixed_sample, im_moving_warped)
-
-            data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-            loss_q_phi += data_term_sample
-
-        loss_q_phi /= curr_batch_size
-        loss_q_phi.backward()
-        self.optimizer_q_phi.step()  # backprop
-        
-        # disable gradients
         self.enc.eval()
         if isinstance(self.enc, nn.DataParallel):
             self.enc.module.set_grad_enabled(False)
         else:
             self.enc.set_grad_enabled(False)
 
-        return loss_q_phi
+        return loss_q_f_q_phi
 
     def _train_epoch(self, epoch):
         """
@@ -300,24 +276,17 @@ class Trainer(BaseTrainer):
             """
 
             total_loss = 0.0
-            loss_q_f = 0.0
-            loss_q_phi = 0.0
+            loss_q_f_q_phi = 0.0
 
             loss_q_v = self._step_q_v(curr_batch_size, im_fixed, im_moving,
                                       mu_v, log_var_v, u_v, identity_grid)  # q_v
             total_loss += loss_q_v
 
-            if self.learn_q_f:
-                self.logger.info('\noptimising q_f..')
-                loss_q_f = self._step_q_f(curr_batch_size, im_fixed, im_moving, 
-                                          mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid)  # q_f
-                total_loss += loss_q_f
-
             if self.learn_sim_metric:
-                self.logger.info('\noptimising q_phi..')
-                loss_q_phi = self._step_q_phi(curr_batch_size, im_fixed, im_moving, 
-                                              mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid)  # q_phi
-                total_loss += loss_q_phi
+                self.logger.info('\noptimising q_f and q_phi..')
+                loss_q_f_q_phi = self._step_q_f_q_phi(curr_batch_size, im_fixed, im_moving, 
+                                                      mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid)  # q_phi
+                total_loss += loss_q_f_q_phi
 
             # save the updated tensors
             self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f) 
@@ -350,8 +319,8 @@ class Trainer(BaseTrainer):
             if batch_idx % self.log_step == 0:
                 self.logger.info(
                         'train epoch: {} {}'.format(epoch, self._progress(batch_idx)) +
-                        '\nloss: {:.5f}'.format(total_loss) + 
-                        '\nloss_q_v: {:.5f}, loss_q_f: {:.5f}, loss_q_phi: {:.5f}'.format(loss_q_v, loss_q_f, loss_q_phi)
+                        '\nloss: {total_loss.item():.5f}' + 
+                        '\nloss_q_v: {loss_q_v.item()::.5f}, loss_q_f_q_phi: {loss_q_f_q_phi.item():.5f}'
                                 )
 
             if batch_idx == self.len_epoch:
