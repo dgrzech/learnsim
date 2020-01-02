@@ -145,7 +145,7 @@ class WarpingTestMethods(unittest.TestCase):
         load image and warp it
         """
 
-        im_path = '/vol/bitbucket/dig15/biobank_test/1007582_T2_FLAIR_unbiased_brain_affine_to_mni.nii.gz'
+        im_path = '/vol/bitbucket/dig15/learnsim_biobank_train/biobank_9/1007582_T2_FLAIR_unbiased_brain_affine_to_mni.nii.gz'
         im_moving = sitk.ReadImage(im_path, sitk.sitkFloat32)
 
         im_moving = torch.from_numpy(transform.resize(

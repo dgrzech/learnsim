@@ -318,9 +318,9 @@ class Trainer(BaseTrainer):
 
             if batch_idx % self.log_step == 0:
                 self.logger.info(
-                        'train epoch: {} {}'.format(epoch, self._progress(batch_idx)) +
-                        '\nloss: {total_loss.item():.5f}' + 
-                        '\nloss_q_v: {loss_q_v.item()::.5f}, loss_q_f_q_phi: {loss_q_f_q_phi.item():.5f}'
+                        f'train epoch: {epoch} {self._progress(batch_idx)}\n' +
+                        f'loss: {total_loss.item():.5f}\n' + 
+                        f'loss_q_v: {loss_q_v.item():.5f}, loss_q_f_q_phi: {loss_q_f_q_phi.item():.5f}'
                                 )
 
             if batch_idx == self.len_epoch:
