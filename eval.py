@@ -1,6 +1,7 @@
 from tqdm import tqdm
 
 from logger import save_images
+from model.metric import dice
 from parse_config import ConfigParser
 from utils import grid_to_deformation_field, sample_qv
 
@@ -117,14 +118,13 @@ def main(config):
 
             im_moving_warped = registration_module(im_moving, transformation)
             seg_moving_warped = registration_module(seg_moving, transformation, mode='nearest')
-            
+
             save_images(im_pair_idxs, data_loader.save_dirs, im_fixed, im_moving, im_moving_warped,
                         mu_v, log_var_v, u_v, log_var_f, u_f, warp_field,
                         seg_fixed, seg_moving, seg_moving_warped)
 
             logger.info('\nsaved the output images and vector fields to disk\n')
 
-    # metrics
     with torch.no_grad():
         transformation = transformation_model(identity_grid, mu_v)
         im_moving_warped = registration_module(im_moving, transformation)
@@ -134,8 +134,17 @@ def main(config):
         reg_term = reg_loss(mu_v).sum()
         entropy_term = entropy(log_var_v, u_v).sum()
 
+        seg_moving_warped = registration_module(seg_moving, transformation, mode='nearest')
+        dsc = dice(seg_fixed, seg_moving_warped)
+
     total_loss = data_term + reg_term + entropy_term
-    log = {'loss': total_loss.item(), 'data': data_term.item(), 'reg': reg_term.item(), 'entropy': entropy_term.item()}
+
+    log = {'loss': total_loss.item(),
+           'data': data_term.item(), 'reg': reg_term.item(), 'entropy': entropy_term.item()}
+
+    for class_idx, val in enumerate(dsc):
+        log['dice_' + str(class_idx + 1)] = val
+    
     logger.info(log)
 
 

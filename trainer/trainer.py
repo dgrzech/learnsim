@@ -1,4 +1,5 @@
 from base import BaseTrainer
+from model.metric import dice
 from logger import save_images
 from utils import grid_to_deformation_field, inf_loop, MetricTracker, sample_qv, sample_qf
 
@@ -169,7 +170,7 @@ class Trainer(BaseTrainer):
             
             mu_v.requires_grad_(False)
 
-        return loss_q_v / curr_batch_size
+        return loss_q_v.item() / curr_batch_size
 
     def _step_q_f_q_phi(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid):
         """
@@ -228,7 +229,7 @@ class Trainer(BaseTrainer):
         else:
             self.enc.set_grad_enabled(False)
 
-        return loss_q_f_q_phi
+        return loss_q_f_q_phi.item()
 
     def _train_epoch(self, epoch):
         """
@@ -240,10 +241,13 @@ class Trainer(BaseTrainer):
 
         self.train_metrics.reset()
 
-        for batch_idx, (im_pair_idxs, im_fixed, _, im_moving, _, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
-                in enumerate(self.data_loader):
+        for batch_idx, (im_pair_idxs, im_fixed, seg_fixed, im_moving, seg_moving,
+                        mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) in enumerate(self.data_loader):
             im_fixed, im_moving = im_fixed.to(self.device, non_blocking=True), \
                                   im_moving.to(self.device, non_blocking=True)  # images to register
+
+            seg_fixed, seg_moving = seg_fixed.to(self.device, non_blocking=True), \
+                                    seg_moving.to(self.device, non_blocking=True)  # corresponding segmentations
 
             mu_v = mu_v.to(self.device, non_blocking=True)  # mean velocity field
 
@@ -309,6 +313,12 @@ class Trainer(BaseTrainer):
                 self.train_metrics.update('reg_term', reg_term.item())
                 self.train_metrics.update('entropy_term', entropy_term.item())
 
+                seg_moving_warped = self.registration_module(seg_moving, transformation, mode='nearest')
+                dsc = dice(seg_fixed, seg_moving_warped)
+                
+                for class_idx, val in enumerate(dsc):
+                    self.train_metrics.update('dice_' + str(class_idx + 1), val)
+
                 # save the images
                 warp_field = grid_to_deformation_field(identity_grid, transformation)
 
@@ -319,8 +329,8 @@ class Trainer(BaseTrainer):
             if batch_idx % self.log_step == 0:
                 self.logger.info(
                         f'train epoch: {epoch} {self._progress(batch_idx)}\n' +
-                        f'loss: {total_loss.item():.5f}\n' + 
-                        f'loss_q_v: {loss_q_v.item():.5f}, loss_q_f_q_phi: {loss_q_f_q_phi.item():.5f}'
+                        f'loss: {total_loss:.5f}\n' +
+                        f'loss_q_v: {loss_q_v:.5f}, loss_q_f_q_phi: {loss_q_f_q_phi:.5f}'
                                 )
 
             if batch_idx == self.len_epoch:
