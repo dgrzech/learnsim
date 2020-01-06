@@ -5,7 +5,6 @@ from torch.utils.data import Dataset
 from utils import init_identity_grid_2d, init_identity_grid_3d, rescale_im, standardise_im
 
 import numpy as np
-import os
 import SimpleITK as sitk
 import torch
 
@@ -35,10 +34,9 @@ def init_u_f(dims):
 
 
 class BiobankDataset(Dataset):
-    def __init__(self, scene_paths, save_paths):
-        self.scene_paths = scene_paths
+    def __init__(self, im_paths, save_paths):
+        self.im_paths = im_paths
         self.save_paths = save_paths
-        self.img_pairs = []
 
         self.dim_x = 128
         self.dim_y = 128
@@ -46,30 +44,48 @@ class BiobankDataset(Dataset):
 
         self.identity_grid = None
 
-        img_paths = {scene_paths: [path.join(scene_paths, f)
-                                   for f in listdir(scene_paths) if path.isfile(path.join(scene_paths, f))]}
+        # image filenames
+        im_filenames = sorted([path.join(im_paths, f)
+                               for f in listdir(im_paths) if path.isfile(path.join(im_paths, f))])
+
+        # segmentation filenames
+        seg_paths = path.join(im_paths, 'seg')
+
+        if listdir(seg_paths):
+            seg_filenames = sorted([path.join(seg_paths, f)
+                                    for f in listdir(seg_paths) if path.isfile(path.join(seg_paths, f))])
+        else:
+            seg_filenames = ['' for _ in range(len(im_filenames))]
+
+        im_seg_pairs = list(zip(im_filenames, seg_filenames))
 
         # all-to-one
-        temp = img_paths[scene_paths]
-        img_path = temp[0]
+        atlas = im_seg_pairs[0]
+        self.im_seg_pairs = []
 
-        for other_img_path in temp:
-            if other_img_path == img_path:
+        for other_im_seg_pair in im_seg_pairs:
+            if other_im_seg_pair == atlas:
                 continue
 
-            self.img_pairs.append((img_path, other_img_path))
+            self.im_seg_pairs.append((atlas, other_im_seg_pair))
 
     def __len__(self):
-        return len(self.img_pairs)
+        return len(self.im_seg_pairs)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_pair = self.img_pairs[idx]
+        im_seg_pair = self.im_seg_pairs[idx]
 
-        im_fixed, im_moving = sitk.ReadImage(img_pair[0], sitk.sitkFloat32), \
-                              sitk.ReadImage(img_pair[1], sitk.sitkFloat32)
+        im_fixed_path = im_seg_pair[0][0]
+        seg_fixed_path = im_seg_pair[0][1]
+
+        im_moving_path = im_seg_pair[1][0]
+        seg_moving_path = im_seg_pair[1][1]
+
+        im_fixed, im_moving = sitk.ReadImage(im_fixed_path, sitk.sitkFloat32), \
+                              sitk.ReadImage(im_moving_path, sitk.sitkFloat32)
 
         im_fixed, im_moving = torch.from_numpy(
             transform.resize(
@@ -77,6 +93,18 @@ class BiobankDataset(Dataset):
                               torch.from_numpy(
             transform.resize(
                 np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z)))
+
+        if seg_fixed_path is not '' and seg_moving_path is not '':
+            seg_fixed, seg_moving = sitk.ReadImage(seg_fixed_path, sitk.sitkFloat32), \
+                                    sitk.ReadImage(seg_moving_path, sitk.sitkFloat32)
+
+            seg_fixed, seg_moving = \
+                torch.from_numpy(transform.resize(
+                    np.transpose(sitk.GetArrayFromImage(seg_fixed), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z),
+                    order=0)), \
+                torch.from_numpy(transform.resize(
+                    np.transpose(sitk.GetArrayFromImage(seg_moving), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z),
+                    order=0))
 
         # standardise images
         im_fixed, im_moving = standardise_im(im_fixed), standardise_im(im_moving)
@@ -88,6 +116,9 @@ class BiobankDataset(Dataset):
         im_fixed.unsqueeze_(0)
         im_moving.unsqueeze_(0)
 
+        seg_fixed.unsqueeze_(0)
+        seg_moving.unsqueeze_(0)
+
         dims_im = (1, self.dim_x, self.dim_y, self.dim_z)
         dims_v = (3, self.dim_x, self.dim_y, self.dim_z)
 
@@ -96,30 +127,30 @@ class BiobankDataset(Dataset):
         """
 
         # velocity field
-        if path.exists(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):
-            mu_v = torch.load(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):
+            mu_v = torch.load(path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
         else:
             mu_v = init_mu_v(dims_v)
 
         # sigma_v
-        if path.exists(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
-            log_var_v = torch.load(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
+            log_var_v = torch.load(path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
         else:
             log_var_v = init_log_var_v(dims_v)
         # u_v
-        if path.exists(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
-            u_v = torch.load(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
+            u_v = torch.load(path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
         else:
             u_v = init_u_v(dims_v)
 
         # sigma_f
-        if path.exists(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
-            log_var_f = torch.load(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
+            log_var_f = torch.load(path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
         else:
             log_var_f = init_log_var_f(dims_im)
         # u_f
-        if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
-            u_f = torch.load(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
+            u_f = torch.load(path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
         else:
             u_f = init_u_f(dims_im)
 
@@ -129,7 +160,7 @@ class BiobankDataset(Dataset):
         elif self.identity_grid is None and len(im_fixed.shape) == 4:
             self.identity_grid = torch.squeeze(init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z))
 
-        return idx, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
+        return idx, im_fixed, seg_fixed, im_moving, seg_moving, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
 
 
 class RGBDDataset(Dataset):
@@ -185,31 +216,31 @@ class RGBDDataset(Dataset):
         """
 
         # velocity field
-        if path.exists(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):
-            mu_v = torch.load(os.path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt')):
+            mu_v = torch.load(path.join(self.save_paths['mu_v'], 'mu_v_' + str(idx) + '.pt'))
         else:
             mu_v = init_mu_v(dims_v)
 
         # sigma_v
-        if path.exists(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
-            log_var_v = torch.load(os.path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt')):
+            log_var_v = torch.load(path.join(self.save_paths['log_var_v'], 'log_var_v_' + str(idx) + '.pt'))
         else:
             log_var_v = init_log_var_v(dims_v)
 
         # u_v
-        if path.exists(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
-            u_v = torch.load(os.path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt')):
+            u_v = torch.load(path.join(self.save_paths['u_v'], 'u_v_' + str(idx) + '.pt'))
         else:
             u_v = init_u_v(dims_v)
 
         # sigma_f
-        if path.exists(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
-            log_var_f = torch.load(os.path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt')):
+            log_var_f = torch.load(path.join(self.save_paths['log_var_f'], 'log_var_f_' + str(idx) + '.pt'))
         else:
             log_var_f = init_log_var_f(dims_im)
         # u_f
-        if path.exists(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
-            u_f = torch.load(os.path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
+        if path.exists(path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt')):
+            u_f = torch.load(path.join(self.save_paths['u_f'], 'u_f_' + str(idx) + '.pt'))
         else:
             u_f = init_u_f(dims_im)
 

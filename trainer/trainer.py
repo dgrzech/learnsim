@@ -240,7 +240,7 @@ class Trainer(BaseTrainer):
 
         self.train_metrics.reset()
 
-        for batch_idx, (im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
+        for batch_idx, (im_pair_idxs, im_fixed, _, im_moving, _, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
                 in enumerate(self.data_loader):
             im_fixed, im_moving = im_fixed.to(self.device, non_blocking=True), \
                                   im_moving.to(self.device, non_blocking=True)  # images to register

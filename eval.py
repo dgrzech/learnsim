@@ -5,7 +5,6 @@ from parse_config import ConfigParser
 from utils import grid_to_deformation_field, sample_qv
 
 import argparse
-import os
 import torch
 
 import data_loader.data_loaders as module_data
@@ -61,10 +60,13 @@ def main(config):
     no_steps_v = config['trainer']['no_steps_v']
     no_samples = config['trainer']['no_samples']
 
-    for batch_idx, (im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) \
-            in enumerate(tqdm(data_loader)):
+    for batch_idx, (im_pair_idxs, im_fixed, seg_fixed, im_moving, seg_moving,
+                    mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) in enumerate(tqdm(data_loader)):
         im_fixed, im_moving = im_fixed.to(device, non_blocking=True), \
                               im_moving.to(device, non_blocking=True)  # images to register
+
+        seg_fixed, seg_moving = seg_fixed.to(device, non_blocking=True), \
+                                seg_moving.to(device, non_blocking=True)  # corresponding segmentations
 
         mu_v = mu_v.to(device, non_blocking=True).requires_grad_(True)  # mean velocity field
         log_var_v, u_v = log_var_v.to(device, non_blocking=True).requires_grad_(True), \
@@ -112,10 +114,14 @@ def main(config):
         with torch.no_grad():
             transformation = transformation_model(identity_grid, mu_v)
             warp_field = grid_to_deformation_field(identity_grid, transformation)
+
             im_moving_warped = registration_module(im_moving, transformation)
+            seg_moving_warped = registration_module(seg_moving, transformation, mode='nearest')
             
             save_images(im_pair_idxs, data_loader.save_dirs, im_fixed, im_moving, im_moving_warped,
-                        mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
+                        mu_v, log_var_v, u_v, log_var_f, u_f, warp_field,
+                        seg_fixed, seg_moving, seg_moving_warped)
+
             logger.info('\nsaved the output images and vector fields to disk\n')
 
     # metrics

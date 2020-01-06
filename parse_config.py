@@ -36,7 +36,8 @@ class ConfigParser:
         
         self._save_dir = save_dir / exper_name / run_id / 'models'
         self._log_dir = save_dir / exper_name / run_id / 'log'
-        self._images_dir = save_dir / exper_name / run_id / 'images'
+        self._im_dir = save_dir / exper_name / run_id / 'images'
+        self._seg_dir = save_dir / exper_name / run_id / 'images' / 'segs'
 
         self._mu_v_dir = save_dir / exper_name / run_id / 'models' / 'mu_v'
         self._log_var_v_dir = save_dir / exper_name / run_id / 'models' / 'log_var_v'
@@ -54,7 +55,8 @@ class ConfigParser:
 
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.images_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.seg_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.mu_v_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_var_v_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -210,12 +212,16 @@ class ConfigParser:
         return self._deformation_field_dir
 
     @property
-    def images_dir(self):
-        return self._images_dir
+    def im_dir(self):
+        return self._im_dir
     
     @property
     def norms_dir(self):
         return self._norms_dir
+
+    @property
+    def seg_dir(self):
+        return self._seg_dir
     
     @property
     def save_dirs(self):
@@ -223,7 +229,7 @@ class ConfigParser:
                 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
                 'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
                 'mu_v_field': self.mu_v_field_dir, 'deformation_field': self.deformation_field_dir,
-                'images': self.images_dir, 'norms': self.norms_dir}
+                'images': self.im_dir, 'norms': self.norms_dir, 'segs': self.seg_dir}
 
 
 # helper functions to update config dict with custom cli options
