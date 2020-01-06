@@ -96,7 +96,10 @@ class BaseTrainer:
 
             # print logged informations to the screen
             for key, value in log.items():
-                self.logger.info('    {:15s}: {}'.format(str(key), value))
+                if isinstance(value, int):
+                    self.logger.info(f'    {str(key):15s}: {value}')
+                else:
+                    self.logger.info(f'    {str(key):15s}: {value:.5f}')
 
             # evaluate model performance according to configured metric, save best checkpoint as model_best
             best = False
