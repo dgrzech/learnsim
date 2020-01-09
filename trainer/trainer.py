@@ -323,7 +323,9 @@ class Trainer(BaseTrainer):
                 warp_field = grid_to_deformation_field(identity_grid, transformation)
 
                 save_images(im_pair_idxs, self.data_loader.save_dirs, im_fixed, im_moving, im_moving_warped, 
-                            mu_v, log_var_v, u_v, log_var_f, u_f, warp_field)
+                            mu_v, log_var_v, u_v, log_var_f, u_f, warp_field, 
+                            seg_fixed, seg_moving, seg_moving_warped)
+
                 self.logger.info('\nsaved the output images and vector fields to disk\n')
 
             if batch_idx % self.log_step == 0:

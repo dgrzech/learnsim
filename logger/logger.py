@@ -17,10 +17,6 @@ def save_images(im_pair_idxs, save_dirs_dict, im_fixed, im_moving, im_moving_war
     im_pair_idxs = im_pair_idxs.tolist()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        save_im_to_disk(im_fixed[loop_idx, :, :, :, :], 
-                        path.join(save_dirs_dict['images'], 'im_fixed_' + str(im_pair_idx) + '.nii.gz'))
-        save_im_to_disk(im_moving[loop_idx, :, :, :, :], 
-                        path.join(save_dirs_dict['images'], 'im_moving_' + str(im_pair_idx) + '.nii.gz'))
         save_im_to_disk(im_moving_warped[loop_idx, :, :, :, :], 
                         path.join(save_dirs_dict['images'], 'im_moving_warped_' + str(im_pair_idx) + '.nii.gz'))
 
@@ -46,12 +42,28 @@ def save_images(im_pair_idxs, save_dirs_dict, im_fixed, im_moving, im_moving_war
 
         save_field_to_disk(mu_v[loop_idx, :, :, :, :], 
                            path.join(save_dirs_dict['mu_v_field'], 'mu_v_' + str(im_pair_idx) + '.nii.gz'))
+
+        im_fixed_path = path.join(save_dirs_dict['images'], 'im_fixed_' + str(im_pair_idx) + '.nii.gz')
+        if not path.exists(im_fixed_path):
+            save_im_to_disk(im_fixed[loop_idx, :, :, :, :], im_fixed_path)
         
-        if seg_fixed is not None and seg_moving is not None and seg_moving_warped is not None:
-            save_im_to_disk(seg_fixed[loop_idx, :, :, :, :],
-                            path.join(save_dirs_dict['segs'], 'seg_fixed_' + str(im_pair_idx) + '.nii.gz'))
-            save_im_to_disk(seg_moving[loop_idx, :, :, :, :],
-                            path.join(save_dirs_dict['segs'], 'seg_moving_' + str(im_pair_idx) + '.nii.gz'))
+        im_moving_path = path.join(save_dirs_dict['images'], 'im_moving_' + str(im_pair_idx) + '.nii.gz')
+        if not path.exists(im_moving_path):
+            save_im_to_disk(im_moving[loop_idx, :, :, :, :], im_moving_path)
+        
+        if seg_fixed is not None:
+            seg_fixed_path = path.join(save_dirs_dict['segs'], 'seg_fixed_' + str(im_pair_idx) + '.nii.gz')
+
+            if not path.exists(seg_fixed_path):
+                save_im_to_disk(seg_fixed[loop_idx, :, :, :, :], seg_fixed_path)
+
+        if seg_moving is not None:
+            seg_moving_path = path.join(save_dirs_dict['segs'], 'seg_moving_' + str(im_pair_idx) + '.nii.gz')
+
+            if not path.exists(seg_moving_path):
+                save_im_to_disk(seg_moving[loop_idx, :, :, :, :], seg_moving_path)
+                                
+        if seg_moving_warped is not None:
             save_im_to_disk(seg_moving_warped[loop_idx, :, :, :, :],
                             path.join(save_dirs_dict['segs'], 'seg_moving_warped_' + str(im_pair_idx) + '.nii.gz'))
 
