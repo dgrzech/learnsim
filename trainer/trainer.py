@@ -1,6 +1,6 @@
 from base import BaseTrainer
 from model.metric import dice
-from logger import save_images
+from logger import log_images, log_q_v, log_q_f, save_images
 from utils import grid_to_deformation_field, inf_loop, MetricTracker, sample_qv, sample_qf
 
 from torch import nn
@@ -38,6 +38,8 @@ class Trainer(BaseTrainer):
         self.do_validation = self.valid_data_loader is not None
 
         self.log_step = int(np.sqrt(data_loader.batch_size))
+        self.log_step_q_v = config['trainer']['log_step_q_v']
+
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
         
         # optimisers
@@ -55,6 +57,28 @@ class Trainer(BaseTrainer):
         else:
             self.enc.set_grad_enabled(False)
 
+        self.identity_grid = None
+
+    def _save_mu_v(self, im_pair_idx, mu_v):
+        torch.save(mu_v,
+                   os.path.join(self.data_loader.save_dirs['mu_v'], 'mu_v_' + str(im_pair_idx) + '.pt'))
+
+    def _save_log_var_v(self, im_pair_idx, log_var_v):
+        torch.save(log_var_v,
+                   os.path.join(self.data_loader.save_dirs['log_var_v'], 'log_var_v_' + str(im_pair_idx) + '.pt'))
+
+    def _save_log_var_f(self, im_pair_idx, log_var_f):
+        torch.save(log_var_f,
+                   os.path.join(self.data_loader.save_dirs['log_var_f'], 'log_var_f_' + str(im_pair_idx) + '.pt'))
+
+    def _save_u_v(self, im_pair_idx, u_v):
+        torch.save(u_v,
+                   os.path.join(self.data_loader.save_dirs['u_v'], 'u_v_' + str(im_pair_idx) + '.pt'))
+
+    def _save_u_f(self, im_pair_idx, u_f):
+        torch.save(u_f,
+                   os.path.join(self.data_loader.save_dirs['u_f'], 'u_f_' + str(im_pair_idx) + '.pt'))
+
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         """
         save the variational parameters to disk in order to load at the next epoch
@@ -68,29 +92,17 @@ class Trainer(BaseTrainer):
         im_pair_idxs = im_pair_idxs.tolist()
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            torch.save(mu_v[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['mu_v'],
-                                                                'mu_v_' + str(im_pair_idx) + '.pt'))
+            self._save_mu_v(im_pair_idx, mu_v[loop_idx])
+            self._save_log_var_v(im_pair_idx, log_var_v[loop_idx])
+            self._save_log_var_f(im_pair_idx, log_var_f[loop_idx])
 
-            torch.save(log_var_v[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['log_var_v'],
-                                                                     'log_var_v_' + str(im_pair_idx) + '.pt'))
-            torch.save(log_var_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['log_var_f'],
-                                                                     'log_var_f_' + str(im_pair_idx) + '.pt'))
+            self._save_u_v(im_pair_idx, u_v[loop_idx])
+            self._save_u_f(im_pair_idx, u_f[loop_idx])
 
-            torch.save(u_v[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['u_v'],
-                                                               'u_v_' + str(im_pair_idx) + '.pt'))
-            torch.save(u_f[loop_idx, :, :, :, :], os.path.join(self.data_loader.save_dirs['u_f'],
-                                                               'u_f_' + str(im_pair_idx) + '.pt'))
-
-    def _reg_print(self, iter_no, no_steps_v, curr_batch_size, loss_q_v, data_term, reg_term, entropy_term):
+    def _registration_print(self, iter_no, no_steps_v, loss_q_v, data_term, reg_term, entropy_term=0.0):
         """
         print value of the energy function at a given step of registration
         """
-
-        loss_q_v /= curr_batch_size
-
-        data_term /= curr_batch_size
-        reg_term /= curr_batch_size
-        entropy_term /= curr_batch_size
 
         self.logger.info(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
                          f', TOTAL ENERGY: {loss_q_v:.5f}' +
@@ -99,7 +111,30 @@ class Trainer(BaseTrainer):
                          f', entropy: {entropy_term:.5f}'
                          )
 
-    def _step_q_v(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, identity_grid):
+    def _registration_step(self, im_fixed, im_moving, mu_v, log_var_v=None, u_v=None):
+        if self.learn_q_v:
+            data_term = 0.0
+
+            for _ in range(self.no_samples):
+                v_sample = sample_qv(mu_v, log_var_v, u_v)
+                transformation = self.transformation_model(self.identity_grid, v_sample)
+
+                im_moving_warped = self.registration_module(im_moving, transformation)
+                im_out = self.enc(im_fixed, im_moving_warped)
+
+                data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                data_term += data_term_sample
+
+            return data_term, self.reg_loss(mu_v).sum(), self.entropy(log_var_v, u_v).sum()
+
+        transformation = self.transformation_model(self.identity_grid, mu_v)
+
+        im_moving_warped = self.registration_module(im_moving, transformation)
+        im_out = self.enc(im_fixed, im_moving_warped)
+
+        return self.data_loss(im_out).sum(), self.reg_loss(mu_v).sum()
+
+    def _step_q_v(self, epoch, batch_idx, curr_batch_size, im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v):
         """
         update parameters of q_v
         """
@@ -118,28 +153,37 @@ class Trainer(BaseTrainer):
             # optimise q_v
             for iter_no in range(self.no_steps_v):
                 self.optimizer_q_v.zero_grad()
-                data_term = 0.0
 
-                for _ in range(self.no_samples):
-                    v_sample = sample_qv(mu_v, log_var_v, u_v)
-                    transformation = self.transformation_model(identity_grid, v_sample)
-
-                    im_moving_warped = self.registration_module(im_moving, transformation)
-                    im_out = self.enc(im_fixed, im_moving_warped)
-
-                    data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
-                    data_term += data_term_sample
-
-                reg_term = self.reg_loss(mu_v).sum()
-                entropy_term = self.entropy(log_var_v, u_v).sum()
-
+                data_term, reg_term, entropy_term = self._registration_step(im_fixed, im_moving, mu_v, log_var_v, u_v)
                 loss_q_v = data_term + reg_term + entropy_term
+
                 loss_q_v.backward()
                 self.optimizer_q_v.step()  # backprop
 
-                if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
-                    self._reg_print(iter_no, self.no_steps_v, curr_batch_size,
-                                    loss_q_v.item(), data_term.item(), reg_term.item(), entropy_term.item())
+                # metrics
+                self.writer.set_step(((epoch - 1) * self.len_epoch + batch_idx) * self.no_steps_v + iter_no)
+
+                if iter_no % self.log_step_q_v == 0:
+                    with torch.no_grad():
+                        transformation = self.transformation_model(self.identity_grid, mu_v)
+                        deformation_field = grid_to_deformation_field(self.identity_grid, transformation)
+
+                        im_moving_warped = self.registration_module(im_moving, transformation)
+                        im_out = self.enc(im_fixed, im_moving_warped)
+
+                        data_term_value = self.data_loss(im_out).sum().item() / curr_batch_size
+                        reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
+                        entropy_term_value = self.entropy(log_var_v, u_v).sum().item() / curr_batch_size
+
+                        self.train_metrics.update('data_term', data_term_value)
+                        self.train_metrics.update('reg_term', reg_term_value)
+                        self.train_metrics.update('entropy_term', entropy_term_value)
+
+                        log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
+                        log_q_v(self.writer, im_pair_idxs, mu_v, deformation_field, log_var_v, u_v)
+
+                        self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
+                                                 data_term_value, reg_term_value, entropy_term_value)
             
             # disable gradients
             mu_v.requires_grad_(False)
@@ -151,28 +195,42 @@ class Trainer(BaseTrainer):
 
             for iter_no in range(self.no_steps_v):
                 self.optimizer_q_v.zero_grad()
-                transformation = self.transformation_model(identity_grid, mu_v)
 
-                im_moving_warped = self.registration_module(im_moving, transformation)
-                im_out = self.enc(im_fixed, im_moving_warped)
-
-                data_term = self.data_loss(im_out).sum()
-                reg_term = self.reg_loss(mu_v).sum()
-
+                data_term, reg_term = self._registration_step(im_fixed, im_moving, mu_v)
                 loss_q_v = data_term + reg_term
+
                 loss_q_v.backward()
                 self.optimizer_q_v.step()
 
-                if iter_no == 0 or iter_no % 16 == 0 or iter_no == self.no_steps_v - 1:
-                    entropy_term = self.entropy(log_var_v, u_v)
-                    self._reg_print(iter_no, self.no_steps_v, curr_batch_size,
-                                    loss_q_v.item(), data_term.item(), reg_term.item(), entropy_term.item())
+                # metrics
+                self.writer.set_step(((epoch - 1) * self.len_epoch + batch_idx) * self.no_steps_v + iter_no)
+
+                if iter_no % self.log_step_q_v == 0:
+                    with torch.no_grad():
+                        transformation = self.transformation_model(self.identity_grid, mu_v)
+                        deformation_field = grid_to_deformation_field(self.identity_grid, transformation)
+
+                        im_moving_warped = self.registration_module(im_moving, transformation)
+                        im_out = self.enc(im_fixed, im_moving_warped)
+
+                        data_term_value = self.data_loss(im_out).sum().item() / curr_batch_size
+                        reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
+
+                        self.train_metrics.update('data_term', data_term_value)
+                        self.train_metrics.update('reg_term', reg_term_value)
+
+                        log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
+                        log_q_v(self.writer, im_pair_idxs, mu_v, deformation_field, log_var_v, u_v)
+
+                        self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
+                                                 data_term_value, reg_term_value)
             
             mu_v.requires_grad_(False)
 
         return loss_q_v.item() / curr_batch_size
 
-    def _step_q_f_q_phi(self, curr_batch_size, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid):
+    def _step_q_f_q_phi(self, epoch, batch_idx, curr_batch_size, im_pair_idxs,
+                        im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f):
         """
         update parameters of q_f and q_phi
         """
@@ -198,7 +256,7 @@ class Trainer(BaseTrainer):
         
         for _ in range(self.no_samples):
             v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
-            transformation = self.transformation_model(identity_grid, v_sample)
+            transformation = self.transformation_model(self.identity_grid, v_sample)
 
             im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = self.enc(im_fixed, im_moving_warped)
@@ -222,6 +280,12 @@ class Trainer(BaseTrainer):
         # disable gradients
         log_var_f.requires_grad_(False)
         u_f.requires_grad_(False)
+        
+        # metrics
+        self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
+
+        with torch.no_grad():
+            log_q_f(self.writer, im_pair_idxs, log_var_f, u_f)
 
         self.enc.eval()
         if isinstance(self.enc, nn.DataParallel):
@@ -256,12 +320,14 @@ class Trainer(BaseTrainer):
             log_var_f, u_f = log_var_f.to(self.device, non_blocking=True), \
                              u_f.to(self.device, non_blocking=True)  # variational parameters
 
-            identity_grid = identity_grid.to(self.device, non_blocking=True)
+            if self.identity_grid is None:
+                self.identity_grid = identity_grid.to(self.device, non_blocking=True)
+
             curr_batch_size = float(im_pair_idxs.numel())
 
             # print value of the data term before registration
             with torch.no_grad():
-                transformation = self.transformation_model(identity_grid, mu_v)
+                transformation = self.transformation_model(self.identity_grid, mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out_unwarped = self.enc(im_fixed, im_moving)
@@ -282,48 +348,37 @@ class Trainer(BaseTrainer):
             total_loss = 0.0
             loss_q_f_q_phi = 0.0
 
-            loss_q_v = self._step_q_v(curr_batch_size, im_fixed, im_moving,
-                                      mu_v, log_var_v, u_v, identity_grid)  # q_v
+            loss_q_v = self._step_q_v(epoch, batch_idx, curr_batch_size, im_pair_idxs,
+                                      im_fixed, im_moving, mu_v, log_var_v, u_v)  # q_v
             total_loss += loss_q_v
 
             if self.learn_sim_metric:
                 self.logger.info('\noptimising q_f and q_phi..')
-                loss_q_f_q_phi = self._step_q_f_q_phi(curr_batch_size, im_fixed, im_moving, 
-                                                      mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid)  # q_phi
+                loss_q_f_q_phi = self._step_q_f_q_phi(epoch, batch_idx, curr_batch_size, im_pair_idxs, 
+                                                      im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f)  # q_phi
                 total_loss += loss_q_f_q_phi
 
-            # save the updated tensors
+            # save the tensors with updated variational parameters
             self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f) 
 
             # metrics
-            self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
+            self.writer.set_step(((epoch - 1) * self.len_epoch + batch_idx))
             self.train_metrics.update('loss', total_loss)
 
             with torch.no_grad():
-                transformation = self.transformation_model(identity_grid, mu_v)
+                transformation = self.transformation_model(self.identity_grid, mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
-                im_out = self.enc(im_fixed, im_moving_warped)
-
-                data_term = self.data_loss(im_out).sum() / curr_batch_size
-                reg_term = self.reg_loss(mu_v).sum() / curr_batch_size
-                entropy_term = self.entropy(log_var_v, u_v).sum() / curr_batch_size
-
-                self.train_metrics.update('data_term', data_term.item())
-                self.train_metrics.update('reg_term', reg_term.item())
-                self.train_metrics.update('entropy_term', entropy_term.item())
-
                 seg_moving_warped = self.registration_module(seg_moving, transformation, mode='nearest')
+
                 dsc = dice(seg_fixed, seg_moving_warped)
-                
                 for class_idx, val in enumerate(dsc):
                     self.train_metrics.update('dice_' + str(class_idx + 1), val)
 
-                # save the images
-                warp_field = grid_to_deformation_field(identity_grid, transformation)
-
-                save_images(im_pair_idxs, self.data_loader.save_dirs, im_fixed, im_moving, im_moving_warped, 
-                            mu_v, log_var_v, u_v, log_var_f, u_f, warp_field, 
+                # save images to .nii.gz
+                deformation_field = grid_to_deformation_field(self.identity_grid, transformation)
+                save_images(self.data_loader.save_dirs, im_pair_idxs, im_fixed, im_moving, im_moving_warped,
+                            mu_v, deformation_field, log_var_v, u_v, log_var_f, u_f, 
                             seg_fixed, seg_moving, seg_moving_warped)
 
                 self.logger.info('\nsaved the output images and vector fields to disk\n')

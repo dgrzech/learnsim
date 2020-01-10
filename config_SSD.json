@@ -78,6 +78,7 @@
         "save_period": 1,
         "verbosity": 2,
         
-        "tensorboard": true
+        "tensorboard": true,
+	"log_step_q_v": 32
     }
 }

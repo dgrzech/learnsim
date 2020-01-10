@@ -65,17 +65,17 @@ class DiffTestMethods(unittest.TestCase):
         test the derivative values are correct
         """
 
-        dv_x_dx = dv_dx[0, 0, :, :, :]
-        dv_y_dx = dv_dx[0, 1, :, :, :]
-        dv_z_dx = dv_dx[0, 2, :, :, :]
+        dv_x_dx = dv_dx[0, 0]
+        dv_y_dx = dv_dx[0, 1]
+        dv_z_dx = dv_dx[0, 2]
 
-        dv_x_dy = dv_dy[0, 0, :, :, :]
-        dv_y_dy = dv_dy[0, 1, :, :, :]
-        dv_z_dy = dv_dy[0, 2, :, :, :]
+        dv_x_dy = dv_dy[0, 0]
+        dv_y_dy = dv_dy[0, 1]
+        dv_z_dy = dv_dy[0, 2]
 
-        dv_x_dz = dv_dz[0, 0, :, :, :]
-        dv_y_dz = dv_dz[0, 1, :, :, :]
-        dv_z_dz = dv_dz[0, 2, :, :, :]
+        dv_x_dz = dv_dz[0, 0]
+        dv_y_dz = dv_dz[0, 1]
+        dv_z_dz = dv_dz[0, 2]
 
         for idx_z in range(self.dim_z - 1):
             for idx_y in range(self.dim_y - 1):
@@ -132,17 +132,17 @@ class DiffTestMethods(unittest.TestCase):
         test the derivative values are correct 
         """
 
-        dv_x_dx = dv_dx[0, 0, :, :, :]
-        dv_y_dx = dv_dx[0, 1, :, :, :]
-        dv_z_dx = dv_dx[0, 2, :, :, :]
+        dv_x_dx = dv_dx[0, 0]
+        dv_y_dx = dv_dx[0, 1]
+        dv_z_dx = dv_dx[0, 2]
 
-        dv_x_dy = dv_dy[0, 0, :, :, :]
-        dv_y_dy = dv_dy[0, 1, :, :, :]
-        dv_z_dy = dv_dy[0, 2, :, :, :]
+        dv_x_dy = dv_dy[0, 0]
+        dv_y_dy = dv_dy[0, 1]
+        dv_z_dy = dv_dy[0, 2]
 
-        dv_x_dz = dv_dz[0, 0, :, :, :]
-        dv_y_dz = dv_dz[0, 1, :, :, :]
-        dv_z_dz = dv_dz[0, 2, :, :, :]
+        dv_x_dz = dv_dz[0, 0]
+        dv_y_dz = dv_dz[0, 1]
+        dv_z_dz = dv_dz[0, 2]
 
         for idx_z in range(self.dim_z):
             for idx_y in range(self.dim_y):

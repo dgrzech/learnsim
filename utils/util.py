@@ -193,7 +193,6 @@ def standardise_im(im):
 
 
 def save_im_to_disk(im, file_path):
-    im = im[0, :, :, :].cpu().numpy()
     im = nib.Nifti1Image(im, np.eye(4))
     im.to_filename(file_path)
 
@@ -211,7 +210,7 @@ def save_field_to_disk(field, file_path):
 class MetricTracker:
     def __init__(self, *keys, writer=None):
         self.writer = writer
-        self._data = pd.DataFrame(index=keys, columns=['total', 'counts', 'average'])
+        self._data = pd.DataFrame(index=keys, columns=['total', 'counts', 'average', 'last_value'])
         self.reset()
         
     def reset(self):
@@ -225,9 +224,10 @@ class MetricTracker:
         self._data.total[key] += value * n
         self._data.counts[key] += n
         self._data.average[key] = self._data.total[key] / self._data.counts[key]
+        self._data.last_value[key] = value
 
     def avg(self, key):
         return self._data.average[key]
     
     def result(self):
-        return dict(self._data.average)
+        return dict(self._data.last_value)
