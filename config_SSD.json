@@ -5,8 +5,8 @@
     "arch": {
         "type": "SimEnc",
         "args": {
-	    "init_type": "SSD",
-            "s": 1
+	        "init_type": "SSD",
+            "s": 5
         }
     },
 
@@ -51,7 +51,7 @@
     "optimizer_phi": {
         "type": "Adam",
         "args": {
-            "lr": 5e-4,
+            "lr": 1e-4,
             "amsgrad": true
         }
     },
@@ -72,7 +72,7 @@
     "trainer": {
         "epochs": 100,
         "no_samples": 2,
-	    "no_steps_v": 128,
+	    "no_steps_v": 192,
 
 	    "learn_q_v": true,
 	    "learn_sim_metric": true,
