@@ -84,16 +84,20 @@ def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_
     im_fixed_batch = im_fixed_batch.cpu().numpy()
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
+    
+    mid_x = int(im_fixed_batch.shape[4] / 2)
+    mid_y = int(im_fixed_batch.shape[3] / 2)
+    mid_z = int(im_fixed_batch.shape[2] / 2)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_fixed = im_fixed_batch[loop_idx, 0]
-        im_fixed_slices = [im_fixed[:, :, 64], im_fixed[:, 64, :], im_fixed[64, :, :]]
+        im_fixed_slices = [im_fixed[:, :, mid_x], im_fixed[:, mid_y, :], im_fixed[mid_z, :, :]]
 
         im_moving = im_moving_batch[loop_idx, 0]
-        im_moving_slices = [im_moving[:, :, 64], im_moving[:, 64, :], im_moving[64, :, :]]
+        im_moving_slices = [im_moving[:, :, mid_x], im_moving[:, mid_y, :], im_moving[mid_z, :, :]]
 
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-        im_moving_warped_slices = [im_moving_warped[:, :, 64], im_moving_warped[:, 64, :], im_moving_warped[64, :, :]]
+        im_moving_warped_slices = [im_moving_warped[:, :, mid_x], im_moving_warped[:, mid_y, :], im_moving_warped[mid_z, :, :]]
 
         writer.add_figure('im_pair_' + str(im_pair_idx),
                           im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
@@ -102,30 +106,34 @@ def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_
 def log_q_v(writer, im_pair_idxs, mu_v_batch, deformation_field_batch, log_var_v_batch, u_v_batch):
     im_pair_idxs = im_pair_idxs.tolist()
 
+    mid_x = int(mu_v_batch.shape[4] / 2)
+    mid_y = int(mu_v_batch.shape[3] / 2)
+    mid_z = int(mu_v_batch.shape[2] / 2)
+
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         temp = compute_norm(mu_v_batch[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
-        mu_v_norm_slices = [mu_v_norm[:, :, 64],
-                            mu_v_norm[:, 64, :],
-                            mu_v_norm[64, :, :]]
+        mu_v_norm_slices = [mu_v_norm[:, :, mid_x],
+                            mu_v_norm[:, mid_y, :],
+                            mu_v_norm[mid_z, :, :]]
 
         temp = compute_norm(deformation_field_batch[loop_idx])
         deformation_field_norm = temp[0].cpu().numpy()
-        deformation_field_norm_slices = [deformation_field_norm[:, :, 64],
-                                         deformation_field_norm[:, 64, :],
-                                         deformation_field_norm[64, :, :]]
+        deformation_field_norm_slices = [deformation_field_norm[:, :, mid_x],
+                                         deformation_field_norm[:, mid_y, :],
+                                         deformation_field_norm[mid_z, :, :]]
 
         temp = compute_norm(log_var_v_batch[loop_idx])
         log_var_v_norm = temp[0].cpu().numpy()
-        log_var_v_norm_slices = [log_var_v_norm[:, :, 64],
-                                 log_var_v_norm[:, 64, :],
-                                 log_var_v_norm[64, :, :]]
+        log_var_v_norm_slices = [log_var_v_norm[:, :, mid_x],
+                                 log_var_v_norm[:, mid_y, :],
+                                 log_var_v_norm[mid_z, :, :]]
 
         temp = compute_norm(u_v_batch[loop_idx])
         u_v_norm = temp[0].cpu().numpy()
-        u_v_norm_slices = [u_v_norm[:, :, 64],
-                           u_v_norm[:, 64, :],
-                           u_v_norm[64, :, :]]
+        u_v_norm_slices = [u_v_norm[:, :, mid_x],
+                           u_v_norm[:, mid_y, :],
+                           u_v_norm[mid_z, :, :]]
 
         writer.add_figure('q_v_' + str(im_pair_idx),
                           var_params_q_v_grid(mu_v_norm_slices, deformation_field_norm_slices,
@@ -138,12 +146,16 @@ def log_q_f(writer, im_pair_idxs, log_var_f_batch, u_f_batch):
     log_var_f_batch = log_var_f_batch.cpu().numpy()
     u_f_batch = u_f_batch.cpu().numpy()
 
+    mid_x = int(log_var_f_batch.shape[4] / 2)
+    mid_y = int(log_var_f_batch.shape[3] / 2)
+    mid_z = int(log_var_f_batch.shape[2] / 2)
+
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         log_var_f = log_var_f_batch[loop_idx, 0]
-        log_var_f_slices = [log_var_f[:, :, 64], log_var_f[:, 64, :], log_var_f[64, :, :]]
+        log_var_f_slices = [log_var_f[:, :, mid_x], log_var_f[:, mid_y, :], log_var_f[mid_z, :, :]]
 
         u_f = u_f_batch[loop_idx, 0]
-        u_f_slices = [u_f[:, :, 64], u_f[:, 64, :], u_f[64, :, :]]
+        u_f_slices = [u_f[:, :, mid_x], u_f[:, mid_y, :], u_f[mid_z, :, :]]
 
         writer.add_figure('q_f_' + str(im_pair_idx),
                           var_params_q_f_grid(log_var_f_slices, u_f_slices))

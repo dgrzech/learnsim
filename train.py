@@ -34,7 +34,11 @@ def main(config):
     logger.info(enc)
 
     # initialise the transformation model and registration modules
-    transformation_model = config.init_obj('transformation_model', transformation)
+    dim_x = config['data_loader']['args']['dim_x']
+    dim_y = config['data_loader']['args']['dim_y']
+    dim_z = config['data_loader']['args']['dim_z']
+
+    transformation_model = config.init_obj('transformation_model', transformation, dim_x, dim_y, dim_z)
     registration_module = config.init_obj('registration_module', registration)
 
     # initialise the loss

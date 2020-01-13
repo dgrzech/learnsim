@@ -1,9 +1,11 @@
+from model.loss import SSD
 from utils import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, standardise_im, save_im_to_disk, RegistrationModule
 
 from skimage import transform
 
 import math
 import numpy as np
+import pytest
 import SimpleITK as sitk
 import torch
 import unittest
@@ -26,7 +28,7 @@ class WarpingTestMethods(unittest.TestCase):
         utils
         """
 
-        n = 64
+        n = 8
         self.dim_x = n
         self.dim_y = n
         self.dim_z = n
@@ -42,8 +44,26 @@ class WarpingTestMethods(unittest.TestCase):
 
         self.registration_module = RegistrationModule().to('cuda:0')
 
+        """
+        losses
+        """
+
+        self.loss = SSD().to('cuda:0')
+
     def tearDown(self):
         del self.registration_module
+
+    def test_loss_value_zero_deformation(self):
+        im_fixed = torch.randn(self.dims_im).to('cuda:0')
+        im_moving = torch.randn(self.dims_im).to('cuda:0')
+
+        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + torch.zeros(self.dims_v).to('cuda:0')
+        im_moving_warped = self.registration_module(im_moving, transformation)
+
+        unwarped_loss_value = self.loss(im_fixed - im_moving).item()
+        warped_loss_value = self.loss(im_fixed - im_moving_warped).item()
+
+        assert pytest.approx(unwarped_loss_value, 0.001) == warped_loss_value
 
     def test_sphere_translation(self):
         """
@@ -100,7 +120,7 @@ class WarpingTestMethods(unittest.TestCase):
         """
 
         offset = 20
-    
+
         warp_field = offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
         transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
 

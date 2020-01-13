@@ -34,13 +34,13 @@ def init_u_f(dims):
 
 
 class BiobankDataset(Dataset):
-    def __init__(self, im_paths, save_paths):
+    def __init__(self, im_paths, save_paths, dim_x, dim_y, dim_z):
         self.im_paths = im_paths
         self.save_paths = save_paths
 
-        self.dim_x = 128
-        self.dim_y = 128
-        self.dim_z = 128
+        self.dim_x = dim_x
+        self.dim_y = dim_y
+        self.dim_z = dim_z
 
         # image filenames
         im_filenames = sorted([path.join(im_paths, f)

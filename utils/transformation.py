@@ -28,7 +28,7 @@ class SVF_2D(TransformationModel):
     stationary velocity field transformation model
     """
 
-    def __init__(self, dim_x=128, dim_y=128):
+    def __init__(self, dim_x, dim_y):
         super(SVF_2D, self).__init__()
         self.no_steps = 16
 
@@ -59,7 +59,7 @@ class SVF_3D(TransformationModel):
     stationary velocity field transformation model
     """
 
-    def __init__(self, dim_x=128, dim_y=128, dim_z=128):
+    def __init__(self, dim_x, dim_y, dim_z):
         super(SVF_3D, self).__init__()
         self.no_steps = 16
 

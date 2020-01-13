@@ -38,21 +38,21 @@
         "type": "Adam",
         "args": {
             "lr": 5e-4,
-	    "amsgrad": true
+	        "amsgrad": true
         }
     },
     "optimizer_f": {
         "type": "Adam",
         "args": {
             "lr": 5e-4,
-	    "amsgrad": true
+            "amsgrad": true
         }
     },
     "optimizer_phi": {
         "type": "Adam",
         "args": {
             "lr": 5e-4,
-	    "amsgrad": true
+            "amsgrad": true
         }
     },
 
@@ -60,6 +60,9 @@
         "type": "LearnSimDataLoader",
         "args":{
             "data_dir": "/vol/bitbucket/dig15/learnsim_biobank_train/biobank_2/",
+	        "dim_x": 128,
+	        "dim_y": 128,
+	        "dim_z": 128,
             "batch_size": 2,
             "num_workers": 2,
             "shuffle": true
@@ -71,14 +74,14 @@
         "no_samples": 2,
 	    "no_steps_v": 128,
 
-	"learn_q_v": true,
-	"learn_sim_metric": true,
+	    "learn_q_v": true,
+	    "learn_sim_metric": true,
 
         "save_dir": "saved/",
         "save_period": 1,
         "verbosity": 2,
         
         "tensorboard": true,
-	"log_step_q_v": 32
+	    "log_step_q_v": 32
     }
 }
