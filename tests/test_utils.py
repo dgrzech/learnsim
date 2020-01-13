@@ -1,4 +1,4 @@
-from utils import compute_norm, init_identity_grid_3d, init_identity_grid_2d, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d, SVF
+from utils import compute_norm, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d, SVF_2D, SVF_3D
 
 import math
 import torch
@@ -23,9 +23,6 @@ class UtilsTestMethods(unittest.TestCase):
         self.dim_y = n
         self.dim_z = n
 
-        self.identity_grid_2d = init_identity_grid_2d(self.dim_x, self.dim_y)
-        self.identity_grid_3d = init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z)
-
     def test_norm(self):
         v = torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
 
@@ -35,31 +32,31 @@ class UtilsTestMethods(unittest.TestCase):
         assert torch.all(torch.eq(v_norm, val_true))
 
     def test_scaling_and_squaring_2d_translation(self):
-        transformation = SVF()
+        transformation = SVF_2D(self.dim_x, self.dim_y)
 
         # v = torch.zeros(1, 2, self.dim_x, self.dim_y)
-        # transformation = transformation.forward_2d(self.identity_grid_2d, v)
+        # transformation = transformation(v)
         # print('zero velocity field\n', transformation)
 
         v = 0.2 * torch.ones(1, 2, self.dim_x, self.dim_y)
-        transformation = transformation.forward_2d(self.identity_grid_2d, v)
+        transformation = transformation(v)
         # print('uniform velocity field\n', transformation)
         plot_2d(v, transformation)
 
     def test_scaling_and_squaring_3d_translation(self):
-        transformation = SVF()
+        transformation = SVF_3D(self.dim_x, self.dim_y, self.dim_z)
 
         # v = torch.zeros(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        # transformation = transformation.forward_3d(self.identity_grid_3d, v)
+        # transformation = transformation(v)
         # print('zero velocity field\n', transformation)
 
         v = 0.2 * torch.ones(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        transformation = transformation.forward_3d(self.identity_grid_3d, v)
+        transformation = transformation(v)
         # print('uniform velocity field\n', transformation)
         plot_3d(v, transformation)
 
     def test_scaling_and_squaring_2d_rotation(self):
-        transformation = SVF()
+        transformation = SVF_2D(self.dim_x, self.dim_y)
 
         v = torch.zeros(1, 2, self.dim_x, self.dim_y)
         for idx_x in range(v.shape[3]):
@@ -69,12 +66,12 @@ class UtilsTestMethods(unittest.TestCase):
                 v[0, 0, idx_x, idx_y] = y
                 v[0, 1, idx_x, idx_y] = -1.0 * x
 
-        transformation = transformation.forward_2d(self.identity_grid_2d, v)
+        transformation = transformation(v)
         # print(transformation)
         plot_2d(v, transformation)
 
     def test_scaling_and_squaring_3d_rotation(self):
-        transformation = SVF()
+        transformation = SVF_3D(self.dim_x, self.dim_y, self.dim_z)
 
         v = torch.zeros(1, 3, self.dim_x, self.dim_y, self.dim_z)
         for idx_z in range(v.shape[2]):
@@ -86,6 +83,6 @@ class UtilsTestMethods(unittest.TestCase):
                     v[0, 1, idx_x, idx_y, idx_z] = -1.0 * x
                     v[0, 2, idx_x, idx_y, idx_z] = 0.0
 
-        transformation = transformation.forward_3d(self.identity_grid_3d, v)
+        transformation = transformation(v)
         # print(transformation)
         plot_3d(v, transformation)

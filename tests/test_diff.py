@@ -37,6 +37,9 @@ class DiffTestMethods(unittest.TestCase):
 
         self.diff_op = GradientOperator()
 
+    def tearDown(self):
+        del self.diff_op
+
     def test_diff_v_uniform(self):
         """
         initialise a uniform velocity field

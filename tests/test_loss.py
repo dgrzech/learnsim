@@ -42,6 +42,9 @@ class LossTestMethods(unittest.TestCase):
 
         self.padding = (self.s, self.s, self.s, self.s, self.s, self.s)
 
+    def tearDown(self):
+        del self.kernel
+
     def test_entropy(self):
         # initialise the loss object
         entropy = EntropyMultivariateNormal()
@@ -55,7 +58,7 @@ class LossTestMethods(unittest.TestCase):
         u_v = torch.zeros((self.dim_x, self.dim_y, self.dim_z))
 
         # calculate the entropy
-        val = entropy.forward(log_var_v, u_v).item()
+        val = entropy(log_var_v, u_v).item()
         val_true = -0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
 
         assert pytest.approx(val, 0.01) == val_true

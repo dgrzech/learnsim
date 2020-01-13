@@ -42,6 +42,9 @@ class WarpingTestMethods(unittest.TestCase):
 
         self.registration_module = RegistrationModule().to('cuda:0')
 
+    def tearDown(self):
+        del self.registration_module
+
     def test_sphere_translation(self):
         """
         initialise 3D image of a sphere

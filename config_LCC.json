@@ -26,7 +26,7 @@
     },
 
     "transformation_model": {
-        "type": "SVF",
+        "type": "SVF_3D",
         "args": {}
     },
     "registration_module": {

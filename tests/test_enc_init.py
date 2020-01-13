@@ -50,6 +50,9 @@ class EncInitTestMethods(unittest.TestCase):
         self.loss_SSD = SSD()
         self.loss_LCC = LCC()
 
+    def tearDown(self):
+        del self.CNN_SSD, self.CNN_LCC, self.loss_SSD, self.loss_LCC
+
     def test_init_SSD(self):
         im_fixed = torch.randn(self.dims_im).to('cuda:0')
         im_moving_warped = torch.randn(self.dims_im).to('cuda:0')

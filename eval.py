@@ -3,7 +3,7 @@ from tqdm import tqdm
 from logger import save_images
 from model.metric import dice
 from parse_config import ConfigParser
-from utils import grid_to_deformation_field, sample_qv
+from utils import sample_qv
 
 import argparse
 import torch
@@ -62,7 +62,7 @@ def main(config):
     no_samples = config['trainer']['no_samples']
 
     for batch_idx, (im_pair_idxs, im_fixed, seg_fixed, im_moving, seg_moving,
-                    mu_v, log_var_v, u_v, log_var_f, u_f, identity_grid) in enumerate(tqdm(data_loader)):
+                    mu_v, log_var_v, u_v, log_var_f, u_f) in enumerate(tqdm(data_loader)):
         im_fixed, im_moving = im_fixed.to(device, non_blocking=True), \
                               im_moving.to(device, non_blocking=True)  # images to register
 
@@ -72,8 +72,6 @@ def main(config):
         mu_v = mu_v.to(device, non_blocking=True).requires_grad_(True)  # mean velocity field
         log_var_v, u_v = log_var_v.to(device, non_blocking=True).requires_grad_(True), \
                          u_v.to(device, non_blocking=True).requires_grad_(True)  # variational parameters
-
-        identity_grid = identity_grid.to(device, non_blocking=True)
 
         # initialise the optimiser
         optimizer_v = config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
@@ -88,7 +86,7 @@ def main(config):
 
             for _ in range(no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation = transformation_model(identity_grid, v_sample)
+                transformation = transformation_model(v_sample)
 
                 im_moving_warped = registration_module(im_moving, transformation)
                 im_out = enc(im_fixed, im_moving_warped)
@@ -113,8 +111,8 @@ def main(config):
 
         # save the images
         with torch.no_grad():
-            transformation = transformation_model(identity_grid, mu_v)
-            warp_field = grid_to_deformation_field(identity_grid, transformation)
+            transformation = transformation_model(mu_v)
+            warp_field = transformation_model.get_deformation_field(transformation)
 
             im_moving_warped = registration_module(im_moving, transformation)
             seg_moving_warped = registration_module(seg_moving, transformation, mode='nearest')
@@ -126,7 +124,7 @@ def main(config):
             logger.info('\nsaved the output images and vector fields to disk\n')
 
     with torch.no_grad():
-        transformation = transformation_model(identity_grid, mu_v)
+        transformation = transformation_model(mu_v)
         im_moving_warped = registration_module(im_moving, transformation)
         im_out = enc(im_fixed, im_moving_warped)
 

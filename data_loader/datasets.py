@@ -2,7 +2,7 @@ from os import listdir, path
 from skimage import io, transform
 from torch.utils.data import Dataset
 
-from utils import init_identity_grid_2d, init_identity_grid_3d, rescale_im, standardise_im
+from utils import rescale_im, standardise_im
 
 import numpy as np
 import SimpleITK as sitk
@@ -41,8 +41,6 @@ class BiobankDataset(Dataset):
         self.dim_x = 128
         self.dim_y = 128
         self.dim_z = 128
-
-        self.identity_grid = None
 
         # image filenames
         im_filenames = sorted([path.join(im_paths, f)
@@ -154,13 +152,7 @@ class BiobankDataset(Dataset):
         else:
             u_f = init_u_f(dims_im)
 
-        # identity grid
-        if self.identity_grid is None and len(im_fixed.shape) == 3:
-            self.identity_grid = torch.squeeze(init_identity_grid_2d(self.dim_x, self.dim_y))
-        elif self.identity_grid is None and len(im_fixed.shape) == 4:
-            self.identity_grid = torch.squeeze(init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z))
-
-        return idx, im_fixed, seg_fixed, im_moving, seg_moving, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
+        return idx, im_fixed, seg_fixed, im_moving, seg_moving, mu_v, log_var_v, u_v, log_var_f, u_f
 
 
 class RGBDDataset(Dataset):
@@ -170,7 +162,6 @@ class RGBDDataset(Dataset):
         self.no_consecutive_frames = no_consecutive_frames
 
         self.img_pairs = []
-        self.identity_grid = None
 
         img_paths = {scene_paths: [path.join(scene_paths, f)
                                    for f in listdir(scene_paths) if path.isfile(path.join(scene_paths, f))]}
@@ -244,8 +235,4 @@ class RGBDDataset(Dataset):
         else:
             u_f = init_u_f(dims_im)
 
-        # identity grid
-        if self.identity_grid is None:
-            self.identity_grid = torch.squeeze(init_identity_grid_3d(dim_x, dim_y, dim_z))
-
-        return idx, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f, self.identity_grid
+        return idx, im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f

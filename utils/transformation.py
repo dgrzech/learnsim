@@ -1,3 +1,5 @@
+from utils import init_identity_grid_2d, init_identity_grid_3d
+
 from abc import ABC, abstractmethod
 from torch import nn
 
@@ -13,30 +15,27 @@ class TransformationModel(nn.Module, ABC):
         super(TransformationModel, self).__init__()
 
     @abstractmethod
-    def forward_2d(self, identity_grid, v):
+    def forward(self, v):
         pass
 
     @abstractmethod
-    def forward_3d(self, identity_grid, v):
+    def get_deformation_field(self, transformation):
         pass
 
-    def forward(self, identity_grid, v):
-        if len(v.shape) == 4:
-            return self.forward_2d(identity_grid, v)
-        elif len(v.shape) == 5:
-            return self.forward_3d(identity_grid, v)
 
-
-class SVF(TransformationModel):
+class SVF_2D(TransformationModel):
     """
     stationary velocity field transformation model
     """
 
-    def __init__(self):
-        super(SVF, self).__init__()
+    def __init__(self, dim_x=128, dim_y=128):
+        super(SVF_2D, self).__init__()
         self.no_steps = 16
 
-    def forward_2d(self, identity_grid, v):
+        identity_grid = init_identity_grid_2d(dim_x, dim_y)
+        self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
+
+    def forward(self, v):
         """
         integrate a 2D stationary velocity field through scaling and squaring
         """
@@ -45,13 +44,29 @@ class SVF(TransformationModel):
 
         for _ in range(self.no_steps):
             grid_sample_input = warp_field
-            grid = identity_grid + grid_sample_input.permute([0, 2, 3, 1])
+            grid = self.identity_grid + grid_sample_input.permute([0, 2, 3, 1])
 
             warp_field = grid_sample_input + F.grid_sample(grid_sample_input, grid, padding_mode='border')
 
-        return identity_grid.permute([0, 3, 1, 2]) + warp_field
+        return self.identity_grid.permute([0, 3, 1, 2]) + warp_field
 
-    def forward_3d(self, identity_grid, v):
+    def get_deformation_field(self, transformation):
+        return transformation - self.identity_grid.permute([0, 3, 1, 2])
+
+
+class SVF_3D(TransformationModel):
+    """
+    stationary velocity field transformation model
+    """
+
+    def __init__(self, dim_x=128, dim_y=128, dim_z=128):
+        super(SVF_3D, self).__init__()
+        self.no_steps = 16
+
+        identity_grid = init_identity_grid_3d(dim_x, dim_y, dim_z)
+        self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
+
+    def forward(self, v):
         """
         integrate a 3D stationary velocity field through scaling and squaring
         """
@@ -60,8 +75,11 @@ class SVF(TransformationModel):
 
         for _ in range(self.no_steps):
             grid_sample_input = warp_field
-            grid = identity_grid + grid_sample_input.permute([0, 2, 3, 4, 1])
+            grid = self.identity_grid + grid_sample_input.permute([0, 2, 3, 4, 1])
 
             warp_field = grid_sample_input + F.grid_sample(grid_sample_input, grid, padding_mode='border')
 
-        return identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
+        return self.identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
+
+    def get_deformation_field(self, transformation):
+        return transformation - self.identity_grid.permute([0, 4, 1, 2, 3])
