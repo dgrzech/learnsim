@@ -115,7 +115,7 @@ class Trainer(BaseTrainer):
 
             for _ in range(self.no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation = self.transformation_model(v_sample)
+                transformation, deformation_field = self.transformation_model(v_sample)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = self.enc(im_fixed, im_moving_warped)
@@ -125,7 +125,7 @@ class Trainer(BaseTrainer):
 
             return data_term, self.reg_loss(mu_v).sum(), self.entropy(log_var_v, u_v).sum()
 
-        transformation = self.transformation_model(mu_v)
+        transformation, deformation_field = self.transformation_model(mu_v)
 
         im_moving_warped = self.registration_module(im_moving, transformation)
         im_out = self.enc(im_fixed, im_moving_warped)
@@ -163,8 +163,7 @@ class Trainer(BaseTrainer):
 
                 if iter_no % self.log_step_q_v == 0:
                     with torch.no_grad():
-                        transformation = self.transformation_model(mu_v)
-                        deformation_field = self.transformation_model.get_deformation_field(transformation)
+                        transformation, deformation_field = self.transformation_model(mu_v)
 
                         im_moving_warped = self.registration_module(im_moving, transformation)
                         im_out = self.enc(im_fixed, im_moving_warped)
@@ -205,8 +204,7 @@ class Trainer(BaseTrainer):
 
                 if iter_no % self.log_step_q_v == 0:
                     with torch.no_grad():
-                        transformation = self.transformation_model(mu_v)
-                        deformation_field = self.transformation_model.get_deformation_field(transformation)
+                        transformation, deformation_field = self.transformation_model(mu_v)
 
                         im_moving_warped = self.registration_module(im_moving, transformation)
                         im_out = self.enc(im_fixed, im_moving_warped)
@@ -254,7 +252,7 @@ class Trainer(BaseTrainer):
         
         for _ in range(self.no_samples):
             v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
-            transformation = self.transformation_model(v_sample)
+            transformation, deformation_field = self.transformation_model(v_sample)
 
             im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = self.enc(im_fixed, im_moving_warped)
@@ -322,7 +320,7 @@ class Trainer(BaseTrainer):
 
             # print value of the data term before registration
             with torch.no_grad():
-                transformation = self.transformation_model(mu_v)
+                transformation, deformation_field = self.transformation_model(mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out_unwarped = self.enc(im_fixed, im_moving)
@@ -361,8 +359,7 @@ class Trainer(BaseTrainer):
             self.train_metrics.update('loss', total_loss)
 
             with torch.no_grad():
-                transformation = self.transformation_model(mu_v)
-                deformation_field = self.transformation_model.get_deformation_field(transformation)
+                transformation, deformation_field = self.transformation_model(mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 seg_moving_warped = self.registration_module(seg_moving, transformation, mode='nearest')

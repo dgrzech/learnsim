@@ -112,7 +112,7 @@ class RegistrationTestMethods(unittest.TestCase):
         total_loss = 0.0
 
         with torch.no_grad():
-            transformation = self.transformation_model(mu_v)
+            transformation, deformation_field = self.transformation_model(mu_v)
             im_moving_warped = self.registration_module(im_moving, transformation)
 
             im_out_unwarped = enc(im_fixed, im_moving)
@@ -133,7 +133,7 @@ class RegistrationTestMethods(unittest.TestCase):
         for iter_no in range(self.no_steps_v):
             optimizer_v.zero_grad()
 
-            transformation = self.transformation_model(mu_v)
+            transformation, deformation_field = self.transformation_model(mu_v)
             im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = enc(im_fixed, im_moving_warped)
 
@@ -159,7 +159,7 @@ class RegistrationTestMethods(unittest.TestCase):
         """
 
         with torch.no_grad():
-            transformation = self.transformation_model(mu_v)
+            transformation, deformation_field = self.transformation_model(mu_v)
             im_moving_warped = self.registration_module(im_moving, transformation)
 
             save_im_to_disk(im_moving_warped[0, 0].cpu().numpy(), './temp/moving_warped_LCC_data_only.nii.gz')
@@ -227,7 +227,7 @@ class RegistrationTestMethods(unittest.TestCase):
         total_loss = 0.0
 
         with torch.no_grad():
-            transformation = self.transformation_model(mu_v)
+            transformation, deformation_field = self.transformation_model(mu_v)
             im_moving_warped = self.registration_module(im_moving, transformation)
 
             print(f'PRE-REGISTRATION: ' +
@@ -248,7 +248,7 @@ class RegistrationTestMethods(unittest.TestCase):
 
             for _ in range(self.no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation = self.transformation_model(v_sample)
+                transformation, deformation_field = self.transformation_model(v_sample)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = enc(im_fixed, im_moving_warped)
@@ -291,7 +291,7 @@ class RegistrationTestMethods(unittest.TestCase):
         for _ in range(self.no_samples):
             # first term
             v_sample = sample_qv(mu_v, log_var_v, u_v)
-            transformation = self.transformation_model(v_sample)
+            transformation, deformation_field = self.transformation_model(v_sample)
 
             im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = enc(im_fixed, im_moving_warped)
@@ -321,7 +321,7 @@ class RegistrationTestMethods(unittest.TestCase):
         """
 
         with torch.no_grad():
-            transformation = self.transformation_model(mu_v)
+            transformation, deformation_field = self.transformation_model(mu_v)
             im_moving_warped = self.registration_module(im_moving, transformation)
 
             save_im_to_disk(im_moving_warped[0, 0].cpu().numpy(), './temp/moving_warped_SSD_all.nii.gz')

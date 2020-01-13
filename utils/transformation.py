@@ -18,10 +18,6 @@ class TransformationModel(nn.Module, ABC):
     def forward(self, v):
         pass
 
-    @abstractmethod
-    def get_deformation_field(self, transformation):
-        pass
-
 
 class SVF_2D(TransformationModel):
     """
@@ -48,10 +44,8 @@ class SVF_2D(TransformationModel):
 
             warp_field = grid_sample_input + F.grid_sample(grid_sample_input, grid, padding_mode='border')
 
-        return self.identity_grid.permute([0, 3, 1, 2]) + warp_field
-
-    def get_deformation_field(self, transformation):
-        return transformation - self.identity_grid.permute([0, 3, 1, 2])
+        transformation = warp_field + self.identity_grid.permute([0, 3, 1, 2])
+        return transformation, warp_field
 
 
 class SVF_3D(TransformationModel):
@@ -79,7 +73,5 @@ class SVF_3D(TransformationModel):
 
             warp_field = grid_sample_input + F.grid_sample(grid_sample_input, grid, padding_mode='border')
 
-        return self.identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
-
-    def get_deformation_field(self, transformation):
-        return transformation - self.identity_grid.permute([0, 4, 1, 2, 3])
+        transformation = warp_field + self.identity_grid.permute([0, 4, 1, 2, 3])
+        return transformation, warp_field
