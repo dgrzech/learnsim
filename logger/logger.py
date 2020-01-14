@@ -1,9 +1,11 @@
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from os import path
+import torch
 
 import matplotlib.pyplot as plt
 
 from pathlib import Path
-from utils import compute_norm, read_json, save_field_to_disk, save_im_to_disk
+from utils import calc_det_J, compute_norm, read_json, save_field_to_disk, save_im_to_disk
 
 import logging
 import logging.config
@@ -78,6 +80,25 @@ def var_params_q_v_grid(mu_v_norm_slices, deformation_field_norm_slices, log_var
     return fig
 
 
+def log_det_J_transformation_grid(log_det_J_transformation_slices):
+    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+    cols = ['axial', 'coronal', 'sagittal']
+
+    for i in range(3):
+        ax = axs[i]
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        im = ax.imshow(log_det_J_transformation_slices[i])
+        ax.set_title(cols[i])
+
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(im, cax=cbar_ax, aspect=1)
+
+    return fig
+
+
 def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
     im_pair_idxs = im_pair_idxs.tolist()
 
@@ -138,6 +159,37 @@ def log_q_v(writer, im_pair_idxs, mu_v_batch, deformation_field_batch, log_var_v
         writer.add_figure('q_v_' + str(im_pair_idx),
                           var_params_q_v_grid(mu_v_norm_slices, deformation_field_norm_slices,
                                               log_var_v_norm_slices, u_v_norm_slices))
+
+
+def log_log_det_J_transformation(writer, im_pair_idxs, transformation_batch, diff_op):
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    mid_x = int(transformation_batch.shape[4] / 2)
+    mid_y = int(transformation_batch.shape[3] / 2)
+    mid_z = int(transformation_batch.shape[2] / 2)
+        
+    nabla_x_batch, nabla_y_batch, nabla_z_batch = diff_op(transformation_batch)
+
+    dim_x = float(transformation_batch.shape[4])
+    dim_y = float(transformation_batch.shape[3])
+    dim_z = float(transformation_batch.shape[2])
+
+    nabla_x_batch *= (dim_x - 1.0) / 2.0
+    nabla_y_batch *= (dim_y - 1.0) / 2.0
+    nabla_z_batch *= (dim_z - 1.0) / 2.0
+
+    log_det_J_transformation_batch = torch.log10(calc_det_J(nabla_x_batch,
+                                                            nabla_y_batch,
+                                                            nabla_z_batch)).cpu().numpy()
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        log_det_J_transformation = log_det_J_transformation_batch[loop_idx]
+        log_det_J_transformation_slices = [log_det_J_transformation[:, :, mid_x],
+                                           log_det_J_transformation[:, mid_y, :],
+                                           log_det_J_transformation[mid_z, :, :]]
+
+        writer.add_figure('log_det_J_transformation_' + str(im_pair_idx),
+                          log_det_J_transformation_grid(log_det_J_transformation_slices))
 
 
 def log_q_f(writer, im_pair_idxs, log_var_f_batch, u_f_batch):

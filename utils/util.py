@@ -140,6 +140,14 @@ def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     return x, y, z
 
 
+def normalised_3d_to_pixel_idx(x, y, z, dim_x, dim_y, dim_z):
+    px_idx_x = (x + 1.0) * (dim_x - 1.0) / 2.0
+    px_idx_y = (y + 1.0) * (dim_y - 1.0) / 2.0
+    px_idx_z = (z + 1.0) * (dim_z - 1.0) / 2.0
+
+    return px_idx_x, px_idx_y, px_idx_z
+
+
 def resample_im_to_be_isotropic(im):
     im_spacing = im.GetSpacing()
     im_size = im.GetSize()
@@ -196,6 +204,17 @@ def save_field_to_disk(field, file_path):
     field = field.cpu().numpy()
     field = nib.Nifti1Image(field, np.eye(4))
     field.to_filename(file_path)
+
+
+def calc_det_J(nabla_x, nabla_y, nabla_z):
+    det_J = nabla_x[:, 0] * nabla_y[:, 1] * nabla_z[:, 2] + \
+            nabla_y[:, 0] * nabla_z[:, 1] * nabla_x[:, 2] + \
+            nabla_z[:, 0] * nabla_x[:, 1] * nabla_y[:, 2] - \
+            nabla_x[:, 2] * nabla_y[:, 1] * nabla_z[:, 0] - \
+            nabla_y[:, 2] * nabla_z[:, 1] * nabla_x[:, 0] - \
+            nabla_z[:, 2] * nabla_x[:, 1] * nabla_y[:, 0]
+
+    return det_J
 
 
 class MetricTracker:

@@ -1,4 +1,4 @@
-from utils import GradientOperator
+from utils import calc_det_J, init_identity_grid_3d, normalised_3d_to_pixel_idx, pixel_to_normalised_3d, GradientOperator
 
 import numpy as np
 import pytest
@@ -23,7 +23,7 @@ class DiffTestMethods(unittest.TestCase):
         utils
         """
 
-        n = 8
+        n = 4
 
         self.dim_x = n
         self.dim_y = n
@@ -62,23 +62,23 @@ class DiffTestMethods(unittest.TestCase):
         calculate its derivative
         """
 
-        dv_dx, dv_dy, dv_dz = self.diff_op.apply(v)
+        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
 
         """
         test the derivative values are correct
         """
 
-        dv_x_dx = dv_dx[0, 0]
-        dv_y_dx = dv_dx[0, 1]
-        dv_z_dx = dv_dx[0, 2]
+        dv_x_dx = nabla_vx[0, 0]
+        dv_y_dx = nabla_vy[0, 0]
+        dv_z_dx = nabla_vz[0, 0]
 
-        dv_x_dy = dv_dy[0, 0]
-        dv_y_dy = dv_dy[0, 1]
-        dv_z_dy = dv_dy[0, 2]
+        dv_x_dy = nabla_vx[0, 1]
+        dv_y_dy = nabla_vy[0, 1]
+        dv_z_dy = nabla_vz[0, 1]
 
-        dv_x_dz = dv_dz[0, 0]
-        dv_y_dz = dv_dz[0, 1]
-        dv_z_dz = dv_dz[0, 2]
+        dv_x_dz = nabla_vx[0, 2]
+        dv_y_dz = nabla_vy[0, 2]
+        dv_z_dz = nabla_vz[0, 2]
 
         for idx_z in range(self.dim_z - 1):
             for idx_y in range(self.dim_y - 1):
@@ -129,23 +129,23 @@ class DiffTestMethods(unittest.TestCase):
         calculate its derivative
         """
 
-        dv_dx, dv_dy, dv_dz = self.diff_op.apply(v)
+        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
 
         """
         test the derivative values are correct 
         """
 
-        dv_x_dx = dv_dx[0, 0]
-        dv_y_dx = dv_dx[0, 1]
-        dv_z_dx = dv_dx[0, 2]
+        dv_x_dx = nabla_vx[0, 0]
+        dv_y_dx = nabla_vy[0, 0]
+        dv_z_dx = nabla_vz[0, 0]
 
-        dv_x_dy = dv_dy[0, 0]
-        dv_y_dy = dv_dy[0, 1]
-        dv_z_dy = dv_dy[0, 2]
+        dv_x_dy = nabla_vx[0, 1]
+        dv_y_dy = nabla_vy[0, 1]
+        dv_z_dy = nabla_vz[0, 1]
 
-        dv_x_dz = dv_dz[0, 0]
-        dv_y_dz = dv_dz[0, 1]
-        dv_z_dz = dv_dz[0, 2]
+        dv_x_dz = nabla_vx[0, 2]
+        dv_y_dz = nabla_vy[0, 2]
+        dv_z_dz = nabla_vz[0, 2]
 
         for idx_z in range(self.dim_z):
             for idx_y in range(self.dim_y):
@@ -161,13 +161,6 @@ class DiffTestMethods(unittest.TestCase):
                     dv_x_dz_val = dv_x_dz[idx_z, idx_y, idx_x].item()
                     dv_y_dz_val = dv_y_dz[idx_z, idx_y, idx_x].item()
                     dv_z_dz_val = dv_z_dz[idx_z, idx_y, idx_x].item()
-
-                    # print(idx_x, idx_y, idx_z)
-                    #
-                    # print('v: ', v[0, :, idx_z, idx_y, idx_x])
-                    # print('dv_dx: ', dv_x_dx_val, dv_y_dx_val, dv_z_dx_val,
-                    #       ', dv_dy: ', dv_x_dy_val, dv_y_dy_val, dv_z_dy_val,
-                    #       ', dv_dz: ', dv_x_dz_val, dv_y_dz_val, dv_z_dz_val)
 
                     if idx_x == 0 or idx_x == self.dim_x - 1 \
                             or idx_y == 0 or idx_y == self.dim_y - 1 \
@@ -185,3 +178,115 @@ class DiffTestMethods(unittest.TestCase):
                     assert pytest.approx(dv_x_dz_val, 1e-5) == 0.0
                     assert pytest.approx(dv_y_dz_val, 1e-5) == 2.0 * idx_z
                     assert pytest.approx(dv_z_dz_val, 1e-5) == 0.0
+
+    def test_det_J(self):
+        """
+        initialise a transformation
+        """
+
+        nabla_x = torch.zeros(self.dims_v).to('cuda:0')
+        nabla_y = torch.zeros(self.dims_v).to('cuda:0')
+        nabla_z = torch.zeros(self.dims_v).to('cuda:0')
+
+        det_J_true = torch.zeros((1, 1, self.dim_z, self.dim_y, self.dim_x)).to('cuda:0')
+
+        for idx_z in range(nabla_x.shape[2]):
+            for idx_y in range(nabla_x.shape[3]):
+                for idx_x in range(nabla_x.shape[4]):
+                    dvx_dx = idx_x
+                    dvx_dy = idx_z ** 2
+                    dvx_dz = idx_y
+
+                    dvy_dx = idx_y
+                    dvy_dy = idx_x ** 2
+                    dvy_dz = idx_z
+
+                    dvz_dx = idx_y ** 2
+                    dvz_dy = idx_x
+                    dvz_dz = idx_x
+
+                    nabla_x[0, 0, idx_z, idx_y, idx_x] = dvx_dx
+                    nabla_x[0, 1, idx_z, idx_y, idx_x] = dvx_dy
+                    nabla_x[0, 2, idx_z, idx_y, idx_x] = dvx_dz
+
+                    nabla_y[0, 0, idx_z, idx_y, idx_x] = dvy_dx
+                    nabla_y[0, 1, idx_z, idx_y, idx_x] = dvy_dy
+                    nabla_y[0, 2, idx_z, idx_y, idx_x] = dvy_dz
+
+                    nabla_z[0, 0, idx_z, idx_y, idx_x] = dvz_dx
+                    nabla_z[0, 1, idx_z, idx_y, idx_x] = dvz_dy
+                    nabla_z[0, 2, idx_z, idx_y, idx_x] = dvz_dz
+
+                    # x^4 - x^2 * y^3 - x^2 * z + x * y^2 - x * y * z^2 + y^2 * z^3
+                    det_J_true[0, 0, idx_z, idx_y, idx_x] = idx_x ** 4 \
+                                                            - idx_x ** 2 * idx_y ** 3 \
+                                                            - idx_x ** 2 * idx_z \
+                                                            + idx_x * idx_y ** 2 \
+                                                            - idx_x * idx_y * idx_z ** 2 \
+                                                            + idx_y ** 2 * idx_z ** 3
+
+        """
+        calculate its Jacobian
+        """
+
+        det_J = calc_det_J(nabla_x, nabla_y, nabla_z)
+
+        """
+        test the Jacobian values are correct
+        """
+
+        assert torch.all(torch.eq(det_J, det_J_true))
+
+    def test_det_J_transformation(self):
+        """
+        initialise the identity transformation
+        """
+
+        identity_transformation = init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z).permute([0, 4, 1, 2, 3])
+
+        """
+        calculate its Jacobian
+        """
+
+        nabla_x, nabla_y, nabla_z = self.diff_op(identity_transformation)
+
+        nabla_x *= (self.dim_x - 1.0) / 2.0
+        nabla_y *= (self.dim_y - 1.0) / 2.0
+        nabla_z *= (self.dim_z - 1.0) / 2.0
+
+        det_J = calc_det_J(nabla_x, nabla_y, nabla_z)
+        log_det_J = torch.log10(det_J)
+
+        # assert torch.all(torch.eq(log_det_J, torch.zeros(1, self.dim_x, self.dim_y, self.dim_z)))
+
+    def test_det_J_transformation2(self):
+        """
+        initialise the transformation
+        """
+
+        identity_transformation = init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z).permute([0, 4, 1, 2, 3])
+        transformation = torch.zeros_like(identity_transformation)
+
+        for idx_z in range(transformation.shape[2]):
+            for idx_y in range(transformation.shape[3]):
+                for idx_x in range(transformation.shape[4]):
+                    displacement_x, displacement_y, displacement_z = 2.0 * idx_x / (self.dim_x - 1.0), 2.0 * idx_y / (self.dim_y - 1.0), 2.0 * idx_z / (self.dim_z - 1.0)
+
+                    transformation[0, 0, idx_z, idx_y, idx_x] = identity_transformation[0, 0, idx_z, idx_y, idx_x] + displacement_x
+                    transformation[0, 1, idx_z, idx_y, idx_x] = identity_transformation[0, 1, idx_z, idx_y, idx_x] + displacement_y
+                    transformation[0, 2, idx_z, idx_y, idx_x] = identity_transformation[0, 2, idx_z, idx_y, idx_x] + displacement_z
+
+        """
+        calculate its Jacobian
+        """
+
+        nabla_x, nabla_y, nabla_z = self.diff_op(transformation)
+
+        nabla_x *= (self.dim_x - 1.0) / 2.0
+        nabla_y *= (self.dim_y - 1.0) / 2.0
+        nabla_z *= (self.dim_z - 1.0) / 2.0
+
+        det_J = calc_det_J(nabla_x, nabla_y, nabla_z)
+        log_det_J = torch.log10(det_J)
+
+        # assert torch.all(torch.eq(log_det_J, torch.zeros(1, self.dim_x, self.dim_y, self.dim_z)))
