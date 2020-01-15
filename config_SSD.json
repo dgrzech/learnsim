@@ -17,7 +17,8 @@
     "reg_loss": {
         "type": "RegLossL2",
         "args": {
-            "diff_op": "GradientOperator"
+            "diff_op": "GradientOperator",
+            "w_reg": 1.0
         }
     },
     "entropy": {

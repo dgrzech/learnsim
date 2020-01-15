@@ -69,8 +69,9 @@ regularisation loss
 
 
 class RegLoss(nn.Module, ABC):
-    def __init__(self):
+    def __init__(self, w_reg):
         super(RegLoss, self).__init__()
+        self.w_reg = float(w_reg)
 
     @abstractmethod
     def forward(self, v):
@@ -78,8 +79,8 @@ class RegLoss(nn.Module, ABC):
 
 
 class RegLossL2(RegLoss):
-    def __init__(self, diff_op):
-        super(RegLossL2, self).__init__()
+    def __init__(self, diff_op, w_reg):
+        super(RegLossL2, self).__init__(w_reg)
 
         if diff_op == 'GradientOperator':
             self.diff_op = GradientOperator()
@@ -88,7 +89,7 @@ class RegLossL2(RegLoss):
 
     def forward(self, v):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        return 0.5 * (torch.sum(torch.pow(nabla_vx, 2)) + torch.sum(torch.pow(nabla_vy, 2)) + torch.sum(torch.pow(nabla_vz, 2)))
+        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) + torch.sum(torch.pow(nabla_vy, 2)) + torch.sum(torch.pow(nabla_vz, 2)))
 
 
 """
