@@ -26,7 +26,7 @@ class SVF_2D(TransformationModel):
 
     def __init__(self, dim_x, dim_y):
         super(SVF_2D, self).__init__()
-        self.no_steps = 16
+        self.no_steps = 32
 
         identity_grid = init_identity_grid_2d(dim_x, dim_y)
         self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
@@ -55,7 +55,7 @@ class SVF_3D(TransformationModel):
 
     def __init__(self, dim_x, dim_y, dim_z):
         super(SVF_3D, self).__init__()
-        self.no_steps = 16
+        self.no_steps = 32
 
         identity_grid = init_identity_grid_3d(dim_x, dim_y, dim_z)
         self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
