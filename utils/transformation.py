@@ -36,16 +36,14 @@ class SVF_2D(TransformationModel):
         integrate a 2D stationary velocity field through scaling and squaring
         """
 
-        warp_field = v / float(2 ** self.no_steps)
+        displacement = v / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
-            grid_sample_input = warp_field
-            grid = self.identity_grid + grid_sample_input.permute([0, 2, 3, 1])
+            transformation = self.identity_grid + displacement.permute([0, 2, 3, 1])
+            displacement = displacement + F.grid_sample(displacement, transformation, padding_mode='border')
 
-            warp_field = grid_sample_input + F.grid_sample(grid_sample_input, grid, padding_mode='border')
-
-        transformation = warp_field + self.identity_grid.permute([0, 3, 1, 2])
-        return transformation, warp_field
+        transformation = self.identity_grid.permute([0, 3, 1, 2]) + displacement
+        return transformation, displacement
 
 
 class SVF_3D(TransformationModel):
@@ -65,13 +63,11 @@ class SVF_3D(TransformationModel):
         integrate a 3D stationary velocity field through scaling and squaring
         """
 
-        warp_field = v / float(2 ** self.no_steps)
+        displacement = v / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
-            grid_sample_input = warp_field
-            grid = self.identity_grid + grid_sample_input.permute([0, 2, 3, 4, 1])
+            transformation = self.identity_grid + displacement.permute([0, 2, 3, 4, 1])
+            displacement = displacement + F.grid_sample(displacement, transformation, padding_mode='border')
 
-            warp_field = grid_sample_input + F.grid_sample(grid_sample_input, grid, padding_mode='border')
-
-        transformation = warp_field + self.identity_grid.permute([0, 4, 1, 2, 3])
-        return transformation, warp_field
+        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + displacement
+        return transformation, displacement

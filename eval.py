@@ -86,7 +86,7 @@ def main(config):
 
             for _ in range(no_samples):
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation, deformation_field = transformation_model(v_sample)
+                transformation, displacement = transformation_model(v_sample)
 
                 im_moving_warped = registration_module(im_moving, transformation)
                 im_out = enc(im_fixed, im_moving_warped)
@@ -111,19 +111,19 @@ def main(config):
 
         # save the images
         with torch.no_grad():
-            transformation, warp_field = transformation_model(mu_v)
+            transformation, displacement = transformation_model(mu_v)
 
             im_moving_warped = registration_module(im_moving, transformation)
             seg_moving_warped = registration_module(seg_moving, transformation, mode='nearest')
 
             save_images(im_pair_idxs, data_loader.save_dirs, im_fixed, im_moving, im_moving_warped,
-                        mu_v, log_var_v, u_v, log_var_f, u_f, warp_field,
+                        mu_v, log_var_v, u_v, log_var_f, u_f, displacement,
                         seg_fixed, seg_moving, seg_moving_warped)
 
             logger.info('\nsaved the output images and vector fields to disk\n')
 
     with torch.no_grad():
-        transformation, deformation_field = transformation_model(mu_v)
+        transformation, displacement = transformation_model(mu_v)
         im_moving_warped = registration_module(im_moving, transformation)
         im_out = enc(im_fixed, im_moving_warped)
 

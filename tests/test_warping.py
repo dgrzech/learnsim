@@ -24,15 +24,9 @@ class WarpingTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName)
 
-        """
-        utils
-        """
-
         n = 8
-        self.dim_x = n
-        self.dim_y = n
-        self.dim_z = n
 
+        self.dim_x, self.dim_y, self.dim_z = n, n, n
         self.dims_im = (1, 1, self.dim_x, self.dim_y, self.dim_z)
         self.dims_v = (1, 3, self.dim_x, self.dim_y, self.dim_z)
 
@@ -87,8 +81,8 @@ class WarpingTestMethods(unittest.TestCase):
 
         offset = 5.0
 
-        warp_field = offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
-        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
+        displacement = offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
+        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + displacement
 
         im_moving_warped = self.registration_module(im_moving, transformation)
 
@@ -121,8 +115,8 @@ class WarpingTestMethods(unittest.TestCase):
 
         offset = 20
 
-        warp_field = offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
-        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + warp_field
+        displacement = offset / self.dim_x * torch.ones(self.dims_v).to('cuda:0')
+        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + displacement
 
         im_moving_warped = self.registration_module(im_moving, transformation)
 

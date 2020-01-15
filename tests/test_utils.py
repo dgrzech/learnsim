@@ -18,10 +18,7 @@ class UtilsTestMethods(unittest.TestCase):
         print(self._testMethodName)
 
         n = 8
-
-        self.dim_x = n
-        self.dim_y = n
-        self.dim_z = n
+        self.dim_x, self.dim_y, self.dim_z = n, n, n
 
     def test_norm(self):
         v = torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
@@ -35,11 +32,11 @@ class UtilsTestMethods(unittest.TestCase):
         transformation_module = SVF_2D(self.dim_x, self.dim_y)
 
         # v = torch.zeros(1, 2, self.dim_x, self.dim_y)
-        # transformation, deformation_field = transformation_module(v)
+        # transformation, displacement = transformation_module(v)
         # print('zero velocity field\n', transformation)
 
         v = 0.2 * torch.ones(1, 2, self.dim_x, self.dim_y)
-        transformation, deformation_field = transformation_module(v)
+        transformation, displacement = transformation_module(v)
         # print('uniform velocity field\n', transformation)
         plot_2d(v, transformation)
 
@@ -47,11 +44,11 @@ class UtilsTestMethods(unittest.TestCase):
         transformation_module = SVF_3D(self.dim_x, self.dim_y, self.dim_z)
 
         # v = torch.zeros(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        # transformation, deformation_field = transformation_module(v)
+        # transformation, displacement = transformation_module(v)
         # print('zero velocity field\n', transformation)
 
         v = 0.2 * torch.ones(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        transformation, deformation_field = transformation_module(v)
+        transformation, displacement = transformation_module(v)
         # print('uniform velocity field\n', transformation)
         plot_3d(v, transformation)
 
@@ -66,7 +63,7 @@ class UtilsTestMethods(unittest.TestCase):
                 v[0, 0, idx_x, idx_y] = y
                 v[0, 1, idx_x, idx_y] = -1.0 * x
 
-        transformation, deformation_field = transformation_module(v)
+        transformation, displacement = transformation_module(v)
         # print(transformation)
         plot_2d(v, transformation)
 
@@ -83,6 +80,6 @@ class UtilsTestMethods(unittest.TestCase):
                     v[0, 1, idx_x, idx_y, idx_z] = -1.0 * x
                     v[0, 2, idx_x, idx_y, idx_z] = 0.0
 
-        transformation, deformation_field = transformation_module(v)
+        transformation, displacement = transformation_module(v)
         # print(transformation)
         plot_3d(v, transformation)

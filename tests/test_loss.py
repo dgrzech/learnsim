@@ -23,10 +23,7 @@ class LossTestMethods(unittest.TestCase):
         print(self._testMethodName)
 
         n = 4
-
-        self.dim_x = n
-        self.dim_y = n
-        self.dim_z = n
+        self.dim_x, self.dim_y, self.dim_z = n, n, n
 
         """
         LCC kernel

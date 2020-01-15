@@ -56,11 +56,11 @@ def var_params_q_f_grid(log_var_f_slices, u_f_slices):
     return fig
 
 
-def var_params_q_v_grid(mu_v_norm_slices, deformation_field_norm_slices, log_var_v_norm_slices, u_v_norm_slices):
+def var_params_q_v_grid(mu_v_norm_slices, displacement_norm_slices, log_var_v_norm_slices, u_v_norm_slices):
     fig, axs = plt.subplots(nrows=4, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['axial', 'coronal', 'sagittal']
-    rows = ['mu_v_norm', 'deformation_field_norm', 'log_var_v_norm', 'u_v_norm']
+    rows = ['mu_v_norm', 'displacement_norm', 'log_var_v_norm', 'u_v_norm']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -73,7 +73,7 @@ def var_params_q_v_grid(mu_v_norm_slices, deformation_field_norm_slices, log_var
 
     for i in range(3):
         axs[0, i].imshow(mu_v_norm_slices[i])
-        axs[1, i].imshow(deformation_field_norm_slices[i])
+        axs[1, i].imshow(displacement_norm_slices[i])
         axs[2, i].imshow(log_var_v_norm_slices[i])
         axs[3, i].imshow(u_v_norm_slices[i])
 
@@ -124,7 +124,7 @@ def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_
                           im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
 
 
-def log_q_v(writer, im_pair_idxs, mu_v_batch, deformation_field_batch, log_var_v_batch, u_v_batch):
+def log_q_v(writer, im_pair_idxs, mu_v_batch, displacement_batch, log_var_v_batch, u_v_batch):
     im_pair_idxs = im_pair_idxs.tolist()
 
     mid_x = int(mu_v_batch.shape[4] / 2)
@@ -138,11 +138,11 @@ def log_q_v(writer, im_pair_idxs, mu_v_batch, deformation_field_batch, log_var_v
                             mu_v_norm[:, mid_y, :],
                             mu_v_norm[mid_z, :, :]]
 
-        temp = compute_norm(deformation_field_batch[loop_idx])
-        deformation_field_norm = temp[0].cpu().numpy()
-        deformation_field_norm_slices = [deformation_field_norm[:, :, mid_x],
-                                         deformation_field_norm[:, mid_y, :],
-                                         deformation_field_norm[mid_z, :, :]]
+        temp = compute_norm(displacement_batch[loop_idx])
+        displacement_norm = temp[0].cpu().numpy()
+        displacement_norm_slices = [displacement_norm[:, :, mid_x],
+                                    displacement_norm[:, mid_y, :],
+                                    displacement_norm[mid_z, :, :]]
 
         temp = compute_norm(log_var_v_batch[loop_idx])
         log_var_v_norm = temp[0].cpu().numpy()
@@ -157,30 +157,29 @@ def log_q_v(writer, im_pair_idxs, mu_v_batch, deformation_field_batch, log_var_v
                            u_v_norm[mid_z, :, :]]
 
         writer.add_figure('q_v_' + str(im_pair_idx),
-                          var_params_q_v_grid(mu_v_norm_slices, deformation_field_norm_slices,
+                          var_params_q_v_grid(mu_v_norm_slices, displacement_norm_slices,
                                               log_var_v_norm_slices, u_v_norm_slices))
 
 
 def log_log_det_J_transformation(writer, im_pair_idxs, transformation_batch, diff_op):
     im_pair_idxs = im_pair_idxs.tolist()
 
-    mid_x = int(transformation_batch.shape[4] / 2)
-    mid_y = int(transformation_batch.shape[3] / 2)
-    mid_z = int(transformation_batch.shape[2] / 2)
-        
-    nabla_x_batch, nabla_y_batch, nabla_z_batch = diff_op(transformation_batch)
-
     dim_x = float(transformation_batch.shape[4])
     dim_y = float(transformation_batch.shape[3])
     dim_z = float(transformation_batch.shape[2])
+
+    mid_x = int(dim_x / 2)
+    mid_y = int(dim_y / 2)
+    mid_z = int(dim_z / 2)
+        
+    nabla_x_batch, nabla_y_batch, nabla_z_batch = diff_op(transformation_batch)
 
     nabla_x_batch *= (dim_x - 1.0) / 2.0
     nabla_y_batch *= (dim_y - 1.0) / 2.0
     nabla_z_batch *= (dim_z - 1.0) / 2.0
 
-    log_det_J_transformation_batch = torch.log10(calc_det_J(nabla_x_batch,
-                                                            nabla_y_batch,
-                                                            nabla_z_batch)).cpu().numpy()
+    det_J_transformation_batch = calc_det_J(nabla_x_batch, nabla_y_batch, nabla_z_batch) + 1e-5
+    log_det_J_transformation_batch = torch.log10(det_J_transformation_batch).cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         log_det_J_transformation = log_det_J_transformation_batch[loop_idx]
@@ -237,10 +236,10 @@ def save_mu_v_norm(save_dirs_dict, im_pair_idx, mu_v_norm):
     save_im_to_disk(mu_v_norm, mu_v_norm_path)
 
 
-def save_deformation_field_norm(save_dirs_dict, im_pair_idx, deformation_field_norm):
-    deformation_field_norm_path = path.join(save_dirs_dict['norms'],
-                                            'deformation_field_norm_' + str(im_pair_idx) + '.nii.gz')
-    save_im_to_disk(deformation_field_norm, deformation_field_norm_path)
+def save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm):
+    displacement_norm_path = path.join(save_dirs_dict['norms'],
+                                       'displacement_norm_' + str(im_pair_idx) + '.nii.gz')
+    save_im_to_disk(displacement_norm, displacement_norm_path)
 
 
 def save_log_var_v_norm(save_dirs_dict, im_pair_idx, log_var_v_norm):
@@ -253,9 +252,9 @@ def save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm):
     save_im_to_disk(u_v_norm, u_v_norm_path)
 
 
-def save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, deformation_field_norm, log_var_v_norm, u_v_norm):
+def save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, log_var_v_norm, u_v_norm):
     save_mu_v_norm(save_dirs_dict, im_pair_idx, mu_v_norm)
-    save_deformation_field_norm(save_dirs_dict, im_pair_idx, deformation_field_norm)
+    save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm)
     save_log_var_v_norm(save_dirs_dict, im_pair_idx, log_var_v_norm)
     save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm)
 
@@ -295,7 +294,7 @@ def save_seg_moving_warped(save_dirs_dict, im_pair_idx, seg_moving_warped):
 
 
 def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch,
-                mu_v_batch, deformation_field_batch, log_var_v_batch, u_v_batch, log_var_f_batch, u_f_batch,
+                mu_v_batch, log_var_v_batch, u_v_batch, log_var_f_batch, u_f_batch, displacement_batch,
                 seg_fixed_batch=None, seg_moving_batch=None, seg_moving_warped_batch=None):
     """
     save the input and output images as well as norms of vectors in the vector fields to disk
@@ -333,8 +332,8 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
         temp = compute_norm(mu_v_batch[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
 
-        temp = compute_norm(deformation_field_batch[loop_idx])
-        deformation_field_norm = temp[0].cpu().numpy()
+        temp = compute_norm(displacement_batch[loop_idx])
+        displacement_norm = temp[0].cpu().numpy()
 
         temp = compute_norm(log_var_v_batch[loop_idx])
         log_var_v_norm = temp[0].cpu().numpy()
@@ -346,7 +345,7 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
         save_im_moving(save_dirs_dict, im_pair_idx, im_moving)
         save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped)
 
-        save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, deformation_field_norm, log_var_v_norm, u_v_norm)
+        save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, log_var_v_norm, u_v_norm)
         save_images_q_f(save_dirs_dict, im_pair_idx, log_var_f, u_f)
 
         if seg_fixed_batch is not None:

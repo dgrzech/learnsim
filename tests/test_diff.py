@@ -1,4 +1,4 @@
-from utils import calc_det_J, init_identity_grid_3d, normalised_3d_to_pixel_idx, pixel_to_normalised_3d, GradientOperator
+from utils import calc_det_J, init_identity_grid_3d, GradientOperator
 
 import numpy as np
 import pytest
@@ -19,16 +19,8 @@ class DiffTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName)
 
-        """
-        utils
-        """
-
-        n = 4
-
-        self.dim_x = n
-        self.dim_y = n
-        self.dim_z = n
-
+        n = 8
+        self.dim_x, self.dim_y, self.dim_z = n, n, n
         self.dims_v = (1, 3, self.dim_x, self.dim_y, self.dim_z)
 
         """
@@ -132,7 +124,7 @@ class DiffTestMethods(unittest.TestCase):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
 
         """
-        test the derivative values are correct 
+        test the derivative values are correct
         """
 
         dv_x_dx = nabla_vx[0, 0]
@@ -237,7 +229,7 @@ class DiffTestMethods(unittest.TestCase):
 
         assert torch.all(torch.eq(det_J, det_J_true))
 
-    def test_det_J_transformation(self):
+    def test_log_det_J_identity(self):
         """
         initialise the identity transformation
         """
@@ -254,12 +246,24 @@ class DiffTestMethods(unittest.TestCase):
         nabla_y *= (self.dim_y - 1.0) / 2.0
         nabla_z *= (self.dim_z - 1.0) / 2.0
 
-        det_J = calc_det_J(nabla_x, nabla_y, nabla_z)
+        """
+        calculate the log determinant of the Jacobian
+        """
+
+        det_J = calc_det_J(nabla_x, nabla_y, nabla_z) + 1e-5
         log_det_J = torch.log10(det_J)
 
-        # assert torch.all(torch.eq(log_det_J, torch.zeros(1, self.dim_x, self.dim_y, self.dim_z)))
+        """
+        test that values of the log determinant of the Jacobian are correct
+        """
 
-    def test_det_J_transformation2(self):
+        for idx_z in range(log_det_J.shape[1]):
+            for idx_y in range(log_det_J.shape[2]):
+                for idx_x in range(log_det_J.shape[3]):
+                    log_det_J_val = log_det_J[0, idx_z, idx_y, idx_x].item()
+                    assert pytest.approx(log_det_J_val, abs=1e-5) == 0.0
+
+    def test_log_det_J_stretching(self):
         """
         initialise the transformation
         """
@@ -270,11 +274,16 @@ class DiffTestMethods(unittest.TestCase):
         for idx_z in range(transformation.shape[2]):
             for idx_y in range(transformation.shape[3]):
                 for idx_x in range(transformation.shape[4]):
-                    displacement_x, displacement_y, displacement_z = 2.0 * idx_x / (self.dim_x - 1.0), 2.0 * idx_y / (self.dim_y - 1.0), 2.0 * idx_z / (self.dim_z - 1.0)
+                    displacement_x, displacement_y, displacement_z = 2.0 * idx_x / (self.dim_x - 1.0), \
+                                                                     2.0 * idx_y / (self.dim_y - 1.0), \
+                                                                     2.0 * idx_z / (self.dim_z - 1.0)
 
-                    transformation[0, 0, idx_z, idx_y, idx_x] = identity_transformation[0, 0, idx_z, idx_y, idx_x] + displacement_x
-                    transformation[0, 1, idx_z, idx_y, idx_x] = identity_transformation[0, 1, idx_z, idx_y, idx_x] + displacement_y
-                    transformation[0, 2, idx_z, idx_y, idx_x] = identity_transformation[0, 2, idx_z, idx_y, idx_x] + displacement_z
+                    transformation[0, 0, idx_z, idx_y, idx_x] = identity_transformation[0, 0, idx_z, idx_y, idx_x] + \
+                                                                displacement_x
+                    transformation[0, 1, idx_z, idx_y, idx_x] = identity_transformation[0, 1, idx_z, idx_y, idx_x] + \
+                                                                displacement_y
+                    transformation[0, 2, idx_z, idx_y, idx_x] = identity_transformation[0, 2, idx_z, idx_y, idx_x] + \
+                                                                displacement_z
 
         """
         calculate its Jacobian
@@ -287,6 +296,14 @@ class DiffTestMethods(unittest.TestCase):
         nabla_z *= (self.dim_z - 1.0) / 2.0
 
         det_J = calc_det_J(nabla_x, nabla_y, nabla_z)
-        log_det_J = torch.log10(det_J)
 
-        # assert torch.all(torch.eq(log_det_J, torch.zeros(1, self.dim_x, self.dim_y, self.dim_z)))
+        log_det_J = torch.log10(det_J)
+        log_det_J_true = torch.log10(8.0 * torch.ones_like(log_det_J))
+
+        for idx_z in range(log_det_J.shape[1]):
+            for idx_y in range(log_det_J.shape[2]):
+                for idx_x in range(log_det_J.shape[3]):
+                    log_det_J_val = log_det_J[0, idx_z, idx_y, idx_x].item()
+                    log_det_J_true_val = log_det_J_true[0, idx_z, idx_y, idx_x].item()
+
+                    assert pytest.approx(log_det_J_val) == log_det_J_true_val

@@ -46,7 +46,7 @@ class ConfigParser:
         self._u_f_dir = save_dir / exper_name / run_id / 'models' / 'u_f'
         
         self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
-        self._deformation_field_dir = save_dir / exper_name / run_id / 'fields' / 'deformation_field'
+        self._displacement_dir = save_dir / exper_name / run_id / 'fields' / 'displacement'
         
         self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
 
@@ -65,7 +65,7 @@ class ConfigParser:
         self.u_f_dir.mkdir(parents=True, exist_ok=exist_ok)
         
         self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.deformation_field_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.displacement_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
         
@@ -208,8 +208,8 @@ class ConfigParser:
         return self._mu_v_field_dir
 
     @property
-    def deformation_field_dir(self):
-        return self._deformation_field_dir
+    def displacement_dir(self):
+        return self._displacement_dir
 
     @property
     def im_dir(self):
@@ -228,7 +228,7 @@ class ConfigParser:
         return {'mu_v': self.mu_v_dir,
                 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
                 'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
-                'mu_v_field': self.mu_v_field_dir, 'deformation_field': self.deformation_field_dir,
+                'mu_v_field': self.mu_v_field_dir, 'displacement': self.displacement_dir,
                 'images': self.im_dir, 'norms': self.norms_dir, 'segs': self.seg_dir}
 
 
