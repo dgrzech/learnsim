@@ -1,6 +1,6 @@
 from base import BaseTrainer
 from model.metric import dice
-from logger import log_images, log_q_v, log_q_f, save_images
+from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, save_images
 from utils import inf_loop, MetricTracker, sample_qv, sample_qf
 
 from torch import nn
@@ -113,14 +113,29 @@ class Trainer(BaseTrainer):
         if self.learn_q_v:
             data_term = 0.0
 
-            for _ in range(self.no_samples):
+            if self.no_samples == 1:
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
+
                 transformation, deformation_field = self.transformation_model(v_sample)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = self.enc(im_fixed, im_moving_warped)
 
                 data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                data_term += data_term_sample
+            elif self.no_samples == 2:
+                v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v, self.no_samples)  # draw a sample from q_v
+
+                transformation1, deformation_field1 = self.transformation_model(v_sample1)
+                transformation2, deformation_field2 = self.transformation_model(v_sample2)
+
+                im_moving_warped1 = self.registration_module(im_moving, transformation1)
+                im_out1 = self.enc(im_fixed, im_moving_warped1)
+
+                im_moving_warped2 = self.registration_module(im_moving, transformation2)
+                im_out2 = self.enc(im_fixed, im_moving_warped2)
+
+                data_term_sample = (self.data_loss(im_out1).sum() + self.data_loss(im_out2).sum()) / float(2 * self.no_samples)
                 data_term += data_term_sample
 
             return data_term, self.reg_loss(mu_v).sum(), self.entropy(log_var_v, u_v).sum()
@@ -177,6 +192,7 @@ class Trainer(BaseTrainer):
                         self.train_metrics.update('entropy_term', entropy_term_value)
 
                         log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
+                        log_log_det_J_transformation(self.writer, im_pair_idxs, transformation, self.reg_loss.diff_op)
                         log_q_v(self.writer, im_pair_idxs, mu_v, deformation_field, log_var_v, u_v)
 
                         self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
@@ -216,6 +232,7 @@ class Trainer(BaseTrainer):
                         self.train_metrics.update('reg_term', reg_term_value)
 
                         log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
+                        log_log_det_J_transformation(self.writer, im_pair_idxs, transformation, self.reg_loss.diff_op)
                         log_q_v(self.writer, im_pair_idxs, mu_v, deformation_field, log_var_v, u_v)
 
                         self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
@@ -260,11 +277,19 @@ class Trainer(BaseTrainer):
             data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
             loss_q_f_q_phi += data_term_sample
             
-            for _ in range(self.no_samples):
-                im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)  # draw a sample from q_f
+            if self.no_samples == 1:
+                im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)
                 im_out = self.enc(im_fixed_sample, im_moving_warped)
 
                 data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
+                loss_q_f_q_phi -= data_term_sample
+            elif self.no_samples == 2:
+                im_fixed_sample1, im_fixed_sample2 = sample_qf(im_fixed, log_var_f, u_f, self.no_samples)  # draw a sample from q_f
+
+                im_out1 = self.enc(im_fixed_sample1, im_moving_warped)
+                im_out2 = self.enc(im_fixed_sample2, im_moving_warped)
+
+                data_term_sample = (self.data_loss(im_out1).sum() + self.data_loss(im_out2).sum()) / float(2 * self.no_samples ** 2)
                 loss_q_f_q_phi -= data_term_sample
 
         loss_q_f_q_phi /= curr_batch_size
