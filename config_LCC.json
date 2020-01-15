@@ -6,7 +6,7 @@
         "type": "SimEnc",
         "args": {
 	        "init_type": "LCC",
-            "s": 5
+            "s": 4
         }
     },
 
@@ -18,7 +18,7 @@
         "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 1.0
+            "w_reg": 12000.0
         }
     },
     "entropy": {
@@ -38,14 +38,14 @@
     "optimizer_v": {
         "type": "Adam",
         "args": {
-            "lr": 4e-4,
+            "lr": 5e-4,
 	        "amsgrad": true
         }
     },
     "optimizer_f": {
         "type": "Adam",
         "args": {
-            "lr": 4e-4,
+            "lr": 5e-4,
 	        "amsgrad": true
         }
     },
@@ -72,7 +72,7 @@
 
     "trainer": {
         "epochs": 100,
-        "no_samples": 2,
+        "no_samples": 1,
 	    "no_steps_v": 256,
 
 	    "learn_q_v": true,

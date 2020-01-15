@@ -6,7 +6,7 @@
         "type": "SimEnc",
         "args": {
 	        "init_type": "SSD",
-            "s": 5
+            "s": 4
         }
     },
 
@@ -18,7 +18,7 @@
         "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 1.0
+            "w_reg": 12000.0
         }
     },
     "entropy": {
@@ -72,8 +72,8 @@
 
     "trainer": {
         "epochs": 100,
-        "no_samples": 2,
-	    "no_steps_v": 192,
+        "no_samples": 1,
+	    "no_steps_v": 256,
 
 	    "learn_q_v": true,
 	    "learn_sim_metric": true,

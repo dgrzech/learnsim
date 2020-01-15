@@ -36,12 +36,8 @@ class GradientOperator(DifferentialOperator):
         dv_dy = 0.5 * F.pad(v[:, :, :, 2:, :] - v[:, :, :, :-2, :], self.py, 'replicate')
         dv_dz = 0.5 * F.pad(v[:, :, 2:, :, :] - v[:, :, :-2, :, :], self.pz, 'replicate')
 
-        nabla_vx = torch.cat((dv_dx[:, 0], dv_dy[:, 0], dv_dz[:, 0]), 0)
-        nabla_vy = torch.cat((dv_dx[:, 1], dv_dy[:, 1], dv_dz[:, 1]), 0)
-        nabla_vz = torch.cat((dv_dx[:, 2], dv_dy[:, 2], dv_dz[:, 2]), 0)
-
-        nabla_vx.unsqueeze_(0)
-        nabla_vy.unsqueeze_(0)
-        nabla_vz.unsqueeze_(0)
+        nabla_vx = torch.stack((dv_dx[:, 0], dv_dy[:, 0], dv_dz[:, 0]), 1)
+        nabla_vy = torch.stack((dv_dx[:, 1], dv_dy[:, 1], dv_dz[:, 1]), 1)
+        nabla_vz = torch.stack((dv_dx[:, 2], dv_dy[:, 2], dv_dz[:, 2]), 1)
 
         return nabla_vx, nabla_vy, nabla_vz
