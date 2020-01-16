@@ -1,7 +1,7 @@
 from os import path
-import torch
 
 import matplotlib.pyplot as plt
+import torch
 
 from pathlib import Path
 from utils import calc_det_J, compute_norm, read_json, save_field_to_disk, save_im_to_disk
@@ -327,7 +327,7 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
         log_var_f = log_var_f_batch[loop_idx, 0]
         u_f = u_f_batch[loop_idx, 0]
 
-        mu_v_field_path = path.join(save_dirs_dict['mu_v_field'], 'mu_v_' + str(im_pair_idx) + '.nii.gz')
+        mu_v_field_path = path.join(save_dirs_dict['mu_v_field'], 'mu_v_' + str(im_pair_idx) + '.vtk')
         save_field_to_disk(mu_v_batch[loop_idx], mu_v_field_path)
 
         temp = compute_norm(mu_v_batch[loop_idx])

@@ -2,6 +2,7 @@ from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
 from torch import nn
+from tvtk.api import tvtk, write_data
 
 import json
 import nibabel as nib
@@ -205,13 +206,27 @@ def save_im_to_disk(im, file_path):
 
 
 def save_field_to_disk(field, file_path):
-    """
-    save a 3D vector field to disk
-    """
-
     field = field.cpu().numpy()
-    field = nib.Nifti1Image(field, np.eye(4))
-    field.to_filename(file_path)
+
+    field_x = field[0]
+    field_y = field[1]
+    field_z = field[2]
+
+    dim = field.shape[1:]  # FIXME (dig15): why is the no. cells < no. points?
+
+    vectors = np.empty(field_x.shape + (3,), dtype=float)
+    vectors[..., 0] = field_x
+    vectors[..., 1] = field_y
+    vectors[..., 2] = field_z
+
+    vectors = vectors.transpose(2, 1, 0, 3).copy()
+    vectors.shape = vectors.size // 3, 3
+
+    im_vtk = tvtk.ImageData(spacing=(1, 1, 1), origin=(0, 0, 0), dimensions=dim)
+    im_vtk.point_data.vectors = vectors
+    im_vtk.point_data.vectors.name = 'field'
+
+    write_data(im_vtk, file_path)
 
 
 def calc_det_J(nabla_x, nabla_y, nabla_z):
