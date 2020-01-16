@@ -1,4 +1,3 @@
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from os import path
 import torch
 
@@ -118,7 +117,9 @@ def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_
         im_moving_slices = [im_moving[:, :, mid_x], im_moving[:, mid_y, :], im_moving[mid_z, :, :]]
 
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-        im_moving_warped_slices = [im_moving_warped[:, :, mid_x], im_moving_warped[:, mid_y, :], im_moving_warped[mid_z, :, :]]
+        im_moving_warped_slices = [im_moving_warped[:, :, mid_x],
+                                   im_moving_warped[:, mid_y, :],
+                                   im_moving_warped[mid_z, :, :]]
 
         writer.add_figure('im_pair_' + str(im_pair_idx),
                           im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))

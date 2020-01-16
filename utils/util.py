@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
+from torch import nn
 
 import json
 import nibabel as nib
@@ -78,6 +79,13 @@ def compute_lcc(im1, im2, s=5):
 
 def compute_norm(v):
     return torch.norm(v, p=2, dim=0, keepdim=True)
+
+
+def get_module_attr(module, name):
+    if isinstance(module, nn.DataParallel):
+        return getattr(module.module, name)
+
+    return getattr(module, name)
 
 
 def init_identity_grid_2d(nx, ny):

@@ -10,7 +10,8 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metric_ftns, config):
+    def __init__(self, enc, data_loss, reg_loss, entropy, transformation_model, registration_module,
+                 metric_ftns, config):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 

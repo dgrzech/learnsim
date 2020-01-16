@@ -89,7 +89,9 @@ class RegLossL2(RegLoss):
 
     def forward(self, v):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) + torch.sum(torch.pow(nabla_vy, 2)) + torch.sum(torch.pow(nabla_vz, 2)))
+        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) +
+                             torch.sum(torch.pow(nabla_vy, 2)) +
+                             torch.sum(torch.pow(nabla_vz, 2)))
 
 
 """
