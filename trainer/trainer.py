@@ -1,7 +1,9 @@
+from os import path
+
 from base import BaseTrainer
 from model.metric import dice
 from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, save_images
-from utils import get_module_attr, inf_loop, MetricTracker, sample_qv, sample_qf
+from utils import get_module_attr, inf_loop, MetricTracker, sample_qv, sample_qf, save_optimiser_to_disk
 
 import math
 import numpy as np
@@ -52,23 +54,23 @@ class Trainer(BaseTrainer):
 
     def _save_mu_v(self, im_pair_idx, mu_v):
         torch.save(mu_v,
-                   os.path.join(self.data_loader.save_dirs['mu_v'], 'mu_v_' + str(im_pair_idx) + '.pt'))
+                   path.join(self.data_loader.save_dirs['mu_v'], 'mu_v_' + str(im_pair_idx) + '.pt'))
 
     def _save_log_var_v(self, im_pair_idx, log_var_v):
         torch.save(log_var_v,
-                   os.path.join(self.data_loader.save_dirs['log_var_v'], 'log_var_v_' + str(im_pair_idx) + '.pt'))
+                   path.join(self.data_loader.save_dirs['log_var_v'], 'log_var_v_' + str(im_pair_idx) + '.pt'))
 
     def _save_log_var_f(self, im_pair_idx, log_var_f):
         torch.save(log_var_f,
-                   os.path.join(self.data_loader.save_dirs['log_var_f'], 'log_var_f_' + str(im_pair_idx) + '.pt'))
+                   path.join(self.data_loader.save_dirs['log_var_f'], 'log_var_f_' + str(im_pair_idx) + '.pt'))
 
     def _save_u_v(self, im_pair_idx, u_v):
         torch.save(u_v,
-                   os.path.join(self.data_loader.save_dirs['u_v'], 'u_v_' + str(im_pair_idx) + '.pt'))
+                   path.join(self.data_loader.save_dirs['u_v'], 'u_v_' + str(im_pair_idx) + '.pt'))
 
     def _save_u_f(self, im_pair_idx, u_f):
         torch.save(u_f,
-                   os.path.join(self.data_loader.save_dirs['u_f'], 'u_f_' + str(im_pair_idx) + '.pt'))
+                   path.join(self.data_loader.save_dirs['u_f'], 'u_f_' + str(im_pair_idx) + '.pt'))
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         """
@@ -89,6 +91,28 @@ class Trainer(BaseTrainer):
 
             self._save_u_v(im_pair_idx, u_v[loop_idx])
             self._save_u_f(im_pair_idx, u_f[loop_idx])
+
+    def _load_optimiser_q_v(self, batch_idx):
+        file_path = path.join(self.data_loader.save_dirs['optimisers'], 'optimiser_q_v_' + str(batch_idx) + '.pt')
+
+        if path.exists(file_path):
+            checkpoint = torch.load(file_path)
+            self.optimizer_q_v.load_state_dict(checkpoint)
+
+    def _load_optimiser_q_f(self, batch_idx):
+        file_path = path.join(self.data_loader.save_dirs['optimisers'], 'optimiser_q_f_' + str(batch_idx) + '.pt')
+
+        if path.exists(file_path):
+            checkpoint = torch.load(file_path)
+            self.optimizer_q_f.load_state_dict(checkpoint)
+
+    def _save_optimiser_q_v(self, batch_idx):
+        file_path = path.join(self.data_loader.save_dirs['optimisers'], 'optimiser_q_v_' + str(batch_idx) + '.pt')
+        save_optimiser_to_disk(self.optimizer_q_v, file_path)
+
+    def _save_optimiser_q_f(self, batch_idx):
+        file_path = path.join(self.data_loader.save_dirs['optimisers'], 'optimiser_q_f_' + str(batch_idx) + '.pt')
+        save_optimiser_to_disk(self.optimizer_q_f, file_path)
 
     def _registration_print(self, iter_no, no_steps_v, loss_q_v, data_term, reg_term, entropy_term=0.0):
         """
@@ -156,6 +180,7 @@ class Trainer(BaseTrainer):
 
             # initialise the optimiser
             self.optimizer_q_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
+            self._load_optimiser_q_v(batch_idx)
 
             # optimise q_v
             for iter_no in range(self.no_steps_v):
@@ -201,7 +226,10 @@ class Trainer(BaseTrainer):
 
                         self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
                                                  data_term_value, reg_term_value, entropy_term_value)
-            
+
+            # save the optimiser
+            self._save_optimiser_q_v(batch_idx)
+
             # disable gradients
             mu_v.requires_grad_(False)
             log_var_v.requires_grad_(False)
@@ -209,6 +237,7 @@ class Trainer(BaseTrainer):
         else:
             mu_v.requires_grad_(True)
             self.optimizer_q_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v])
+            self._load_optimiser_q_v(batch_idx)
 
             for iter_no in range(self.no_steps_v):
                 self.optimizer_q_v.zero_grad()
@@ -252,6 +281,7 @@ class Trainer(BaseTrainer):
                         self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
                                                  data_term_value, reg_term_value)
 
+            self._save_optimiser_q_v(batch_idx)
             mu_v.requires_grad_(False)
 
         return loss_q_v.item() / curr_batch_size
@@ -271,6 +301,7 @@ class Trainer(BaseTrainer):
         
         # initialise the optimiser
         self.optimizer_q_f = self.config.init_obj('optimizer_f', torch.optim, [log_var_f, u_f])
+        self._load_optimiser_q_f(batch_idx)
 
         # optimise the encoding function
         self.optimizer_q_f.zero_grad()
@@ -310,7 +341,10 @@ class Trainer(BaseTrainer):
 
         self.optimizer_q_f.step()  # backprop
         self.optimizer_q_phi.step()  
-        
+
+        # save the optimiser
+        self._save_optimiser_q_f(batch_idx)
+
         # disable gradients
         log_var_f.requires_grad_(False)
         u_f.requires_grad_(False)

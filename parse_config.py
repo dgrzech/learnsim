@@ -44,6 +44,8 @@ class ConfigParser:
         self._u_v_dir = save_dir / exper_name / run_id / 'models' / 'u_v'
         self._log_var_f_dir = save_dir / exper_name / run_id / 'models' / 'log_var_f'
         self._u_f_dir = save_dir / exper_name / run_id / 'models' / 'u_f'
+
+        self._optimiser_dir = save_dir / exper_name / run_id / 'models' / 'optimisers'
         
         self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
         self._displacement_dir = save_dir / exper_name / run_id / 'fields' / 'displacement'
@@ -63,6 +65,8 @@ class ConfigParser:
         self.u_v_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_var_f_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.u_f_dir.mkdir(parents=True, exist_ok=exist_ok)
+
+        self.optimiser_dir.mkdir(parents=True, exist_ok=exist_ok)
         
         self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.displacement_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -83,6 +87,10 @@ class ConfigParser:
                        self._log_var_f_dir.absolute().as_posix())
             copy_tree((self.resume.parent / 'u_f').absolute().as_posix(), 
                        self._u_f_dir.absolute().as_posix())
+
+            copy_tree((self.resume.parent / 'optimisers').absolute().as_posix(),
+                      self._optimiser_dir.absolute().as_posix())
+
             print('done!\n')
 
         # save updated config file to the checkpoint dir
@@ -203,6 +211,11 @@ class ConfigParser:
     def u_f_dir(self):
         return self._u_f_dir
 
+
+    @property
+    def optimiser_dir(self):
+        return self._optimiser_dir
+
     @property
     def mu_v_field_dir(self):
         return self._mu_v_field_dir
@@ -229,7 +242,8 @@ class ConfigParser:
                 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
                 'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
                 'mu_v_field': self.mu_v_field_dir, 'displacement': self.displacement_dir,
-                'images': self.im_dir, 'norms': self.norms_dir, 'segs': self.seg_dir}
+                'images': self.im_dir, 'norms': self.norms_dir, 'segs': self.seg_dir,
+                'optimisers': self.optimiser_dir}
 
 
 # helper functions to update config dict with custom cli options

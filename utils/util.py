@@ -200,11 +200,6 @@ def standardise_im(im):
     return im
 
 
-def save_im_to_disk(im, file_path):
-    im = nib.Nifti1Image(im, np.eye(4))
-    im.to_filename(file_path)
-
-
 def save_field_to_disk(field, file_path):
     field = field.cpu().numpy()
 
@@ -227,6 +222,16 @@ def save_field_to_disk(field, file_path):
     im_vtk.point_data.vectors.name = 'field'
 
     write_data(im_vtk, file_path)
+
+
+def save_im_to_disk(im, file_path):
+    im = nib.Nifti1Image(im, np.eye(4))
+    im.to_filename(file_path)
+
+
+def save_optimiser_to_disk(optimiser, file_path):
+    state_dict = optimiser.state_dict()
+    torch.save(state_dict, file_path)
 
 
 def calc_det_J(nabla_x, nabla_y, nabla_z):
