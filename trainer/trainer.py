@@ -201,7 +201,7 @@ class Trainer(BaseTrainer):
                 self.optimizer_q_v.step()  # backprop
 
                 # metrics
-                global_step = (epoch - 1) * self.len_epoch * self.no_steps_v + iter_no + 1
+                global_step = (epoch - 1) * self.no_steps_v + iter_no + 1
                 self.writer.set_step(global_step)
 
                 if math.log2(global_step).is_integer():
@@ -257,7 +257,7 @@ class Trainer(BaseTrainer):
                 self.optimizer_q_v.step()
 
                 # metrics
-                global_step = (epoch - 1) * self.len_epoch * self.no_steps_v + iter_no + 1
+                global_step = (epoch - 1) * self.no_steps_v + iter_no + 1
                 self.writer.set_step(global_step)
 
                 if math.log2(global_step).is_integer():
@@ -358,7 +358,7 @@ class Trainer(BaseTrainer):
         u_f.requires_grad_(False)
         
         # metrics
-        step = (epoch - 1) * self.len_epoch + batch_idx
+        step = epoch - 1
         self.writer.set_step(step)
 
         with torch.no_grad():
