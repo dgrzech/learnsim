@@ -129,6 +129,7 @@ class Trainer(BaseTrainer):
     def _registration_step(self, im_fixed, im_moving, mu_v, log_var_v=None, u_v=None):
         if self.learn_q_v:
             data_term = 0.0
+            reg_term = 0.0
 
             if self.no_samples == 1:
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
@@ -139,7 +140,10 @@ class Trainer(BaseTrainer):
                 im_out = self.enc(im_fixed, im_moving_warped)
 
                 data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                reg_term_sample = self.reg_loss(v_sample).sum() / float(self.no_samples)
+
                 data_term += data_term_sample
+                reg_term += reg_term_sample
             elif self.no_samples == 2:
                 v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v, self.no_samples)  # draw a sample from q_v
 
@@ -154,9 +158,13 @@ class Trainer(BaseTrainer):
 
                 data_term_sample = \
                     (self.data_loss(im_out1).sum() + self.data_loss(im_out2).sum()) / float(2 * self.no_samples)
-                data_term += data_term_sample
+                reg_term_sample = \
+                    (self.reg_loss(v_sample1).sum() + self.reg_loss(v_sample2).sum()) / float(2 * self.no_samples)
 
-            return data_term, self.reg_loss(mu_v).sum(), self.entropy(log_var_v, u_v).sum()
+                data_term += data_term_sample
+                reg_term += reg_term_sample
+
+            return data_term, reg_term, self.entropy(log_var_v, u_v).sum()
 
         transformation, displacement = self.transformation_model(mu_v)
 
@@ -206,7 +214,7 @@ class Trainer(BaseTrainer):
                                                      get_module_attr(self.reg_loss, 'diff_op'))
                         log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
 
-                global_step = ((epoch - 1) + batch_idx) * self.len_epoch * self.no_steps_v + iter_no + 1
+                global_step = ((epoch - 1) * self.len_epoch + batch_idx) * self.no_steps_v + iter_no + 1
                 self.writer.set_step(global_step)
 
                 if iter_no % self.log_step_q_v == 0:
@@ -262,7 +270,7 @@ class Trainer(BaseTrainer):
                                                      get_module_attr(self.reg_loss, 'diff_op'))
                         log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
 
-                global_step = ((epoch - 1) + batch_idx) * self.len_epoch * self.no_steps_v + iter_no + 1
+                global_step = ((epoch - 1) * self.len_epoch + batch_idx) * self.no_steps_v + iter_no + 1
                 self.writer.set_step(global_step)
 
                 if iter_no % self.log_step_q_v == 0:
