@@ -1,5 +1,5 @@
 from base import BaseDataLoader
-from .datasets import BiobankDataset, RGBDDataset
+from .datasets import BiobankDataset
 
 
 class LearnSimDataLoader(BaseDataLoader):

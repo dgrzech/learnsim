@@ -60,37 +60,37 @@ class Trainer(BaseTrainer):
         torch.save(log_var_v,
                    path.join(self.data_loader.save_dirs['log_var_v'], 'log_var_v_' + str(im_pair_idx) + '.pt'))
 
-    def _save_log_var_f(self, im_pair_idx, log_var_f):
+    def _save_log_var_f(self, log_var_f):
         torch.save(log_var_f,
-                   path.join(self.data_loader.save_dirs['log_var_f'], 'log_var_f_' + str(im_pair_idx) + '.pt'))
+                   path.join(self.data_loader.save_dirs['log_var_f'], 'log_var_f.pt'))
 
     def _save_u_v(self, im_pair_idx, u_v):
         torch.save(u_v,
                    path.join(self.data_loader.save_dirs['u_v'], 'u_v_' + str(im_pair_idx) + '.pt'))
 
-    def _save_u_f(self, im_pair_idx, u_f):
+    def _save_u_f(self, u_f):
         torch.save(u_f,
-                   path.join(self.data_loader.save_dirs['u_f'], 'u_f_' + str(im_pair_idx) + '.pt'))
+                   path.join(self.data_loader.save_dirs['u_f'], 'u_f.pt'))
 
     def _save_tensors(self, im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f):
         """
         save the variational parameters to disk in order to load at the next epoch
         """
-
-        mu_v = mu_v.cpu()
-
-        log_var_v, u_v = log_var_v.cpu(), u_v.cpu()
+        im_pair_idxs = im_pair_idxs.tolist()
+        
+        log_var_f, u_f = torch.mean(log_var_f, dim=0), torch.mean(u_f, dim=0)
         log_var_f, u_f = log_var_f.cpu(), u_f.cpu()
 
-        im_pair_idxs = im_pair_idxs.tolist()
+        self._save_u_f(u_f)
+        self._save_log_var_f(log_var_f)
 
+        mu_v = mu_v.cpu()
+        log_var_v, u_v = log_var_v.cpu(), u_v.cpu()
+        
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
             self._save_mu_v(im_pair_idx, mu_v[loop_idx])
             self._save_log_var_v(im_pair_idx, log_var_v[loop_idx])
-            self._save_log_var_f(im_pair_idx, log_var_f[loop_idx])
-
             self._save_u_v(im_pair_idx, u_v[loop_idx])
-            self._save_u_f(im_pair_idx, u_f[loop_idx])
 
     def _load_optimiser_q_v(self, batch_idx):
         file_path = path.join(self.data_loader.save_dirs['optimisers'], 'optimiser_q_v_' + str(batch_idx) + '.pt')
@@ -362,7 +362,7 @@ class Trainer(BaseTrainer):
         self.writer.set_step(step)
 
         with torch.no_grad():
-            log_q_f(self.writer, im_pair_idxs, log_var_f, u_f)
+            log_q_f(self.writer, log_var_f, u_f)
 
         self.enc.eval()
         get_module_attr(self.enc, 'set_grad_enabled')(False)

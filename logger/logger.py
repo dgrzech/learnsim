@@ -192,25 +192,22 @@ def log_log_det_J_transformation(writer, im_pair_idxs, transformation_batch, dif
                           log_det_J_transformation_grid(log_det_J_transformation_slices))
 
 
-def log_q_f(writer, im_pair_idxs, log_var_f_batch, u_f_batch):
-    im_pair_idxs = im_pair_idxs.tolist()
-
-    log_var_f_batch = log_var_f_batch.cpu().numpy()
-    u_f_batch = u_f_batch.cpu().numpy()
+def log_q_f(writer, log_var_f_batch, u_f_batch):
+    log_var_f, u_f = torch.mean(log_var_f_batch, dim=0), torch.mean(u_f_batch, dim=0)
+    log_var_f, u_f = log_var_f.cpu(), u_f.cpu()
 
     mid_x = int(log_var_f_batch.shape[4] / 2)
     mid_y = int(log_var_f_batch.shape[3] / 2)
     mid_z = int(log_var_f_batch.shape[2] / 2)
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        log_var_f = log_var_f_batch[loop_idx, 0]
-        log_var_f_slices = [log_var_f[:, :, mid_x], log_var_f[:, mid_y, :], log_var_f[mid_z, :, :]]
+    log_var_f = log_var_f[0]
+    log_var_f_slices = [log_var_f[:, :, mid_x], log_var_f[:, mid_y, :], log_var_f[mid_z, :, :]]
 
-        u_f = u_f_batch[loop_idx, 0]
-        u_f_slices = [u_f[:, :, mid_x], u_f[:, mid_y, :], u_f[mid_z, :, :]]
+    u_f = u_f[0]
+    u_f_slices = [u_f[:, :, mid_x], u_f[:, mid_y, :], u_f[mid_z, :, :]]
 
-        writer.add_figure('q_f_' + str(im_pair_idx),
-                          var_params_q_f_grid(log_var_f_slices, u_f_slices))
+    writer.add_figure('q_f',
+                      var_params_q_f_grid(log_var_f_slices, u_f_slices))
 
 
 def save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed):
@@ -260,19 +257,19 @@ def save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, l
     save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm)
 
 
-def save_log_var_f_image(save_dirs_dict, im_pair_idx, log_var_f):
-    log_var_f_im_path = path.join(save_dirs_dict['images'], 'log_var_f_' + str(im_pair_idx) + '.nii.gz')
+def save_log_var_f_image(save_dirs_dict, log_var_f):
+    log_var_f_im_path = path.join(save_dirs_dict['images'], 'log_var_f.nii.gz')
     save_im_to_disk(log_var_f, log_var_f_im_path)
 
 
-def save_u_f_image(save_dirs_dict, im_pair_idx, u_f):
-    u_f_im_path = path.join(save_dirs_dict['images'], 'u_f_' + str(im_pair_idx) + '.nii.gz')
+def save_u_f_image(save_dirs_dict, u_f):
+    u_f_im_path = path.join(save_dirs_dict['images'], 'u_f.nii.gz')
     save_im_to_disk(u_f, u_f_im_path)
 
 
-def save_images_q_f(save_dirs_dict, im_pair_idx, log_var_f, u_f):
-    save_log_var_f_image(save_dirs_dict, im_pair_idx, log_var_f)
-    save_u_f_image(save_dirs_dict, im_pair_idx, u_f)
+def save_images_q_f(save_dirs_dict, log_var_f, u_f):
+    save_log_var_f_image(save_dirs_dict, log_var_f)
+    save_u_f_image(save_dirs_dict, u_f)
 
 
 def save_seg_fixed(save_dirs_dict, im_pair_idx, seg_fixed):
@@ -307,8 +304,10 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
-    log_var_f_batch = log_var_f_batch.cpu().numpy()
-    u_f_batch = u_f_batch.cpu().numpy()
+    log_var_f, u_f = torch.mean(log_var_f_batch, dim=0), torch.mean(u_f_batch, dim=0)
+    log_var_f, u_f = log_var_f[0].cpu().numpy(), u_f[0].cpu().numpy()
+
+    save_images_q_f(save_dirs_dict, log_var_f, u_f)
 
     if seg_fixed_batch is not None:
         seg_fixed_batch = seg_fixed_batch.cpu().numpy()
@@ -323,9 +322,6 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
         im_fixed = im_fixed_batch[loop_idx, 0]
         im_moving = im_moving_batch[loop_idx, 0]
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-
-        log_var_f = log_var_f_batch[loop_idx, 0]
-        u_f = u_f_batch[loop_idx, 0]
 
         mu_v_field_path = path.join(save_dirs_dict['mu_v_field'], 'mu_v_' + str(im_pair_idx) + '.vtk')
         save_field_to_disk(mu_v_batch[loop_idx], mu_v_field_path)
@@ -345,9 +341,7 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
         save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed)
         save_im_moving(save_dirs_dict, im_pair_idx, im_moving)
         save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped)
-
         save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, log_var_v_norm, u_v_norm)
-        save_images_q_f(save_dirs_dict, im_pair_idx, log_var_f, u_f)
 
         if seg_fixed_batch is not None:
             seg_fixed = seg_fixed_batch[loop_idx, 0]
