@@ -44,16 +44,17 @@ def compute_local_means(im, kernel, sz):
     return F.conv3d(im, kernel) / sz
 
 
-def compute_local_corrs(im1, im2, kernel, sz):
-    u_im1 = compute_local_means(im1, kernel, sz)
-    u_im2 = compute_local_means(im2, kernel, sz)
+def compute_local_corrs(im1, im2, kernel, sz, padding):
+    im1 = F.pad(im1, padding, mode='replicate')
+    im2 = F.pad(im2, padding, mode='replicate')
 
-    im_prod = im1 * im2
+    u_im1 = F.pad(compute_local_means(im1, kernel, sz), padding, mode='replicate')
+    u_im2 = F.pad(compute_local_means(im2, kernel, sz), padding, mode='replicate')
 
-    return F.conv3d(im_prod, kernel) - u_im1 * u_im2 * sz
+    return F.conv3d((im1 - u_im1) * (im2 - u_im2), kernel)
 
 
-def compute_lcc(im1, im2, s=5):
+def compute_lcc(im1, im2, s):
     """
     calculate the value of LCC
     """
@@ -67,14 +68,11 @@ def compute_lcc(im1, im2, s=5):
 
     padding = (s, s, s, s, s, s)
 
-    im1 = F.pad(im1, padding, mode='replicate')
-    im2 = F.pad(im2, padding, mode='replicate')
+    cross = compute_local_corrs(im1, im2, kernel, sz, padding)
+    F_var = compute_local_corrs(im1, im1, kernel, sz, padding)
+    M_var = compute_local_corrs(im2, im2, kernel, sz, padding)
 
-    cross = compute_local_corrs(im1, im2, kernel, sz)
-    F_var = compute_local_corrs(im1, im1, kernel, sz)
-    M_var = compute_local_corrs(im2, im2, kernel, sz)
-
-    lcc = cross * cross / (F_var * M_var + 1e-1)
+    lcc = cross * cross / (F_var * M_var + 1e-5)
     return -1.0 * torch.sum(lcc)
 
 

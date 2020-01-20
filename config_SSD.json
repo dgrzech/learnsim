@@ -6,7 +6,8 @@
         "type": "SimEnc",
         "args": {
 	        "init_type": "SSD",
-            "s": 4
+            "s": 4,
+            "no_feature_maps": 6
         }
     },
 
@@ -18,7 +19,7 @@
         "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 12000.0
+            "w_reg": 4000.0
         }
     },
     "entropy": {

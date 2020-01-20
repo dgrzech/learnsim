@@ -5,7 +5,6 @@ from utils import compute_lcc
 import numpy as np
 import pytest
 import torch
-import torch.nn.functional as F
 import unittest
 
 # fix random seeds for reproducibility
@@ -30,11 +29,10 @@ class EncInitTestMethods(unittest.TestCase):
         modules
         """
 
-        self.s = 5
-        self.padding = (self.s, self.s, self.s, self.s, self.s, self.s)
+        self.s = 4
+        self.no_feature_maps = 6
 
-        self.CNN_SSD = CNN_SSD(self.s).to('cuda:0')
-        self.CNN_LCC = CNN_LCC(self.s).to('cuda:0')
+        self.CNN_SSD = CNN_SSD(self.s, self.no_feature_maps).to('cuda:0')
 
         """
         losses
@@ -44,7 +42,7 @@ class EncInitTestMethods(unittest.TestCase):
         self.loss_LCC = LCC()
 
     def tearDown(self):
-        del self.CNN_SSD, self.CNN_LCC, self.loss_SSD, self.loss_LCC
+        del self.CNN_SSD, self.loss_SSD, self.loss_LCC
 
     def test_init_SSD(self):
         im_fixed = torch.randn(self.dims_im).to('cuda:0')
@@ -61,10 +59,23 @@ class EncInitTestMethods(unittest.TestCase):
         im_fixed = torch.randn(self.dims_im).to('cuda:0')
         im_moving_warped = torch.randn(self.dims_im).to('cuda:0')
 
-        z = self.CNN_LCC(im_fixed, im_moving_warped)
- 
-        val = self.loss_LCC(z).item()
-        val_true = compute_lcc(im_fixed, im_moving_warped).item()
+        # single feature map
+        CNN_LCC_one_feature_map = CNN_LCC(self.s, 1).to('cuda:0')
+        z = CNN_LCC_one_feature_map(im_fixed, im_moving_warped)
 
+        val = self.loss_LCC(z).item()
+        val_true = compute_lcc(im_fixed, im_moving_warped, self.s).item()
+        
         assert -1.0 * val > 0.0
         assert pytest.approx(val, 0.01) == val_true
+        
+        # multiple feature maps
+        CNN_LCC_multiple_feature_maps = CNN_LCC(self.s, self.no_feature_maps).to('cuda:0')
+        z = CNN_LCC_multiple_feature_maps(im_fixed, im_moving_warped)
+
+        val = self.loss_LCC(z).item()
+        val_true = compute_lcc(im_fixed, im_moving_warped, self.s).item()
+        
+        assert -1.0 * val > 0.0
+        assert pytest.approx(val, 0.01) == val_true
+
