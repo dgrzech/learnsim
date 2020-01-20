@@ -83,6 +83,6 @@
         "verbosity": 2,
         
         "tensorboard": true,
-	    "log_step_q_v": 32
+	    "log_step": 32
     }
 }

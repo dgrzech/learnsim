@@ -7,7 +7,6 @@ from utils import get_module_attr, inf_loop, MetricTracker, sample_qv, sample_qf
 
 import math
 import numpy as np
-import os
 import torch
 
 
@@ -38,9 +37,7 @@ class Trainer(BaseTrainer):
         self.valid_data_loader = valid_data_loader
         self.do_validation = self.valid_data_loader is not None
 
-        self.log_step = int(np.sqrt(data_loader.batch_size))
-        self.log_step_q_v = config['trainer']['log_step_q_v']
-
+        self.log_step = config['trainer']['log_step']
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
         
         # optimisers
@@ -214,10 +211,10 @@ class Trainer(BaseTrainer):
                                                      get_module_attr(self.reg_loss, 'diff_op'))
                         log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
 
-                global_step = ((epoch - 1) * self.len_epoch + batch_idx) * self.no_steps_v + iter_no + 1
-                self.writer.set_step(global_step)
+                step = epoch - 1
+                self.writer.set_step(step)
 
-                if iter_no % self.log_step_q_v == 0:
+                if iter_no % self.log_step == 0:
                     with torch.no_grad():
                         transformation, displacement = self.transformation_model(mu_v)
 
@@ -270,10 +267,10 @@ class Trainer(BaseTrainer):
                                                      get_module_attr(self.reg_loss, 'diff_op'))
                         log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
 
-                global_step = ((epoch - 1) * self.len_epoch + batch_idx) * self.no_steps_v + iter_no + 1
-                self.writer.set_step(global_step)
+                step = epoch - 1
+                self.writer.set_step(step)
 
-                if iter_no % self.log_step_q_v == 0:
+                if iter_no % self.log_step == 0:
                     with torch.no_grad():
                         transformation, displacement = self.transformation_model(mu_v)
 
@@ -294,7 +291,7 @@ class Trainer(BaseTrainer):
 
         return loss_q_v.item() / curr_batch_size
 
-    def _step_q_f_q_phi(self, epoch, batch_idx, curr_batch_size, im_pair_idxs,
+    def _step_q_f_q_phi(self, epoch, batch_idx, curr_batch_size,
                         im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f):
         """
         update parameters of q_f and q_phi
@@ -417,7 +414,6 @@ class Trainer(BaseTrainer):
             """
 
             total_loss = 0.0
-            loss_q_f_q_phi = 0.0
 
             loss_q_v = self._step_q_v(epoch, batch_idx, curr_batch_size, im_pair_idxs,
                                       im_fixed, im_moving, mu_v, log_var_v, u_v)  # q_v
@@ -425,7 +421,7 @@ class Trainer(BaseTrainer):
 
             if self.learn_sim_metric:
                 self.logger.info('\noptimising q_f and q_phi..')
-                loss_q_f_q_phi = self._step_q_f_q_phi(epoch, batch_idx, curr_batch_size, im_pair_idxs, 
+                loss_q_f_q_phi = self._step_q_f_q_phi(epoch, batch_idx, curr_batch_size,
                                                       im_fixed, im_moving, mu_v, log_var_v, u_v,
                                                       log_var_f, u_f)  # q_phi
                 total_loss += loss_q_f_q_phi
@@ -434,7 +430,7 @@ class Trainer(BaseTrainer):
             self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f) 
 
             # metrics
-            step = (epoch - 1) * self.len_epoch + batch_idx
+            step = epoch - 1
             self.writer.set_step(step)
             self.train_metrics.update('loss', total_loss)
 
@@ -454,13 +450,6 @@ class Trainer(BaseTrainer):
                             seg_fixed, seg_moving, seg_moving_warped)
 
                 self.logger.info('\nsaved the output images and vector fields to disk\n')
-
-            if batch_idx % self.log_step == 0:
-                self.logger.info(
-                        f'train epoch: {epoch} {self._progress(batch_idx)}\n' +
-                        f'loss: {total_loss:.5f}\n' +
-                        f'loss_q_v: {loss_q_v:.5f}, loss_q_f_q_phi: {loss_q_f_q_phi:.5f}'
-                                )
 
             if batch_idx == self.len_epoch:
                 break

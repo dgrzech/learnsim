@@ -262,10 +262,9 @@ class MetricTracker:
         self._data.total[key] += value * n
         self._data.counts[key] += n
         self._data.average[key] = self._data.total[key] / self._data.counts[key]
-        self._data.last_value[key] = value
 
     def avg(self, key):
         return self._data.average[key]
     
     def result(self):
-        return dict(self._data.last_value)
+        return dict(self._data.average)

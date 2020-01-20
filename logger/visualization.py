@@ -1,6 +1,210 @@
 from datetime import datetime
 
 import importlib
+import matplotlib.pyplot as plt
+import torch
+
+from utils import calc_det_J, compute_norm
+
+
+def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
+    fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+
+    cols = ['axial', 'coronal', 'sagittal']
+    rows = ['im_fixed', 'im_moving', 'im_moving_warped']
+
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
+
+    for ax, row in zip(axs[:, 0], rows):
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        ax.set_ylabel(row, rotation=90, size='large')
+
+    for i in range(3):
+        axs[0, i].imshow(im_fixed_slices[i])
+        axs[1, i].imshow(im_moving_slices[i])
+        axs[2, i].imshow(im_moving_warped_slices[i])
+
+    return fig
+
+
+def var_params_q_f_grid(log_var_f_slices, u_f_slices):
+    fig, axs = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+
+    cols = ['axial', 'coronal', 'sagittal']
+    rows = ['log_var_f', 'u_f']
+
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
+
+    for ax, row in zip(axs[:, 0], rows):
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        ax.set_ylabel(row, rotation=90, size='large')
+
+    for i in range(3):
+        axs[0, i].imshow(log_var_f_slices[i])
+        axs[1, i].imshow(u_f_slices[i])
+
+    return fig
+
+
+def var_params_q_v_grid(mu_v_norm_slices, displacement_norm_slices, log_var_v_norm_slices, u_v_norm_slices):
+    fig, axs = plt.subplots(nrows=4, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+
+    cols = ['axial', 'coronal', 'sagittal']
+    rows = ['mu_v_norm', 'displacement_norm', 'log_var_v_norm', 'u_v_norm']
+
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
+
+    for ax, row in zip(axs[:, 0], rows):
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        ax.set_ylabel(row, rotation=90, size='large')
+
+    for i in range(3):
+        axs[0, i].imshow(mu_v_norm_slices[i])
+        axs[1, i].imshow(displacement_norm_slices[i])
+        axs[2, i].imshow(log_var_v_norm_slices[i])
+        axs[3, i].imshow(u_v_norm_slices[i])
+
+    return fig
+
+
+def log_det_J_transformation_grid(log_det_J_transformation_slices):
+    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+    cols = ['axial', 'coronal', 'sagittal']
+
+    for i in range(3):
+        ax = axs[i]
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        im = ax.imshow(log_det_J_transformation_slices[i])
+        ax.set_title(cols[i])
+
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(im, cax=cbar_ax, aspect=1)
+
+    return fig
+
+
+def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    im_fixed_batch = im_fixed_batch.cpu().numpy()
+    im_moving_batch = im_moving_batch.cpu().numpy()
+    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
+
+    mid_x = int(im_fixed_batch.shape[4] / 2)
+    mid_y = int(im_fixed_batch.shape[3] / 2)
+    mid_z = int(im_fixed_batch.shape[2] / 2)
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        im_fixed = im_fixed_batch[loop_idx, 0]
+        im_fixed_slices = [im_fixed[:, :, mid_x], im_fixed[:, mid_y, :], im_fixed[mid_z, :, :]]
+
+        im_moving = im_moving_batch[loop_idx, 0]
+        im_moving_slices = [im_moving[:, :, mid_x], im_moving[:, mid_y, :], im_moving[mid_z, :, :]]
+
+        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
+        im_moving_warped_slices = [im_moving_warped[:, :, mid_x],
+                                   im_moving_warped[:, mid_y, :],
+                                   im_moving_warped[mid_z, :, :]]
+
+        writer.add_figure('im_pair_' + str(im_pair_idx),
+                          im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
+
+
+def log_q_v(writer, im_pair_idxs, mu_v_batch, displacement_batch, log_var_v_batch, u_v_batch):
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    mid_x = int(mu_v_batch.shape[4] / 2)
+    mid_y = int(mu_v_batch.shape[3] / 2)
+    mid_z = int(mu_v_batch.shape[2] / 2)
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        temp = compute_norm(mu_v_batch[loop_idx])
+        mu_v_norm = temp[0].cpu().numpy()
+        mu_v_norm_slices = [mu_v_norm[:, :, mid_x],
+                            mu_v_norm[:, mid_y, :],
+                            mu_v_norm[mid_z, :, :]]
+
+        temp = compute_norm(displacement_batch[loop_idx])
+        displacement_norm = temp[0].cpu().numpy()
+        displacement_norm_slices = [displacement_norm[:, :, mid_x],
+                                    displacement_norm[:, mid_y, :],
+                                    displacement_norm[mid_z, :, :]]
+
+        temp = compute_norm(log_var_v_batch[loop_idx])
+        log_var_v_norm = temp[0].cpu().numpy()
+        log_var_v_norm_slices = [log_var_v_norm[:, :, mid_x],
+                                 log_var_v_norm[:, mid_y, :],
+                                 log_var_v_norm[mid_z, :, :]]
+
+        temp = compute_norm(u_v_batch[loop_idx])
+        u_v_norm = temp[0].cpu().numpy()
+        u_v_norm_slices = [u_v_norm[:, :, mid_x],
+                           u_v_norm[:, mid_y, :],
+                           u_v_norm[mid_z, :, :]]
+
+        writer.add_figure('q_v_' + str(im_pair_idx),
+                          var_params_q_v_grid(mu_v_norm_slices, displacement_norm_slices,
+                                              log_var_v_norm_slices, u_v_norm_slices))
+
+
+def log_log_det_J_transformation(writer, im_pair_idxs, transformation_batch, diff_op):
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    dim_x = float(transformation_batch.shape[4])
+    dim_y = float(transformation_batch.shape[3])
+    dim_z = float(transformation_batch.shape[2])
+
+    mid_x = int(dim_x / 2)
+    mid_y = int(dim_y / 2)
+    mid_z = int(dim_z / 2)
+
+    nabla_x_batch, nabla_y_batch, nabla_z_batch = diff_op(transformation_batch)
+
+    nabla_x_batch *= (dim_x - 1.0) / 2.0
+    nabla_y_batch *= (dim_y - 1.0) / 2.0
+    nabla_z_batch *= (dim_z - 1.0) / 2.0
+
+    det_J_transformation_batch = calc_det_J(nabla_x_batch, nabla_y_batch, nabla_z_batch) + 1e-5
+    log_det_J_transformation_batch = torch.log10(det_J_transformation_batch).cpu().numpy()
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        log_det_J_transformation = log_det_J_transformation_batch[loop_idx]
+        log_det_J_transformation_slices = [log_det_J_transformation[:, :, mid_x],
+                                           log_det_J_transformation[:, mid_y, :],
+                                           log_det_J_transformation[mid_z, :, :]]
+
+        writer.add_figure('log_det_J_transformation_' + str(im_pair_idx),
+                          log_det_J_transformation_grid(log_det_J_transformation_slices))
+
+
+def log_q_f(writer, log_var_f_batch, u_f_batch):
+    log_var_f, u_f = torch.mean(log_var_f_batch, dim=0), torch.mean(u_f_batch, dim=0)
+    log_var_f, u_f = log_var_f.cpu(), u_f.cpu()
+
+    mid_x = int(log_var_f_batch.shape[4] / 2)
+    mid_y = int(log_var_f_batch.shape[3] / 2)
+    mid_z = int(log_var_f_batch.shape[2] / 2)
+
+    log_var_f = log_var_f[0]
+    log_var_f_slices = [log_var_f[:, :, mid_x], log_var_f[:, mid_y, :], log_var_f[mid_z, :, :]]
+
+    u_f = u_f[0]
+    u_f_slices = [u_f[:, :, mid_x], u_f[:, mid_y, :], u_f[mid_z, :, :]]
+
+    writer.add_figure('q_f',
+                      var_params_q_f_grid(log_var_f_slices, u_f_slices))
 
 
 class TensorboardWriter:
