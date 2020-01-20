@@ -29,6 +29,10 @@ enc = torch.nn.DataParallel(enc)
 ```
 
 ```{python}
+"""
+view the kernel weights
+"""
+
 checkpoint_path = '/vol/bitbucket/dig15/workspace/learnsim/saved/LearnSim/0102_175515/models/checkpoint-epoch200.pth'
 checkpoint = torch.load(checkpoint_path)
 
@@ -39,6 +43,42 @@ enc.load_state_dict(state_dict)
 ```{python}
 for param in enc.parameters():
     print(param.data)
+```
+
+```{python}
+from scipy.spatial.distance import directed_hausdorff
+
+import SimpleITK as sitk
+```
+
+```{python}
+"""
+calculate the Hausdorff distance
+"""
+
+path_seg_fixed = '/vol/bitbucket/dig15/workspace/learnsim/saved/LearnSim/0118_183626/images/segs/seg_fixed_0.nii.gz'
+path_seg_moving_warped = '/vol/bitbucket/dig15/workspace/learnsim/saved/LearnSim/0118_183626/images/segs/seg_moving_warped_0.nii.gz'
+path_seg_moving_warped_learn_sim = '/vol/bitbucket/dig15/workspace/learnsim/saved/LearnSim/0118_183711/images/segs/seg_moving_warped_0.nii.gz'
+```
+
+```{python}
+seg_fixed = sitk.ReadImage(path_seg_fixed, sitk.sitkFloat32)
+seg_moving_warped = sitk.ReadImage(path_seg_moving_warped, sitk.sitkFloat32)
+seg_moving_warped_learn_sim = sitk.ReadImage(path_seg_moving_warped_learn_sim, sitk.sitkFloat32)
+```
+
+```{python}
+seg_fixed_arr = sitk.GetArrayFromImage(seg_fixed)[:, :, 64]
+seg_moving_warped_arr = sitk.GetArrayFromImage(seg_moving_warped)[:, :, 64]
+seg_moving_warped_learn_sim_arr = sitk.GetArrayFromImage(seg_moving_warped_learn_sim)[:, :, 64]
+```
+
+```{python}
+max(directed_hausdorff(seg_fixed_arr, seg_moving_warped_arr)[0], directed_hausdorff(seg_moving_warped_arr, seg_fixed_arr)[0])
+```
+
+```{python}
+max(directed_hausdorff(seg_fixed_arr, seg_moving_warped_learn_sim_arr)[0], directed_hausdorff(seg_moving_warped_learn_sim_arr, seg_fixed_arr)[0])
 ```
 
 ```{python}
