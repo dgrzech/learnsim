@@ -69,7 +69,7 @@ regularisation loss
 
 
 class RegLoss(nn.Module, ABC):
-    def __init__(self, w_reg):
+    def __init__(self, w_reg=1.0):
         super(RegLoss, self).__init__()
         self.w_reg = float(w_reg)
 
@@ -92,6 +92,48 @@ class RegLossL2(RegLoss):
         return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) +
                              torch.sum(torch.pow(nabla_vy, 2)) +
                              torch.sum(torch.pow(nabla_vz, 2)))
+
+
+class RegLossL2_Student(RegLoss):
+    def __init__(self, diff_op, w_reg, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
+        """
+        t_nu0(x | 0, lambda0) with  nu0 = 2 * a0 deg. of freedom and scale lambda0 = a0 / b0,
+        following a canonical parameterisation of the multivariate student distribution t_nu(x | mu, Lambda)
+
+        if lambda0 is specified, b0 is ignored
+        if nu0 is specified, a0 is ignored
+
+        recall that t_nu0(x | 0, a0 / b0) = int_s N(x | 0, lambda) Gamma(lambda | a0, b0) ds
+
+        lambda0 would be the expected "precision" E_{lambda ~ Gamma(lambda | a0, b0)}[lambda] = a0 / b0,
+        hence the design choice
+
+        lambda0 gives a more direct access to the strength of the prior
+        """
+
+        super(RegLossL2_Student, self).__init__(w_reg)
+
+        if nu0 != 2e-6:
+            self.a0 = nu0 / 2.0
+        else:
+            self.a0 = a0
+
+        if lambda0 != 1e-6:
+            b0 = self.a0 / lambda0
+
+        self.b0_twice = b0 * 2.0
+
+        if diff_op == 'GradientOperator':
+            self.diff_op = GradientOperator()
+        else:
+            raise Exception('Unknown differential operator')
+
+    def forward(self, v):
+        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
+        return self.w_reg * torch.log(self.b0_twice
+                                      + torch.sum(torch.pow(nabla_vx, 2))
+                                      + torch.sum(torch.pow(nabla_vy, 2))
+                                      + torch.sum(torch.pow(nabla_vz, 2))) * (self.a0 + 0.5)
 
 
 """
