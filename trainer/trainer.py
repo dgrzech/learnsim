@@ -2,11 +2,10 @@ from os import path
 
 from base import BaseTrainer
 from model.metric import dice
-from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, save_images
-from utils import get_module_attr, inf_loop, MetricTracker, sample_qv, sample_qf, save_optimiser_to_disk
+from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, registration_print, save_images
+from utils import get_module_attr, inf_loop, sample_qv, sample_qf, save_optimiser_to_disk, MetricTracker
 
 import math
-import numpy as np
 import torch
 
 
@@ -41,13 +40,8 @@ class Trainer(BaseTrainer):
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
         
         # optimisers
-        get_module_attr(self.enc, 'set_grad_enabled')(True)
-
         self.optimizer_q_f = None
-        self.optimizer_q_phi = self.config.init_obj('optimizer_phi', torch.optim, self.enc.parameters())
         self.optimizer_q_v = None
-        
-        get_module_attr(self.enc, 'set_grad_enabled')(False)
 
     def _save_mu_v(self, im_pair_idx, mu_v):
         torch.save(mu_v,
@@ -111,18 +105,6 @@ class Trainer(BaseTrainer):
         file_path = path.join(self.data_loader.save_dirs['optimisers'], 'optimiser_q_f_' + str(batch_idx) + '.pt')
         save_optimiser_to_disk(self.optimizer_q_f, file_path)
 
-    def _registration_print(self, iter_no, no_steps_v, loss_q_v, data_term, reg_term, entropy_term=0.0):
-        """
-        print value of the energy function at a given step of registration
-        """
-
-        self.logger.info(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
-                         f', TOTAL ENERGY: {loss_q_v:.5f}' +
-                         f'\ndata: {data_term:.5f}' +
-                         f', regularisation: {reg_term:.5f}' +
-                         f', entropy: {entropy_term:.5f}'
-                         )
-
     def _registration_step(self, im_fixed, im_moving, mu_v, log_var_v=None, u_v=None):
         if self.learn_q_v:
             data_term = 0.0
@@ -130,31 +112,39 @@ class Trainer(BaseTrainer):
 
             if self.no_samples == 1:
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-
                 transformation, displacement = self.transformation_model(v_sample)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
-                im_out = self.enc(im_fixed, im_moving_warped)
 
-                data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+                if self.learn_sim_metric:
+                    im_out = self.enc(im_fixed, im_moving_warped)
+                    data_term_sample = self.data_loss(None, None, im_out).sum() / float(self.no_samples)
+                else:
+                    data_term_sample = self.data_loss(im_fixed, im_moving_warped).sum() / float(self.no_samples)
+
                 reg_term_sample = self.reg_loss(v_sample).sum() / float(self.no_samples)
 
                 data_term += data_term_sample
                 reg_term += reg_term_sample
             elif self.no_samples == 2:
                 v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v, self.no_samples)  # draw a sample from q_v
-
                 transformation1, displacement1 = self.transformation_model(v_sample1)
                 transformation2, displacement2 = self.transformation_model(v_sample2)
 
                 im_moving_warped1 = self.registration_module(im_moving, transformation1)
-                im_out1 = self.enc(im_fixed, im_moving_warped1)
-
                 im_moving_warped2 = self.registration_module(im_moving, transformation2)
-                im_out2 = self.enc(im_fixed, im_moving_warped2)
 
-                data_term_sample = \
-                    (self.data_loss(im_out1).sum() + self.data_loss(im_out2).sum()) / float(2 * self.no_samples)
+                if self.learn_sim_metric:
+                    im_out1 = self.enc(im_fixed, im_moving_warped1)
+                    im_out2 = self.enc(im_fixed, im_moving_warped2)
+
+                    data_term_sample = (self.data_loss(None, None, im_out1).sum()
+                                        + self.data_loss(None, None, im_out2).sum()) / float(2 * self.no_samples)
+                else:
+                    data_term_sample = (self.data_loss(im_fixed, im_moving_warped1).sum()
+                                        + self.data_loss(im_fixed, im_moving_warped2).sum()) \
+                                       / float(2 * self.no_samples)
+
                 reg_term_sample = \
                     (self.reg_loss(v_sample1).sum() + self.reg_loss(v_sample2).sum()) / float(2 * self.no_samples)
 
@@ -164,11 +154,9 @@ class Trainer(BaseTrainer):
             return data_term, reg_term, self.entropy(log_var_v, u_v).sum()
 
         transformation, displacement = self.transformation_model(mu_v)
-
         im_moving_warped = self.registration_module(im_moving, transformation)
-        im_out = self.enc(im_fixed, im_moving_warped)
 
-        return self.data_loss(im_out).sum(), self.reg_loss(mu_v).sum()
+        return self.data_loss(im_fixed, im_moving_warped).sum(), self.reg_loss(mu_v).sum()
 
     def _step_q_v(self, epoch, batch_idx, curr_batch_size, im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v):
         """
@@ -217,11 +205,14 @@ class Trainer(BaseTrainer):
                 if iter_no % self.log_step == 0:
                     with torch.no_grad():
                         transformation, displacement = self.transformation_model(mu_v)
-
                         im_moving_warped = self.registration_module(im_moving, transformation)
-                        im_out = self.enc(im_fixed, im_moving_warped)
 
-                        data_term_value = self.data_loss(im_out).sum().item() / curr_batch_size
+                        if self.learn_sim_metric:
+                            im_out = self.enc(im_fixed, im_moving_warped)
+                            data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
+                        else:
+                            data_term_value = self.data_loss(im_fixed, im_moving_warped).sum().item() / curr_batch_size
+
                         reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
                         entropy_term_value = self.entropy(log_var_v, u_v).sum().item() / curr_batch_size
 
@@ -229,8 +220,8 @@ class Trainer(BaseTrainer):
                         self.train_metrics.update('reg_term', reg_term_value)
                         self.train_metrics.update('entropy_term', entropy_term_value)
 
-                        self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
-                                                 data_term_value, reg_term_value, entropy_term_value)
+                        registration_print(self.logger, iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
+                                           data_term_value, reg_term_value, entropy_term_value)
 
             # save the optimiser
             self._save_optimiser_q_v(batch_idx)
@@ -273,18 +264,21 @@ class Trainer(BaseTrainer):
                 if iter_no % self.log_step == 0:
                     with torch.no_grad():
                         transformation, displacement = self.transformation_model(mu_v)
-
                         im_moving_warped = self.registration_module(im_moving, transformation)
-                        im_out = self.enc(im_fixed, im_moving_warped)
 
-                        data_term_value = self.data_loss(im_out).sum().item() / curr_batch_size
+                        if self.learn_sim_metric:
+                            im_out = self.enc(im_fixed, im_moving_warped)
+                            data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
+                        else:
+                            data_term_value = self.data_loss(im_fixed, im_moving_warped).item() / curr_batch_size
+
                         reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
 
                         self.train_metrics.update('data_term', data_term_value)
                         self.train_metrics.update('reg_term', reg_term_value)
 
-                        self._registration_print(iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
-                                                 data_term_value, reg_term_value)
+                        registration_print(self.logger, iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
+                                           data_term_value, reg_term_value)
 
             self._save_optimiser_q_v(batch_idx)
             mu_v.requires_grad_(False)
@@ -317,28 +311,41 @@ class Trainer(BaseTrainer):
         for _ in range(self.no_samples):
             v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
             transformation, displacement = self.transformation_model(v_sample)
-
             im_moving_warped = self.registration_module(im_moving, transformation)
-            im_out = self.enc(im_fixed, im_moving_warped)
 
-            data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples)
+            if self.learn_sim_metric:
+                im_out = self.enc(im_fixed, im_moving_warped)
+                data_term_sample = self.data_loss(None, None, im_out).sum() / float(self.no_samples)
+            else:
+                data_term_sample = self.data_loss(im_fixed, im_moving_warped).sum() / float(self.no_samples)
+
             loss_q_f_q_phi += data_term_sample
             
             if self.no_samples == 1:
                 im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)
-                im_out = self.enc(im_fixed_sample, im_moving_warped)
 
-                data_term_sample = self.data_loss(im_out).sum() / float(self.no_samples ** 2)
+                if self.learn_sim_metric:
+                    im_out = self.enc(im_fixed_sample, im_moving_warped)
+                    data_term_sample = self.data_loss(None, None, im_out).sum() / float(self.no_samples ** 2)
+                else:
+                    data_term_sample = self.data_loss(im_fixed_sample, im_moving_warped).sum() \
+                                       / float(self.no_samples ** 2)
+
                 loss_q_f_q_phi -= data_term_sample
             elif self.no_samples == 2:
                 im_fixed_sample1, im_fixed_sample2 = \
                     sample_qf(im_fixed, log_var_f, u_f, self.no_samples)  # draw a sample from q_f
 
-                im_out1 = self.enc(im_fixed_sample1, im_moving_warped)
-                im_out2 = self.enc(im_fixed_sample2, im_moving_warped)
+                if self.learn_sim_metric:
+                    im_out1 = self.enc(im_fixed_sample1, im_moving_warped)
+                    im_out2 = self.enc(im_fixed_sample2, im_moving_warped)
 
-                data_term_sample = \
-                    (self.data_loss(im_out1).sum() + self.data_loss(im_out2).sum()) / float(2 * self.no_samples ** 2)
+                    data_term_sample = (self.data_loss(None, None, im_out1).sum()
+                                        + self.data_loss(None, None, im_out2).sum()) / float(2 * self.no_samples ** 2)
+                else:
+                    data_term_sample = self.data_loss(im_fixed_sample, im_moving_warped).sum() \
+                                       / float(2 * self.no_samples ** 2)
+
                 loss_q_f_q_phi -= data_term_sample
 
         loss_q_f_q_phi /= curr_batch_size
@@ -396,13 +403,17 @@ class Trainer(BaseTrainer):
             # print value of the data term before registration
             with torch.no_grad():
                 transformation, displacement = self.transformation_model(mu_v)
-
                 im_moving_warped = self.registration_module(im_moving, transformation)
-                im_out_unwarped = self.enc(im_fixed, im_moving)
-                im_out = self.enc(im_fixed, im_moving_warped)
+
+                if self.learn_sim_metric:
+                    im_out_unwarped = self.enc(im_fixed, im_moving)
+                    im_out = self.enc(im_fixed, im_moving_warped)
                 
-                loss_unwarped = self.data_loss(im_out_unwarped).sum() / curr_batch_size
-                loss_warped = self.data_loss(im_out).sum() / curr_batch_size
+                    loss_unwarped = self.data_loss(None, None, im_out_unwarped).sum() / curr_batch_size
+                    loss_warped = self.data_loss(None, None, im_out).sum() / curr_batch_size
+                else:
+                    loss_unwarped = self.data_loss(im_fixed, im_moving).sum() / curr_batch_size
+                    loss_warped = self.data_loss(im_fixed, im_moving_warped).sum() / curr_batch_size
 
                 self.logger.info(f'\nPRE-REGISTRATION: ' +
                                  f'unwarped: {loss_unwarped:.5f}' +

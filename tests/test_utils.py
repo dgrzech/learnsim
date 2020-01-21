@@ -15,7 +15,7 @@ torch.autograd.set_detect_anomaly(True)
 
 class UtilsTestMethods(unittest.TestCase):
     def setUp(self):
-        print(self._testMethodName)
+        print(self._testMethodName + '\n')
 
         n = 8
         self.dim_x, self.dim_y, self.dim_z = n, n, n

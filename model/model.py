@@ -27,16 +27,10 @@ class CNN_LCC(BaseModel):
         # initialise kernels
         nn.init.ones_(self.conv2.weight)  # sum
 
-        if self.no_feature_maps == 1:  # FIXME: when not learning the similarity metric, use a regular loss function
-            nn.init.zeros_(self.conv1.weight)
-
-            w1 = self.conv1.weight
-            w1[0, 0, s, s, s] = 1.0
-        else:
+        with torch.no_grad():
             w1 = self.conv1.weight * 1e-5
             w1[0, 0, s, s, s] = 1.0
 
-        with torch.no_grad():
             self.conv1.weight = nn.Parameter(w1, requires_grad=True)
 
     def encode(self, im_fixed, im_moving_warped):
@@ -48,8 +42,8 @@ class CNN_LCC(BaseModel):
         if self.no_feature_maps > 1:
             N, C, D, H, W = im_fixed.size()
 
-            im_fixed = im_fixed.reshape(N, 1, self.no_feature_maps, D, H, W).sum(2)
-            im_moving_warped = im_moving_warped.reshape(N, 1, self.no_feature_maps, D, H, W).sum(2)
+            im_fixed = torch.tanh(im_fixed).reshape(N, 1, self.no_feature_maps, D, H, W).sum(2)
+            im_moving_warped = torch.tanh(im_moving_warped).reshape(N, 1, self.no_feature_maps, D, H, W).sum(2)
 
         im_fixed, im_moving_warped = F.pad(im_fixed, self.padding, mode='replicate'), \
                                      F.pad(im_moving_warped, self.padding, mode='replicate')

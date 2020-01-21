@@ -22,7 +22,7 @@ torch.autograd.set_detect_anomaly(True)
 
 class WarpingTestMethods(unittest.TestCase):
     def setUp(self):
-        print(self._testMethodName)
+        print(self._testMethodName + '\n')
 
         n = 8
 
@@ -54,8 +54,8 @@ class WarpingTestMethods(unittest.TestCase):
         transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + torch.zeros(self.dims_v).to('cuda:0')
         im_moving_warped = self.registration_module(im_moving, transformation)
 
-        unwarped_loss_value = self.loss(im_fixed - im_moving).item()
-        warped_loss_value = self.loss(im_fixed - im_moving_warped).item()
+        unwarped_loss_value = self.loss(im_fixed, im_moving).item()
+        warped_loss_value = self.loss(im_fixed, im_moving_warped).item()
 
         assert pytest.approx(unwarped_loss_value, 0.001) == warped_loss_value
 

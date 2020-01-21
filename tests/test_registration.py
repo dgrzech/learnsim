@@ -20,7 +20,7 @@ torch.autograd.set_detect_anomaly(True)
 
 class RegistrationTestMethods(unittest.TestCase):
     def setUp(self):
-        print(self._testMethodName)
+        print(self._testMethodName + '\n')
 
         n = 64
 
@@ -50,8 +50,8 @@ class RegistrationTestMethods(unittest.TestCase):
         optimiser parameters
         """
 
-        self.no_steps_v = 128
-        self.no_samples = 6
+        self.no_steps_v = 32
+        self.no_samples = 1
 
     def tearDown(self):
         del self.transformation_model, self.registration_module, self.reg_loss, self.entropy
@@ -96,7 +96,7 @@ class RegistrationTestMethods(unittest.TestCase):
         loss, parameters to learn, and optimiser
         """
 
-        data_loss = LCC().to('cuda:0')
+        data_loss = LCC(self.s).to('cuda:0')
         mu_v = torch.zeros(self.dims_v).to('cuda:0').requires_grad_(True)
         optimizer_v = Adam([mu_v], lr=1e-3)
 
@@ -114,8 +114,8 @@ class RegistrationTestMethods(unittest.TestCase):
             im_out = enc(im_fixed, im_moving_warped)
 
             print(f'PRE-REGISTRATION: ' +
-                  f'{data_loss(im_out_unwarped).item():.2f}' +
-                  f', {data_loss(im_out).item():.2f}\n'
+                  f'{data_loss(None, None, im_out_unwarped).item():.2f}' +
+                  f', {data_loss(None, None, im_out).item():.2f}\n'
                   )
 
         """
@@ -132,7 +132,7 @@ class RegistrationTestMethods(unittest.TestCase):
             im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = enc(im_fixed, im_moving_warped)
 
-            data_term = data_loss(im_out)
+            data_term = data_loss(None, None, im_out)
             reg_term = self.reg_loss(mu_v).sum()
             loss_qv = data_term + reg_term
 
@@ -226,8 +226,8 @@ class RegistrationTestMethods(unittest.TestCase):
             im_moving_warped = self.registration_module(im_moving, transformation)
 
             print(f'PRE-REGISTRATION: ' +
-                  f'{data_loss(im_fixed - im_moving).item():.2f}' +
-                  f', {data_loss(im_fixed - im_moving_warped).item():.2f}\n'
+                  f'{data_loss(im_fixed, im_moving).item():.2f}' +
+                  f', {data_loss(im_fixed, im_moving_warped).item():.2f}\n'
                   )
 
         """
@@ -248,7 +248,7 @@ class RegistrationTestMethods(unittest.TestCase):
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 im_out = enc(im_fixed, im_moving_warped)
 
-                data_term_sample = data_loss(im_out).sum() / float(self.no_samples)
+                data_term_sample = data_loss(None, None, im_out).sum() / float(self.no_samples)
                 data_term += data_term_sample
 
             reg_term = self.reg_loss(mu_v).sum()
@@ -291,7 +291,7 @@ class RegistrationTestMethods(unittest.TestCase):
             im_moving_warped = self.registration_module(im_moving, transformation)
             im_out = enc(im_fixed, im_moving_warped)
 
-            data_term_sample = data_loss(im_out).sum() / float(self.no_samples)
+            data_term_sample = data_loss(None, None, im_out).sum() / float(self.no_samples)
             loss_qphi += data_term_sample
 
             # second term
@@ -299,7 +299,7 @@ class RegistrationTestMethods(unittest.TestCase):
                 f_sample = sample_qf(im_fixed, log_var_f, u_f)
                 im_out = enc(f_sample, im_moving_warped)
 
-                data_term_sample = data_loss(im_out).sum() / float(self.no_samples ** 2)
+                data_term_sample = data_loss(None, None, im_out).sum() / float(self.no_samples ** 2)
                 loss_qphi -= data_term_sample
 
         loss_qphi.backward()

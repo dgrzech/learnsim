@@ -4,6 +4,7 @@ from torch import nn
 from utils import GradientOperator
 
 import torch
+import torch.nn.functional as F
 
 """
 data loss
@@ -13,9 +14,9 @@ data loss
 class DataLoss(nn.Module, ABC):
     def __init__(self):
         super(DataLoss, self).__init__()
-    
+
     @abstractmethod
-    def forward(self):
+    def forward(self, im_fixed, im_moving, z):
         pass
     
     @abstractmethod
@@ -23,7 +24,7 @@ class DataLoss(nn.Module, ABC):
         pass
 
     @abstractmethod
-    def reduce(self, z):
+    def reduce(self):
         pass
 
 
@@ -32,17 +33,43 @@ class LCC(DataLoss):
     local cross-correlation
     """
 
-    def __init__(self):
+    def __init__(self, s=None):
         super(LCC, self).__init__()
 
-    def forward(self, z):
-        return self.reduce(z)
+        if s is not None:
+            self.s = s
+            self.kernel_size = self.s * 2 + 1
+            self.sz = float(self.kernel_size ** 3)
+
+            self.padding = (self.s, self.s, self.s, self.s, self.s, self.s)
+
+            self.kernel = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, bias=False)
+            nn.init.ones_(self.kernel.weight)
+            self.kernel.weight.requires_grad_(False)
+
+    def forward(self, im_fixed=None, im_moving=None, z=None):
+        if z is not None:
+            return -1.0 * torch.sum(z)
+
+        cross, var_F, var_M = self.map(im_fixed, im_moving)
+        return self.reduce(cross, var_F, var_M)
 
     def map(self, im_fixed, im_moving):
-        pass
+        im_fixed = F.pad(im_fixed, self.padding, mode='replicate')
+        im_moving = F.pad(im_moving, self.padding, mode='replicate')
 
-    def reduce(self, z):
-        return -1.0 * torch.sum(z)
+        u_F = F.pad(self.kernel(im_fixed), self.padding, mode='replicate') / self.sz
+        u_M = F.pad(self.kernel(im_moving), self.padding, mode='replicate') / self.sz
+
+        cross = self.kernel((im_fixed - u_F) * (im_moving - u_M))
+        var_F = self.kernel((im_fixed - u_F) * (im_fixed - u_F))
+        var_M = self.kernel((im_moving - u_M) * (im_moving - u_M))
+
+        return cross, var_F, var_M
+
+    def reduce(self, cross, var_F, var_M):
+        lcc = cross * cross / (var_F * var_M + 1e-5)
+        return -1.0 * torch.sum(lcc)
 
 
 class SSD(DataLoss):
@@ -53,7 +80,11 @@ class SSD(DataLoss):
     def __init__(self):
         super(SSD, self).__init__()
 
-    def forward(self, z):
+    def forward(self, im_fixed=None, im_moving=None, z=None):
+        if z is not None:
+            return self.reduce(z)
+
+        z = self.map(im_fixed, im_moving)
         return self.reduce(z)
 
     def map(self, im_fixed, im_moving):

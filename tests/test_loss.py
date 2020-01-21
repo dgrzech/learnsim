@@ -1,5 +1,4 @@
-from model.loss import EntropyMultivariateNormal
-from utils import compute_lcc, compute_local_corrs, compute_local_means
+from model.loss import LCC, EntropyMultivariateNormal
 
 import math
 import numpy as np
@@ -20,27 +19,24 @@ torch.autograd.set_detect_anomaly(True)
 
 class LossTestMethods(unittest.TestCase):
     def setUp(self):
-        print(self._testMethodName)
+        print(self._testMethodName + '\n')
 
         n = 4
         self.dim_x, self.dim_y, self.dim_z = n, n, n
 
         """
-        LCC kernel
+        LCC
         """
 
         self.s = 4
         self.kernel_size = 2 * self.s + 1
         self.sz = float(self.kernel_size ** 3)
-        
-        kernel = torch.ones([self.kernel_size, self.kernel_size, self.kernel_size])
-        kernel.unsqueeze_(0).unsqueeze_(0)
-        self.kernel = kernel.to('cuda:0')
 
         self.padding = (self.s, self.s, self.s, self.s, self.s, self.s)
+        self.loss_LCC = LCC(self.s).to('cuda:0')
 
     def tearDown(self):
-        del self.kernel
+        del self.loss_LCC
 
     def test_entropy(self):
         # initialise the loss object
@@ -69,16 +65,14 @@ class LossTestMethods(unittest.TestCase):
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
         im_moving_padded = F.pad(im_moving, self.padding, mode='replicate')
 
-        u_F = compute_local_means(im_fixed_padded, self.kernel, self.sz)
-        u_M = compute_local_means(im_moving_padded, self.kernel, self.sz)
+        u_F = self.loss_LCC.kernel(im_fixed_padded) / self.sz
+        u_M = self.loss_LCC.kernel(im_moving_padded) / self.sz
 
         assert torch.all(torch.eq(u_F, im_fixed))
         assert torch.all(torch.eq(u_M, im_moving))
 
         # calculate the local sums
-        cross = compute_local_corrs(im_fixed_padded, im_moving_padded, self.kernel, self.sz)
-        var_F = compute_local_corrs(im_fixed_padded, im_fixed_padded, self.kernel, self.sz)
-        var_M = compute_local_corrs(im_moving_padded, im_moving_padded, self.kernel, self.sz)
+        cross, var_F, var_M = self.loss_LCC.map(im_fixed, im_moving)
 
         zero_tensor = torch.zeros(1, 1, self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
         assert torch.all(torch.eq(cross, zero_tensor))
@@ -86,7 +80,7 @@ class LossTestMethods(unittest.TestCase):
         assert torch.all(torch.eq(var_M, zero_tensor))
 
         # calculate the value of loss
-        val = compute_lcc(im_fixed, im_moving).item()
+        val = self.loss_LCC(im_fixed, im_moving).item()
         val_true = 0.0
 
         assert pytest.approx(val, 0.01) == val_true
@@ -100,19 +94,17 @@ class LossTestMethods(unittest.TestCase):
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
         im_moving_padded = F.pad(im_moving, self.padding, mode='replicate')
 
-        u_F = compute_local_means(im_fixed_padded, self.kernel, self.sz)
-        u_M = compute_local_means(im_moving_padded, self.kernel, self.sz)
+        u_F = self.loss_LCC.kernel(im_fixed_padded) / self.sz
+        u_M = self.loss_LCC.kernel(im_moving_padded) / self.sz
+
         assert torch.all(torch.eq(4.0 * u_F, u_M))
 
         # calculate the local sums
-        cross = compute_local_corrs(im_fixed_padded, im_moving_padded, self.kernel, self.sz)
-        var_F = compute_local_corrs(im_fixed_padded, im_fixed_padded, self.kernel, self.sz)
-        var_M = compute_local_corrs(im_moving_padded, im_moving_padded, self.kernel, self.sz)
-
+        cross, var_F, var_M = self.loss_LCC.map(im_fixed, im_moving)
         assert torch.all(torch.eq(16.0 * var_F, var_M))
 
         # calculate the value of loss
-        val = compute_lcc(im_fixed, im_moving).item()
+        val = self.loss_LCC(im_fixed, im_moving).item()
         no_voxels = float(self.dim_x * self.dim_y * self.dim_z)
 
         assert pytest.approx(val, 0.01) == -1.0 * no_voxels

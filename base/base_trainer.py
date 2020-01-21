@@ -18,7 +18,16 @@ class BaseTrainer:
         # setup GPU device if available and move the model and losses into configured device
         self.device, device_ids = self._prepare_device(config['n_gpu'])
 
-        self.enc = enc.to(self.device)
+        self.enc = None
+        self.optimizer_q_phi = None
+
+        if enc is not None:
+            self.enc = enc.to(self.device)
+
+            trainable_params = filter(lambda p: p.requires_grad, self.enc.parameters())
+            self.optimizer_q_phi = config.init_obj('optimizer_phi', torch.optim, trainable_params)
+            self.enc.set_grad_enabled(False)
+
         self.transformation_model = transformation_model.to(self.device)
         self.registration_module = registration_module.to(self.device)
 
@@ -27,17 +36,15 @@ class BaseTrainer:
         self.entropy = entropy.to(self.device)
 
         if len(device_ids) > 1:
-            self.enc = torch.nn.DataParallel(enc, device_ids=device_ids)
+            if self.enc is not None:
+                self.enc = torch.nn.DataParallel(enc, device_ids=device_ids)
+
             self.transformation_model = torch.nn.DataParallel(transformation_model, device_ids=device_ids)
             self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
 
             self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
             self.entropy = torch.nn.DataParallel(entropy, device_ids=device_ids)
-
-        # encoder optimiser
-        trainable_params = filter(lambda p: p.requires_grad, enc.parameters())
-        self.optimizer_phi = config.init_obj('optimizer_phi', torch.optim, trainable_params)
 
         # metrics
         self.metric_ftns = metric_ftns
@@ -160,22 +167,26 @@ class BaseTrainer:
         :param save_best: if True, rename the saved checkpoint to 'model_best.pth'
         """
 
-        arch = type(self.enc).__name__
-        state = {
-            'arch': arch,
-            'epoch': epoch,
-            'state_dict': self.enc.state_dict(),
-            'optimizer_phi': self.optimizer_phi.state_dict(),
-            'monitor_best': self.mnt_best,
-            'config': self.config
-        }
-        filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
-        torch.save(state, filename)
-        self.logger.info("saving checkpoint: {} ...".format(filename))
-        if save_best:
-            best_path = str(self.checkpoint_dir / 'model_best.pth')
-            torch.save(state, best_path)
-            self.logger.info("saving current best: model_best.pth ...")
+        if self.enc is not None:
+            arch = type(self.enc).__name__
+            state = {
+                'arch': arch,
+                'epoch': epoch,
+                'state_dict': self.enc.state_dict(),
+                'optimizer_q_phi': self.optimizer_q_phi.state_dict(),
+                'monitor_best': self.mnt_best,
+                'config': self.config
+            }
+
+            filename = str(self.checkpoint_dir / 'checkpoint-epoch{}.pth'.format(epoch))
+            torch.save(state, filename)
+
+            self.logger.info("saving checkpoint: {} ...".format(filename))
+
+            if save_best:
+                best_path = str(self.checkpoint_dir / 'model_best.pth')
+                torch.save(state, best_path)
+                self.logger.info("saving current best: model_best.pth ...")
 
     def _resume_checkpoint(self, resume_path):
         """
@@ -202,6 +213,6 @@ class BaseTrainer:
             self.logger.warning("warning: optimiser type given in config file is different from that of checkpoint; "
                                 "optimizer parameters not being resumed")
         else:
-            self.optimizer_phi.load_state_dict(checkpoint['optimizer_phi'])
+            self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
 
         self.logger.info("checkpoint loaded, resuming training from epoch {}\n".format(self.start_epoch))

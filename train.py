@@ -30,8 +30,11 @@ def main(config):
     valid_data_loader = data_loader.split_validation()
 
     # build model architecture, then print to console
-    enc = config.init_obj('arch', module_arch)
-    logger.info(enc)
+    enc = None
+
+    if config['trainer']['learn_sim_metric']:
+        enc = config.init_obj('arch', module_arch)
+        logger.info(enc)
 
     # initialise the transformation model and registration modules
     dim_x = config['data_loader']['args']['dim_x']

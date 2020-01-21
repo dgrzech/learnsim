@@ -9,6 +9,19 @@ import logging
 import logging.config
 
 
+def registration_print(logger, iter_no, no_steps_v, loss_q_v, data_term, reg_term, entropy_term=0.0):
+    """
+    print value of the energy function at a given step of registration
+    """
+
+    logger.info(f'ITERATION ' + str(iter_no) + '/' + str(no_steps_v - 1) +
+                f', TOTAL ENERGY: {loss_q_v:.5f}' +
+                f'\ndata: {data_term:.5f}' +
+                f', regularisation: {reg_term:.5f}' +
+                f', entropy: {entropy_term:.5f}'
+                )
+
+
 def save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed):
     im_fixed_path = path.join(save_dirs_dict['images'], 'im_fixed_' + str(im_pair_idx) + '.nii.gz')
     

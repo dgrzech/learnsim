@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 import torch
-import torch.nn.functional as F
 
 
 def ensure_dir(dirname):
@@ -40,40 +39,15 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def compute_local_means(im, kernel, sz):
-    return F.conv3d(im, kernel) / sz
+def calc_det_J(nabla_x, nabla_y, nabla_z):
+    det_J = nabla_x[:, 0] * nabla_y[:, 1] * nabla_z[:, 2] + \
+            nabla_y[:, 0] * nabla_z[:, 1] * nabla_x[:, 2] + \
+            nabla_z[:, 0] * nabla_x[:, 1] * nabla_y[:, 2] - \
+            nabla_x[:, 2] * nabla_y[:, 1] * nabla_z[:, 0] - \
+            nabla_y[:, 2] * nabla_z[:, 1] * nabla_x[:, 0] - \
+            nabla_z[:, 2] * nabla_x[:, 1] * nabla_y[:, 0]
 
-
-def compute_local_corrs(im1, im2, kernel, sz, padding):
-    im1 = F.pad(im1, padding, mode='replicate')
-    im2 = F.pad(im2, padding, mode='replicate')
-
-    u_im1 = F.pad(compute_local_means(im1, kernel, sz), padding, mode='replicate')
-    u_im2 = F.pad(compute_local_means(im2, kernel, sz), padding, mode='replicate')
-
-    return F.conv3d((im1 - u_im1) * (im2 - u_im2), kernel)
-
-
-def compute_lcc(im1, im2, s):
-    """
-    calculate the value of LCC
-    """
-
-    kernel_size = s * 2 + 1
-    sz = float(kernel_size ** 3)
-
-    kernel = torch.ones([kernel_size, kernel_size, kernel_size])
-    kernel.unsqueeze_(0).unsqueeze_(0)
-    kernel = kernel.to('cuda:0')
-
-    padding = (s, s, s, s, s, s)
-
-    cross = compute_local_corrs(im1, im2, kernel, sz, padding)
-    F_var = compute_local_corrs(im1, im1, kernel, sz, padding)
-    M_var = compute_local_corrs(im2, im2, kernel, sz, padding)
-
-    lcc = cross * cross / (F_var * M_var + 1e-5)
-    return -1.0 * torch.sum(lcc)
+    return det_J
 
 
 def compute_norm(v):
@@ -230,17 +204,6 @@ def save_im_to_disk(im, file_path):
 def save_optimiser_to_disk(optimiser, file_path):
     state_dict = optimiser.state_dict()
     torch.save(state_dict, file_path)
-
-
-def calc_det_J(nabla_x, nabla_y, nabla_z):
-    det_J = nabla_x[:, 0] * nabla_y[:, 1] * nabla_z[:, 2] + \
-            nabla_y[:, 0] * nabla_z[:, 1] * nabla_x[:, 2] + \
-            nabla_z[:, 0] * nabla_x[:, 1] * nabla_y[:, 2] - \
-            nabla_x[:, 2] * nabla_y[:, 1] * nabla_z[:, 0] - \
-            nabla_y[:, 2] * nabla_z[:, 1] * nabla_x[:, 0] - \
-            nabla_z[:, 2] * nabla_x[:, 1] * nabla_y[:, 0]
-
-    return det_J
 
 
 class MetricTracker:
