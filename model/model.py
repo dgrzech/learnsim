@@ -21,11 +21,14 @@ class CNN_LCC(BaseModel):
         self.padding = (s, s, s, s, s, s)
 
         # initialise convolutional layers
+        self.agg = nn.Conv1d(self.no_feature_maps, 1, kernel_size=1, stride=1, bias=False)
+
         self.conv1 = nn.Conv3d(1, self.no_feature_maps, kernel_size=self.kernel_size, stride=1, bias=False)
         self.conv2 = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, bias=False)
         
         # initialise kernels
-        nn.init.ones_(self.conv2.weight)  # sum
+        nn.init.ones_(self.agg.weight)  # sum
+        nn.init.ones_(self.conv2.weight)
 
         with torch.no_grad():
             w1 = self.conv1.weight * 1e-5
@@ -36,14 +39,13 @@ class CNN_LCC(BaseModel):
     def encode(self, im_fixed, im_moving_warped):
         im_fixed, im_moving_warped = F.pad(im_fixed, self.padding, mode='replicate'), \
                                      F.pad(im_moving_warped, self.padding, mode='replicate')
-        im_fixed, im_moving_warped = self.conv1(im_fixed), \
-                                     self.conv1(im_moving_warped)
+        im_fixed, im_moving_warped = torch.tanh(self.conv1(im_fixed)), \
+                                     torch.tanh(self.conv1(im_moving_warped))
 
-        if self.no_feature_maps > 1:
-            N, C, D, H, W = im_fixed.size()
+        N, C, D, H, W = im_fixed.size()
 
-            im_fixed = torch.tanh(im_fixed).reshape(N, 1, self.no_feature_maps, D, H, W).sum(2)
-            im_moving_warped = torch.tanh(im_moving_warped).reshape(N, 1, self.no_feature_maps, D, H, W).sum(2)
+        im_fixed = self.agg(im_fixed.view(N, C, D * H * W)).view(N, 1, D, H, W)
+        im_moving_warped = self.agg(im_moving_warped.view(N, C, D * H * W)).view(N, 1, D, H, W)
 
         im_fixed, im_moving_warped = F.pad(im_fixed, self.padding, mode='replicate'), \
                                      F.pad(im_moving_warped, self.padding, mode='replicate')
