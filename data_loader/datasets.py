@@ -58,7 +58,16 @@ class BiobankDataset(Dataset):
         else:
             seg_filenames = ['' for _ in range(len(im_filenames))]
 
-        im_seg_pairs = list(zip(im_filenames, seg_filenames))
+        # mask filenames
+        mask_paths = path.join(im_paths, 'masks')
+
+        if listdir(mask_paths):
+            mask_filenames = sorted([path.join(mask_paths, f)
+                                    for f in listdir(mask_paths) if path.isfile(path.join(mask_paths, f))])
+        else:
+            mask_filenames = ['' for _ in range(len(im_filenames))]
+
+        im_seg_pairs = list(zip(im_filenames, seg_filenames, mask_filenames))
 
         # all-to-one
         atlas = im_seg_pairs[0]
@@ -73,20 +82,36 @@ class BiobankDataset(Dataset):
         # pre-load im_fixed and the segmentation
         im_fixed_path = self.im_seg_pairs[0][0][0]
         seg_fixed_path = self.im_seg_pairs[0][0][1]
+        mask_fixed_path = self.im_seg_pairs[0][0][2]
 
         im_fixed = sitk.ReadImage(im_fixed_path, sitk.sitkFloat32)
-        im_fixed = torch.from_numpy(transform.resize(np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z)))
+        im_fixed = torch.from_numpy(
+            transform.resize(
+                np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z)))
 
         if seg_fixed_path is not '':
             seg_fixed = sitk.ReadImage(seg_fixed_path, sitk.sitkFloat32)
-            seg_fixed = torch.from_numpy(transform.resize(np.transpose(sitk.GetArrayFromImage(seg_fixed), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z), order=0))
+            seg_fixed = torch.from_numpy(
+                transform.resize(
+                    np.transpose(sitk.GetArrayFromImage(seg_fixed), (2, 1, 0)),
+                    (self.dim_x, self.dim_y, self.dim_z), order=0))
 
-        im_fixed = standardise_im(im_fixed)
-        im_fixed = rescale_im(im_fixed)
+        if mask_fixed_path is not '':
+            mask_fixed = sitk.ReadImage(mask_fixed_path, sitk.sitkFloat32)
+            mask_fixed = torch.from_numpy(
+                transform.resize(
+                    np.transpose(sitk.GetArrayFromImage(mask_fixed), (2, 1, 0)),
+                    (self.dim_x, self.dim_y, self.dim_z), order=0))
+
+            im_fixed -= torch.min(im_fixed)  # make pixel intensities positive
+            im_fixed *= mask_fixed
+
+        im_fixed = standardise_im(im_fixed)  # standardise image
+        im_fixed = rescale_im(im_fixed)  # rescale to range (-1, 1)
 
         self.im_fixed = im_fixed.unsqueeze(0)
         self.seg_fixed = seg_fixed.unsqueeze(0)
-        
+
     def __len__(self):
         return len(self.im_seg_pairs)
 
@@ -98,18 +123,33 @@ class BiobankDataset(Dataset):
 
         im_moving_path = im_seg_pair[1][0]
         seg_moving_path = im_seg_pair[1][1]
+        mask_moving_path = im_seg_pair[1][2]
 
         im_moving = sitk.ReadImage(im_moving_path, sitk.sitkFloat32)
-        im_moving = torch.from_numpy(transform.resize(np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z)))
+        im_moving = torch.from_numpy(
+            transform.resize(
+                np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)),
+                (self.dim_x, self.dim_y, self.dim_z)))
 
         if seg_moving_path is not '':
             seg_moving = sitk.ReadImage(seg_moving_path, sitk.sitkFloat32)
-            seg_moving = torch.from_numpy(transform.resize(np.transpose(sitk.GetArrayFromImage(seg_moving), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z), order=0))
+            seg_moving = torch.from_numpy(
+                transform.resize(
+                    np.transpose(sitk.GetArrayFromImage(seg_moving), (2, 1, 0)),
+                    (self.dim_x, self.dim_y, self.dim_z), order=0))
 
-        # standardise images
-        im_moving = standardise_im(im_moving)
-        # rescale to range (-1, 1)
-        im_moving = rescale_im(im_moving)
+        if mask_moving_path is not '':
+            mask_moving = sitk.ReadImage(mask_moving_path, sitk.sitkFloat32)
+            mask_moving = torch.from_numpy(
+                transform.resize(
+                    np.transpose(sitk.GetArrayFromImage(mask_moving), (2, 1, 0)),
+                    (self.dim_x, self.dim_y, self.dim_z), order=0))
+
+            im_moving -= torch.min(im_moving)  # make pixel intensities positive
+            im_moving *= mask_moving
+
+        im_moving = standardise_im(im_moving)  # standardise image
+        im_moving = rescale_im(im_moving)  # rescale to range (-1, 1)
 
         im_moving.unsqueeze_(0)
         seg_moving.unsqueeze_(0)
