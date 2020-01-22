@@ -26,15 +26,14 @@ class GradientOperator(DifferentialOperator):
     def __init__(self):
         super(GradientOperator, self).__init__()
 
-        self.px = (1, 1, 0, 0, 0, 0)  # paddings
-        self.py = (0, 0, 1, 1, 0, 0)
-        self.pz = (0, 0, 0, 0, 1, 1)
+        self.px = (0, 1, 0, 0, 0, 0)  # paddings
+        self.py = (0, 0, 0, 1, 0, 0)
+        self.pz = (0, 0, 0, 0, 0, 1)
 
     def forward(self, v):
-        # central differences
-        dv_dx = 0.5 * F.pad(v[:, :, :, :, 2:] - v[:, :, :, :, :-2], self.px, 'replicate')
-        dv_dy = 0.5 * F.pad(v[:, :, :, 2:, :] - v[:, :, :, :-2, :], self.py, 'replicate')
-        dv_dz = 0.5 * F.pad(v[:, :, 2:, :, :] - v[:, :, :-2, :, :], self.pz, 'replicate')
+        dv_dx = F.pad(v[:, :, :, :, 1:] - v[:, :, :, :, :-1], self.px, 'replicate')
+        dv_dy = F.pad(v[:, :, :, 1:, :] - v[:, :, :, :-1, :], self.py, 'replicate')
+        dv_dz = F.pad(v[:, :, 1:, :, :] - v[:, :, :-1, :, :], self.pz, 'replicate')
 
         nabla_vx = torch.stack((dv_dx[:, 0], dv_dy[:, 0], dv_dz[:, 0]), 1)
         nabla_vy = torch.stack((dv_dx[:, 1], dv_dy[:, 1], dv_dz[:, 1]), 1)
