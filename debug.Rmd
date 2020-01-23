@@ -75,10 +75,22 @@ seg_moving_warped_learn_sim_arr = sitk.GetArrayFromImage(seg_moving_warped_learn
 
 ```{python}
 max(directed_hausdorff(seg_fixed_arr, seg_moving_warped_arr)[0], directed_hausdorff(seg_moving_warped_arr, seg_fixed_arr)[0])
+max(directed_hausdorff(seg_fixed_arr, seg_moving_warped_learn_sim_arr)[0], directed_hausdorff(seg_moving_warped_learn_sim_arr, seg_fixed_arr)[0])
 ```
 
 ```{python}
-max(directed_hausdorff(seg_fixed_arr, seg_moving_warped_learn_sim_arr)[0], directed_hausdorff(seg_moving_warped_learn_sim_arr, seg_fixed_arr)[0])
+"""
+calculate the 3D Laplacian matrix discretised via a 7-point finite-difference stencil
+"""
+
+from utils import laplacian_3D, sobolev_kernel
+
+_s = 7
+_lambda = 1.0
+
+print(laplacian_3D(_s))
+S = sobolev_kernel(_s, _lambda)
+print(S)
 ```
 
 ```{python}

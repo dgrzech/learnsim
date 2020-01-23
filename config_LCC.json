@@ -15,6 +15,7 @@
         "type": "LCC",
         "args": {}
     },
+
     "reg_loss": {
         "type": "RegLossL2",
         "args": {
@@ -22,6 +23,7 @@
             "w_reg": 4000.0
         }
     },
+
     "entropy": {
         "type": "EntropyMultivariateNormal",
         "args": {}
@@ -31,6 +33,7 @@
         "type": "SVF_3D",
         "args": {}
     },
+
     "registration_module": {
         "type": "RegistrationModule",
         "args": {}
@@ -69,6 +72,12 @@
             "num_workers": 2,
             "shuffle": false
         }
+    },
+
+    "sobolev_grad": {
+        "enabled": true,
+        "s": 7,
+        "lambda": 0.05
     },
 
     "trainer": {

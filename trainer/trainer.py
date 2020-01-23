@@ -3,7 +3,8 @@ from os import path
 from base import BaseTrainer
 from model.metric import dice
 from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, registration_print, save_images
-from utils import get_module_attr, inf_loop, sample_qv, sample_qf, save_optimiser_to_disk, MetricTracker
+from utils import get_module_attr, inf_loop, sample_qv, sample_qf, save_optimiser_to_disk, sobolev_kernel, \
+    MetricTracker, SobolevGrad
 
 import math
 import torch
@@ -22,6 +23,7 @@ class Trainer(BaseTrainer):
         self.config = config
         self.data_loader = data_loader
 
+        self.sobolev_grad = config['sobolev_grad']['enabled']
         self.learn_q_v = config['trainer']['learn_q_v']  # whether to learn the variational parameters of q_v
         self.learn_sim_metric = config['trainer']['learn_sim_metric']  # whether to learn the similarity metric
 
@@ -38,7 +40,19 @@ class Trainer(BaseTrainer):
 
         self.log_step = config['trainer']['log_step']
         self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
-        
+
+        # Sobolev kernel
+        if self.sobolev_grad:
+            _s = config['sobolev_grad']['s']
+            _lambda = config['sobolev_grad']['lambda']
+
+            S = torch.from_numpy(sobolev_kernel(_s, _lambda)).float()
+            S = torch.stack((S, S, S), 0)
+            S = torch.stack((S, S, S), 0)
+
+            self.S = S.to(self.device, non_blocking=True)
+            self.padding = _s // 2
+
         # optimisers
         self.optimizer_q_f = None
         self.optimizer_q_v = None
@@ -112,8 +126,11 @@ class Trainer(BaseTrainer):
 
             if self.no_samples == 1:
                 v_sample = sample_qv(mu_v, log_var_v, u_v)
-                transformation, displacement = self.transformation_model(v_sample)
 
+                if self.sobolev_grad:
+                    v_sample = SobolevGrad.apply(v_sample, self.S, self.padding)
+
+                transformation, displacement = self.transformation_model(v_sample)
                 im_moving_warped = self.registration_module(im_moving, transformation)
 
                 if self.learn_sim_metric:
@@ -128,6 +145,11 @@ class Trainer(BaseTrainer):
                 reg_term += reg_term_sample
             elif self.no_samples == 2:
                 v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v, self.no_samples)  # draw a sample from q_v
+
+                if self.sobolev_grad:
+                    v_sample1, v_sample2 = SobolevGrad.apply(v_sample1, self.S, self.padding), \
+                                           SobolevGrad.apply(v_sample2, self.S, self.padding)
+
                 transformation1, displacement1 = self.transformation_model(v_sample1)
                 transformation2, displacement2 = self.transformation_model(v_sample2)
 
@@ -310,6 +332,10 @@ class Trainer(BaseTrainer):
         
         for _ in range(self.no_samples):
             v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
+
+            if self.sobolev_grad:
+                v_sample = SobolevGrad.apply(v_sample, self.S, self.padding)
+
             transformation, displacement = self.transformation_model(v_sample)
             im_moving_warped = self.registration_module(im_moving, transformation)
 
