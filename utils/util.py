@@ -196,6 +196,26 @@ def save_field_to_disk(field, file_path):
     write_data(im_vtk, file_path)
 
 
+def save_grid_to_disk(grid, file_path):
+    grid = grid.cpu().numpy()
+    
+    x = grid[0, :, :, :]
+    y = grid[1, :, :, :]
+    z = grid[2, :, :, :]
+
+    pts = np.empty(x.shape + (3,), dtype=float)
+
+    pts[..., 0] = x
+    pts[..., 1] = y
+    pts[..., 2] = z
+
+    pts = pts.transpose(2, 1, 0, 3).copy()
+    pts.shape = pts.size // 3, 3
+
+    sg = tvtk.StructuredGrid(dimensions=x.shape, points=pts)
+    write_data(sg, file_path)
+
+
 def save_im_to_disk(im, file_path):
     im = nib.Nifti1Image(im, np.eye(4))
     im.to_filename(file_path)

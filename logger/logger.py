@@ -3,7 +3,7 @@ from os import path
 import torch
 
 from pathlib import Path
-from utils import compute_norm, read_json, save_field_to_disk, save_im_to_disk
+from utils import compute_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk
 
 import logging
 import logging.config
@@ -20,6 +20,16 @@ def registration_print(logger, iter_no, no_steps_v, loss_q_v, data_term, reg_ter
                 f', regularisation: {reg_term:.5f}' +
                 f', entropy: {entropy_term:.5f}'
                 )
+
+
+def save_grids(save_dirs_dict, im_pair_idxs, grids):
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        grid = grids[loop_idx]
+        grid_path = path.join(save_dirs_dict['grids'], 'grid_' + str(im_pair_idx) + '.vtk')
+
+        save_grid_to_disk(grid, grid_path)
 
 
 def save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed):
@@ -149,7 +159,7 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
 
         temp = compute_norm(u_v_batch[loop_idx])
         u_v_norm = temp[0].cpu().numpy()
-
+        
         save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed)
         save_im_moving(save_dirs_dict, im_pair_idx, im_moving)
         save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped)

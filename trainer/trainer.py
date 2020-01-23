@@ -2,7 +2,7 @@ from os import path
 
 from base import BaseTrainer
 from model.metric import dice
-from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, registration_print, save_images
+from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, registration_print, save_grids, save_images
 from utils import get_module_attr, inf_loop, sample_qv, sample_qf, save_optimiser_to_disk, sobolev_kernel, \
     MetricTracker, SobolevGrad
 
@@ -485,6 +485,7 @@ class Trainer(BaseTrainer):
                 save_images(self.data_loader.save_dirs, im_pair_idxs, im_fixed, im_moving, im_moving_warped,
                             mu_v, log_var_v, u_v, log_var_f, u_f, displacement,
                             seg_fixed, seg_moving, seg_moving_warped)
+                save_grids(self.data_loader.save_dirs, im_pair_idxs, transformation)
 
                 self.logger.info('\nsaved the output images and vector fields to disk\n')
 

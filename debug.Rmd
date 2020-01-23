@@ -94,5 +94,19 @@ print(S)
 ```
 
 ```{python}
+"""
+save a structured grid to file
+"""
+
+from utils import init_identity_grid_3d, save_grid_to_disk
+
+nx = ny = nz = 128
+grid = init_identity_grid_3d(nx, ny, nz)[0]
+
+file_path = './grid.vtk'
+save_grid_to_disk(grid, file_path)
+```
+
+```{python}
 
 ```

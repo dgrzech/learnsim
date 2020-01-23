@@ -75,9 +75,7 @@
     },
 
     "sobolev_grad": {
-        "enabled": true,
-        "s": 7,
-        "lambda": 0.05
+        "enabled": false
     },
 
     "trainer": {
