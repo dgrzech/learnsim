@@ -1,15 +1,27 @@
+from utils import separable_conv_3d
+
 import torch
 
 
-def sample_qv(mu_v, log_var_v, u_v, no_samples=1):
+def sample_qv(mu_v, log_var_v, u_v, S_sqrt=None, padding=None, no_samples=1):
     sigma = torch.exp(0.5 * log_var_v) + 1e-5
     eps = torch.randn_like(sigma)
     x = torch.randn_like(u_v)
 
     if no_samples == 1:
-        return mu_v + eps * sigma + x * u_v
+        sample = mu_v + eps * sigma + x * u_v
 
-    return mu_v + (eps * sigma + x * u_v), mu_v - (eps * sigma + x * u_v)
+        if S_sqrt is None:
+            return sample
+
+        return separable_conv_3d(sample, S_sqrt, padding)
+
+    sample1, sample2 = mu_v + (eps * sigma + x * u_v), mu_v - (eps * sigma + x * u_v)
+
+    if S_sqrt is None:
+        return sample1, sample2
+
+    return separable_conv_3d(sample1, S_sqrt, padding), separable_conv_3d(sample2, S_sqrt, padding)
 
 
 def sample_qf(mu_f, log_var_f, u_f, no_samples=1):

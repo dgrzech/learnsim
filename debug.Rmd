@@ -83,13 +83,25 @@ max(directed_hausdorff(seg_fixed_arr, seg_moving_warped_learn_sim_arr)[0], direc
 calculate the 3D Laplacian matrix discretised via a 7-point finite-difference stencil
 """
 
-from utils import laplacian_3D, sobolev_kernel
+from utils import laplacian_1D, laplacian_3D
 
 _s = 7
 _lambda = 1.0
 
-print(laplacian_3D(_s))
-S = sobolev_kernel(_s, _lambda)
+L_1D = laplacian_1D(_s)
+L_3D = laplacian_3D(_s)
+
+print(L_1D)
+print('\n')
+print(L_3D)
+
+"""
+calculate the 3D Sobolev kernel
+"""
+
+from utils import sobolev_kernel_3D
+
+S = sobolev_kernel_3D(_s, _lambda)
 print(S)
 ```
 
@@ -101,10 +113,25 @@ save a structured grid to file
 from utils import init_identity_grid_3d, save_grid_to_disk
 
 nx = ny = nz = 128
-grid = init_identity_grid_3d(nx, ny, nz)[0]
+grid = init_identity_grid_3d(nx, ny, nz)
+grid = grid[0].permute(3, 0, 1, 2)
 
 file_path = './grid.vtk'
 save_grid_to_disk(grid, file_path)
+```
+
+```{python}
+"""
+"""
+
+from utils import sobolev_kernel_1D
+
+_s = 7
+_lambda = 0.2
+
+S, S_sqrt = sobolev_kernel_1D(_s, _lambda)
+print(S)
+print(S_sqrt)
 ```
 
 ```{python}

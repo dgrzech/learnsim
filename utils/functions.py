@@ -1,21 +1,43 @@
+from utils import separable_conv_3d
+
 import numpy as np
 import scipy.sparse as sp
 import torch
-import torch.nn.functional as F
+
+
+def laplacian_1D(N):
+    diag = np.ones(N)
+    return sp.spdiags([diag, -2.0 * diag, diag], [-1, 0, 1], N, N)
 
 
 def laplacian_3D(N):
-    diag = np.ones([N * N])
-    mat = sp.spdiags([diag, -2.0 * diag, diag], [-1, 0, 1], N, N)
+    L_1D = laplacian_1D(N)
     I = sp.eye(N)
 
-    L = sp.kron(mat, sp.kron(I, I)) + sp.kron(I, sp.kron(mat, I)) + sp.kron(I, sp.kron(I, mat))
-    return L.todense()
+    return sp.kron(L_1D, sp.kron(I, I)) + sp.kron(I, sp.kron(L_1D, I)) + sp.kron(I, sp.kron(I, L_1D))
 
 
-def sobolev_kernel(_s, _lambda):
+def sobolev_kernel_1D(_s, _lambda):
+    # we do the eigendecomposition anyway for the sqrt, so might as well compute the smoothing kernel while at it
+    L = np.asarray(laplacian_1D(_s).todense())
+    w, v = np.linalg.eigh(L)
+    w = 1.0 - _lambda * w
+
+    mask = np.abs(w) > 1e-10
+    inv_sqrt_w = np.zeros(_s)
+    inv_sqrt_w[mask] = 1 / np.sqrt(w[mask])
+
+    half = v * inv_sqrt_w
+
+    smoothing_kernel = half.dot(half[_s // 2])  # not very pretty but I only need the middle column of half half^t
+    smoothing_kernel_sqrt = half.dot(v[_s // 2])  # not very pretty because it breaks the symmetry
+
+    return smoothing_kernel / np.sum(smoothing_kernel), smoothing_kernel_sqrt / np.sum(smoothing_kernel_sqrt)
+
+
+def sobolev_kernel_3D(_s, _lambda):
     I = np.eye(_s ** 3)  # identity matrix
-    L = laplacian_3D(_s)  # Laplacian matrix discretised via a 7-point finite-difference stencil
+    L = laplacian_3D(_s).todense()  # Laplacian matrix discretised via a 7-point finite-difference stencil
 
     v = np.zeros(_s ** 3)  # one-hot vector that corresponds to a discretised Dirac impulse of size s ** 3 voxels
     v[(_s ** 3) // 2] = 1.0
@@ -37,9 +59,6 @@ class SobolevGrad(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         input, S = ctx.saved_variables
-        padding = (ctx.padding, ctx.padding, ctx.padding, ctx.padding, ctx.padding, ctx.padding)
-
-        grad_output = F.pad(grad_output, padding, 'replicate')
-        grad_input = F.conv3d(grad_output, S)
+        grad_input = separable_conv_3d(grad_output, S, ctx.padding)
 
         return grad_input, None, None

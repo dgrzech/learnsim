@@ -3,8 +3,8 @@ from os import path
 from base import BaseTrainer
 from model.metric import dice
 from logger import log_log_det_J_transformation, log_images, log_q_v, log_q_f, registration_print, save_grids, save_images
-from utils import get_module_attr, inf_loop, sample_qv, sample_qf, save_optimiser_to_disk, sobolev_kernel, \
-    MetricTracker, SobolevGrad
+from utils import get_module_attr, inf_loop, sample_qv, sample_qf, save_optimiser_to_disk, \
+    separable_conv_3d, sobolev_kernel_1D, MetricTracker, SobolevGrad
 
 import math
 import torch
@@ -46,12 +46,19 @@ class Trainer(BaseTrainer):
             _s = config['sobolev_grad']['s']
             _lambda = config['sobolev_grad']['lambda']
 
-            S = torch.from_numpy(sobolev_kernel(_s, _lambda)).float()
-            S = torch.stack((S, S, S), 0)
-            S = torch.stack((S, S, S), 0)
+            S, S_sqrt = sobolev_kernel_1D(_s, _lambda)
 
+            S = torch.from_numpy(S).float()
+            S.unsqueeze_(0)
+            S = torch.stack((S, S, S), 0)
             self.S = S.to(self.device, non_blocking=True)
-            self.padding = _s // 2
+
+            S_sqrt = torch.from_numpy(S_sqrt).float()
+            S_sqrt.unsqueeze_(0)
+            S_sqrt = torch.stack((S_sqrt, S_sqrt, S_sqrt), 0)
+            self.S_sqrt = S_sqrt.to(self.device, non_blocking=True)
+
+            self.padding = (_s // 2, _s // 2)
 
         # optimisers
         self.optimizer_q_f = None
@@ -125,30 +132,30 @@ class Trainer(BaseTrainer):
             reg_term = 0.0
 
             if self.no_samples == 1:
-                v_sample = sample_qv(mu_v, log_var_v, u_v)
-
                 if self.sobolev_grad:
+                    # draw a sample from q_v
+                    v_sample = sample_qv(mu_v, log_var_v, u_v, self.S_sqrt, self.padding, 1)
                     v_sample = SobolevGrad.apply(v_sample, self.S, self.padding)
+                else:
+                    v_sample = sample_qv(mu_v, log_var_v, u_v, None, None, 1)
 
                 transformation, displacement = self.transformation_model(v_sample)
                 im_moving_warped = self.registration_module(im_moving, transformation)
 
                 if self.learn_sim_metric:
                     im_out = self.enc(im_fixed, im_moving_warped)
-                    data_term_sample = self.data_loss(None, None, im_out).sum() / float(self.no_samples)
+                    data_term += self.data_loss(None, None, im_out).sum()
                 else:
-                    data_term_sample = self.data_loss(im_fixed, im_moving_warped).sum() / float(self.no_samples)
+                    data_term += self.data_loss(im_fixed, im_moving_warped).sum()
 
-                reg_term_sample = self.reg_loss(v_sample).sum() / float(self.no_samples)
-
-                data_term += data_term_sample
-                reg_term += reg_term_sample
+                reg_term += self.reg_loss(v_sample).sum()
             elif self.no_samples == 2:
-                v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v, self.no_samples)  # draw a sample from q_v
-
                 if self.sobolev_grad:
+                    v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v, self.S_sqrt, self.padding, 2)
                     v_sample1, v_sample2 = SobolevGrad.apply(v_sample1, self.S, self.padding), \
                                            SobolevGrad.apply(v_sample2, self.S, self.padding)
+                else:
+                    v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v, None, None, 2)
 
                 transformation1, displacement1 = self.transformation_model(v_sample1)
                 transformation2, displacement2 = self.transformation_model(v_sample2)
@@ -160,18 +167,14 @@ class Trainer(BaseTrainer):
                     im_out1 = self.enc(im_fixed, im_moving_warped1)
                     im_out2 = self.enc(im_fixed, im_moving_warped2)
 
-                    data_term_sample = (self.data_loss(None, None, im_out1).sum()
-                                        + self.data_loss(None, None, im_out2).sum()) / float(2 * self.no_samples)
+                    data_term += self.data_loss(None, None, im_out1).sum() / 2.0
+                    data_term += self.data_loss(None, None, im_out2).sum() / 2.0
                 else:
-                    data_term_sample = (self.data_loss(im_fixed, im_moving_warped1).sum()
-                                        + self.data_loss(im_fixed, im_moving_warped2).sum()) \
-                                       / float(2 * self.no_samples)
+                    data_term += self.data_loss(im_fixed, im_moving_warped1).sum() / 2.0
+                    data_term += self.data_loss(im_fixed, im_moving_warped2).sum() / 2.0
 
-                reg_term_sample = \
-                    (self.reg_loss(v_sample1).sum() + self.reg_loss(v_sample2).sum()) / float(2 * self.no_samples)
-
-                data_term += data_term_sample
-                reg_term += reg_term_sample
+                reg_term += self.reg_loss(v_sample1).sum() / 2.0
+                reg_term += self.reg_loss(v_sample2).sum() / 2.0
 
             return data_term, reg_term, self.entropy(log_var_v, u_v).sum()
 
@@ -208,42 +211,61 @@ class Trainer(BaseTrainer):
                 self.optimizer_q_v.step()  # backprop
 
                 # metrics
-                global_step = (epoch - 1) * self.no_steps_v + iter_no + 1
-                self.writer.set_step(global_step)
-
-                if math.log2(global_step).is_integer():
-                    with torch.no_grad():
-                        transformation, displacement = self.transformation_model(mu_v)
-                        im_moving_warped = self.registration_module(im_moving, transformation)
-
-                        log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
-                        log_log_det_J_transformation(self.writer, im_pair_idxs, transformation,
-                                                     get_module_attr(self.reg_loss, 'diff_op'))
-                        log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
-
                 step = epoch - 1
-                self.writer.set_step(step)
+                global_step = (epoch - 1) * self.no_steps_v + iter_no + 1
 
-                if iter_no % self.log_step == 0:
+                if iter_no % self.log_step == 0 or math.log2(global_step).is_integer():
                     with torch.no_grad():
-                        transformation, displacement = self.transformation_model(mu_v)
+                        if self.sobolev_grad:
+                            mu_v_conv_sqrt = separable_conv_3d(mu_v, self.S_sqrt, self.padding)
+                            transformation, displacement = self.transformation_model(mu_v_conv_sqrt)
+                        else:
+                            transformation, displacement = self.transformation_model(mu_v)
+
                         im_moving_warped = self.registration_module(im_moving, transformation)
 
-                        if self.learn_sim_metric:
-                            im_out = self.enc(im_fixed, im_moving_warped)
-                            data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
-                        else:
-                            data_term_value = self.data_loss(im_fixed, im_moving_warped).sum().item() / curr_batch_size
+                        if iter_no % self.log_step == 0:
+                            self.writer.set_step(step)
 
-                        reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
-                        entropy_term_value = self.entropy(log_var_v, u_v).sum().item() / curr_batch_size
+                            if self.learn_sim_metric:
+                                im_out = self.enc(im_fixed, im_moving_warped)
+                                data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
+                            else:
+                                data_term_value = \
+                                    self.data_loss(im_fixed, im_moving_warped).sum().item() / curr_batch_size
+                            
+                            if self.sobolev_grad:
+                                reg_term_value = self.reg_loss(mu_v_conv_sqrt).sum().item() / curr_batch_size
 
-                        self.train_metrics.update('data_term', data_term_value)
-                        self.train_metrics.update('reg_term', reg_term_value)
-                        self.train_metrics.update('entropy_term', entropy_term_value)
+                                log_var_v_conv_sqrt = separable_conv_3d(log_var_v, self.S_sqrt, self.padding)
+                                u_v_conv_sqrt = separable_conv_3d(u_v, self.S_sqrt, self.padding)
 
-                        registration_print(self.logger, iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
-                                           data_term_value, reg_term_value, entropy_term_value)
+                                entropy_term_value = self.entropy(log_var_v_conv_sqrt, u_v_conv_sqrt).sum().item() / curr_batch_size
+                            else:
+                                reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
+                                entropy_term_value = self.entropy(log_var_v, u_v).sum().item() / curr_batch_size
+
+                            self.train_metrics.update('data_term', data_term_value)
+                            self.train_metrics.update('reg_term', reg_term_value)
+                            self.train_metrics.update('entropy_term', entropy_term_value)
+
+                            registration_print(self.logger, iter_no, self.no_steps_v,
+                                               loss_q_v.item() / curr_batch_size,
+                                               data_term_value, reg_term_value, entropy_term_value)
+
+                        if math.log2(global_step).is_integer():
+                            self.writer.set_step(global_step)
+
+                            log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
+                            log_log_det_J_transformation(
+                                self.writer, im_pair_idxs, transformation, get_module_attr(self.reg_loss, 'diff_op'))
+
+                            if self.sobolev_grad:
+                                log_var_v_conv_sqrt = separable_conv_3d(log_var_v, self.S_sqrt, self.padding)
+                                u_v_conv_sqrt = separable_conv_3d(u_v, self.S_sqrt, self.padding)
+                                log_q_v(self.writer, im_pair_idxs, mu_v_conv_sqrt, displacement, log_var_v_conv_sqrt, u_v_conv_sqrt)
+                            else:
+                                log_q_v(self.writer, im_pair_idxs, mu_v_conv_sqrt, displacement, log_var_v, u_v)
 
             # save the optimiser
             self._save_optimiser_q_v(batch_idx)
@@ -267,40 +289,53 @@ class Trainer(BaseTrainer):
                 self.optimizer_q_v.step()
 
                 # metrics
-                global_step = (epoch - 1) * self.no_steps_v + iter_no + 1
-                self.writer.set_step(global_step)
-
-                if math.log2(global_step).is_integer():
-                    with torch.no_grad():
-                        transformation, displacement = self.transformation_model(mu_v)
-                        im_moving_warped = self.registration_module(im_moving, transformation)
-
-                        log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
-                        log_log_det_J_transformation(self.writer, im_pair_idxs, transformation,
-                                                     get_module_attr(self.reg_loss, 'diff_op'))
-                        log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
-
                 step = epoch - 1
-                self.writer.set_step(step)
+                global_step = (epoch - 1) * self.no_steps_v + iter_no + 1
 
-                if iter_no % self.log_step == 0:
+                if iter_no % self.log_step == 0 or math.log2(global_step).is_integer():
                     with torch.no_grad():
-                        transformation, displacement = self.transformation_model(mu_v)
+                        if self.sobolev_grad:
+                            mu_v_conv_sqrt = separable_conv_3d(mu_v, self.S_sqrt, self.padding)
+                            transformation, displacement = self.transformation_model(mu_v_conv_sqrt)
+                        else:
+                            transformation, displacement = self.transformation_model(mu_v)
+                            
                         im_moving_warped = self.registration_module(im_moving, transformation)
 
-                        if self.learn_sim_metric:
-                            im_out = self.enc(im_fixed, im_moving_warped)
-                            data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
-                        else:
-                            data_term_value = self.data_loss(im_fixed, im_moving_warped).item() / curr_batch_size
+                        if iter_no % self.log_step == 0:
+                            self.writer.set_step(step)
 
-                        reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
+                            if self.learn_sim_metric:
+                                im_out = self.enc(im_fixed, im_moving_warped)
+                                data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
+                            else:
+                                data_term_value = \
+                                    self.data_loss(im_fixed, im_moving_warped).sum().item() / curr_batch_size
 
-                        self.train_metrics.update('data_term', data_term_value)
-                        self.train_metrics.update('reg_term', reg_term_value)
+                            if self.sobolev_grad:
+                                reg_term_value = self.reg_loss(mu_v_conv_sqrt).sum().item() / curr_batch_size
+                            else:
+                                reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
 
-                        registration_print(self.logger, iter_no, self.no_steps_v, loss_q_v.item() / curr_batch_size,
-                                           data_term_value, reg_term_value)
+                            self.train_metrics.update('data_term', data_term_value)
+                            self.train_metrics.update('reg_term', reg_term_value)
+
+                            registration_print(self.logger, iter_no, self.no_steps_v,
+                                               loss_q_v.item() / curr_batch_size, data_term_value, reg_term_value)
+
+                        if math.log2(global_step).is_integer():
+                            self.writer.set_step(global_step)
+
+                            log_images(self.writer, im_pair_idxs, im_fixed, im_moving, im_moving_warped)
+                            log_log_det_J_transformation(
+                                self.writer, im_pair_idxs, transformation, get_module_attr(self.reg_loss, 'diff_op'))
+
+                            if self.sobolev_grad:
+                                log_var_v_conv_sqrt = separable_conv_3d(log_var_v, self.S_sqrt, self.padding)
+                                u_v_conv_sqrt = separable_conv_3d(u_v, self.S_sqrt, self.padding)
+                                log_q_v(self.writer, im_pair_idxs, mu_v_conv_sqrt, displacement, log_var_v_conv_sqrt, u_v_conv_sqrt)
+                            else:
+                                log_q_v(self.writer, im_pair_idxs, mu_v_conv_sqrt, displacement, log_var_v, u_v)
 
             self._save_optimiser_q_v(batch_idx)
             mu_v.requires_grad_(False)
@@ -330,49 +365,42 @@ class Trainer(BaseTrainer):
 
         loss_q_f_q_phi = 0.0
         
-        for _ in range(self.no_samples):
-            v_sample = sample_qv(mu_v, log_var_v, u_v)  # draw a sample from q_v
+        if self.sobolev_grad:
+            # draw a sample from q_v
+            v_sample = sample_qv(mu_v, log_var_v, u_v, self.S_sqrt, self.padding, 1)
+            v_sample = SobolevGrad.apply(v_sample, self.S, self.padding)
+        else:
+            v_sample = sample_qv(mu_v, log_var_v, u_v, None, None, 1)
 
-            if self.sobolev_grad:
-                v_sample = SobolevGrad.apply(v_sample, self.S, self.padding)
+        transformation, displacement = self.transformation_model(v_sample)
+        im_moving_warped = self.registration_module(im_moving, transformation)
 
-            transformation, displacement = self.transformation_model(v_sample)
-            im_moving_warped = self.registration_module(im_moving, transformation)
+        if self.learn_sim_metric:
+            im_out = self.enc(im_fixed, im_moving_warped)
+            loss_q_f_q_phi += self.data_loss(None, None, im_out).sum()
+        else:
+            loss_q_f_q_phi += self.data_loss(im_fixed, im_moving_warped).sum()
+
+        if self.no_samples == 1:
+            im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f, 1)  # draw sample from q_f
 
             if self.learn_sim_metric:
-                im_out = self.enc(im_fixed, im_moving_warped)
-                data_term_sample = self.data_loss(None, None, im_out).sum() / float(self.no_samples)
+                im_out = self.enc(im_fixed_sample, im_moving_warped)
+                loss_q_f_q_phi -= self.data_loss(None, None, im_out).sum()
             else:
-                data_term_sample = self.data_loss(im_fixed, im_moving_warped).sum() / float(self.no_samples)
+                loss_q_f_q_phi -= self.data_loss(im_fixed_sample, im_moving_warped).sum()
+        elif self.no_samples == 2:
+            im_fixed_sample1, im_fixed_sample2 = sample_qf(im_fixed, log_var_f, u_f, 2)
 
-            loss_q_f_q_phi += data_term_sample
-            
-            if self.no_samples == 1:
-                im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f)
+            if self.learn_sim_metric:
+                im_out1 = self.enc(im_fixed_sample1, im_moving_warped)
+                im_out2 = self.enc(im_fixed_sample2, im_moving_warped)
 
-                if self.learn_sim_metric:
-                    im_out = self.enc(im_fixed_sample, im_moving_warped)
-                    data_term_sample = self.data_loss(None, None, im_out).sum() / float(self.no_samples ** 2)
-                else:
-                    data_term_sample = self.data_loss(im_fixed_sample, im_moving_warped).sum() \
-                                       / float(self.no_samples ** 2)
-
-                loss_q_f_q_phi -= data_term_sample
-            elif self.no_samples == 2:
-                im_fixed_sample1, im_fixed_sample2 = \
-                    sample_qf(im_fixed, log_var_f, u_f, self.no_samples)  # draw a sample from q_f
-
-                if self.learn_sim_metric:
-                    im_out1 = self.enc(im_fixed_sample1, im_moving_warped)
-                    im_out2 = self.enc(im_fixed_sample2, im_moving_warped)
-
-                    data_term_sample = (self.data_loss(None, None, im_out1).sum()
-                                        + self.data_loss(None, None, im_out2).sum()) / float(2 * self.no_samples ** 2)
-                else:
-                    data_term_sample = self.data_loss(im_fixed_sample, im_moving_warped).sum() \
-                                       / float(2 * self.no_samples ** 2)
-
-                loss_q_f_q_phi -= data_term_sample
+                loss_q_f_q_phi -= self.data_loss(None, None, im_out1).sum() / 2.0
+                loss_q_f_q_phi -= self.data_loss(None, None, im_out2).sum() / 2.0
+            else:
+                loss_q_f_q_phi -= self.data_loss(im_fixed_sample1, im_moving_warped).sum() / 2.0
+                loss_q_f_q_phi -= self.data_loss(im_fixed_sample2, im_moving_warped).sum() / 2.0
 
         loss_q_f_q_phi /= curr_batch_size
         loss_q_f_q_phi.backward()
@@ -428,7 +456,12 @@ class Trainer(BaseTrainer):
 
             # print value of the data term before registration
             with torch.no_grad():
-                transformation, displacement = self.transformation_model(mu_v)
+                if self.sobolev_grad:
+                    mu_v_conv_sqrt = separable_conv_3d(mu_v, self.S_sqrt, self.padding)
+                    transformation, displacement = self.transformation_model(mu_v_conv_sqrt)
+                else:
+                    transformation, displacement = self.transformation_model(mu_v)
+
                 im_moving_warped = self.registration_module(im_moving, transformation)
 
                 if self.learn_sim_metric:
@@ -452,27 +485,30 @@ class Trainer(BaseTrainer):
 
             total_loss = 0.0
 
+            # q_v
             loss_q_v = self._step_q_v(epoch, batch_idx, curr_batch_size, im_pair_idxs,
-                                      im_fixed, im_moving, mu_v, log_var_v, u_v)  # q_v
+                                      im_fixed, im_moving, mu_v, log_var_v, u_v)
             total_loss += loss_q_v
 
-            if self.learn_sim_metric:
+            if self.learn_sim_metric:  # q_f and q_phi
                 self.logger.info('\noptimising q_f and q_phi..')
                 loss_q_f_q_phi = self._step_q_f_q_phi(epoch, batch_idx, curr_batch_size,
-                                                      im_fixed, im_moving, mu_v, log_var_v, u_v,
-                                                      log_var_f, u_f)  # q_phi
+                                                      im_fixed, im_moving, mu_v, log_var_v, u_v, log_var_f, u_f)
                 total_loss += loss_q_f_q_phi
 
-            # save the tensors with updated variational parameters
+            # save tensors with the updated variational parameters
             self._save_tensors(im_pair_idxs, mu_v, log_var_v, u_v, log_var_f, u_f) 
 
             # metrics
             step = epoch - 1
             self.writer.set_step(step)
-            self.train_metrics.update('loss', total_loss)
 
             with torch.no_grad():
-                transformation, displacement = self.transformation_model(mu_v)
+                if self.sobolev_grad:
+                    mu_v_conv_sqrt = separable_conv_3d(mu_v, self.S_sqrt, self.padding)
+                    transformation, displacement = self.transformation_model(mu_v_conv_sqrt)
+                else:
+                    transformation, displacement = self.transformation_model(mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 seg_moving_warped = self.registration_module(seg_moving, transformation, mode='nearest')
@@ -481,13 +517,25 @@ class Trainer(BaseTrainer):
                 for class_idx, val in enumerate(dsc):
                     self.train_metrics.update('dice_' + str(class_idx + 1), val)
 
-                # save images to .nii.gz
-                save_images(self.data_loader.save_dirs, im_pair_idxs, im_fixed, im_moving, im_moving_warped,
-                            mu_v, log_var_v, u_v, log_var_f, u_f, displacement,
-                            seg_fixed, seg_moving, seg_moving_warped)
+                # save images, fields etc.
+                if self.sobolev_grad:
+                    log_var_v_conv_sqrt = separable_conv_3d(log_var_v, self.S_sqrt, self.padding)
+                    u_v_conv_sqrt = separable_conv_3d(u_v, self.S_sqrt, self.padding)
+
+                    save_images(self.data_loader.save_dirs, im_pair_idxs, im_fixed, im_moving, im_moving_warped,
+                                mu_v_conv_sqrt, log_var_v_conv_sqrt, u_v_conv_sqrt, log_var_f, u_f, displacement,
+                                seg_fixed, seg_moving, seg_moving_warped)
+                else:
+                    save_images(self.data_loader.save_dirs, im_pair_idxs, im_fixed, im_moving, im_moving_warped,
+                                mu_v, log_var_v, u_v, log_var_f, u_f, displacement,
+                                seg_fixed, seg_moving, seg_moving_warped)
+
+                # save grids
                 save_grids(self.data_loader.save_dirs, im_pair_idxs, transformation)
 
                 self.logger.info('\nsaved the output images and vector fields to disk\n')
+
+            self.train_metrics.update('loss', total_loss)
 
             if batch_idx == self.len_epoch:
                 break

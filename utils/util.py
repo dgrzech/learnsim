@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import SimpleITK as sitk
 import torch
+import torch.nn.functional as F
 
 
 def ensure_dir(dirname):
@@ -224,6 +225,26 @@ def save_im_to_disk(im, file_path):
 def save_optimiser_to_disk(optimiser, file_path):
     state_dict = optimiser.state_dict()
     torch.save(state_dict, file_path)
+
+
+def separable_conv_3d(input, filter, padding):
+    N, C, D, H, W = input.size()
+
+    input = input.view(N, C, D * H * W)
+    input = F.pad(input, padding, mode='replicate')
+    input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
+
+    input = input.permute((0, 1, 3, 4, 2))
+    input = input.reshape(N, C, D * H * W)
+    input = F.pad(input, padding, mode='replicate')
+    input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
+    
+    input = input.permute((0, 1, 4, 2, 3))
+    input = input.reshape(N, C, D * H * W)
+    input = F.pad(input, padding, mode='replicate')
+    input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
+
+    return input.permute((0, 1, 2, 3, 4))
 
 
 class MetricTracker:
