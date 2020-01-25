@@ -239,12 +239,12 @@ def separable_conv_3d(input, filter, padding):
     input = F.pad(input, padding, mode='replicate')
     input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
     
-    input = input.permute((0, 1, 4, 2, 3))
+    input = input.permute((0, 1, 3, 4, 2))
     input = input.reshape(N, C, D * H * W)
     input = F.pad(input, padding, mode='replicate')
     input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
 
-    return input.permute((0, 1, 2, 3, 4))
+    return input.permute((0, 1, 3, 4, 2))
 
 
 class MetricTracker:
