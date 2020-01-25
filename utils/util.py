@@ -227,24 +227,43 @@ def save_optimiser_to_disk(optimiser, file_path):
     torch.save(state_dict, file_path)
 
 
-def separable_conv_3d(input, filter, padding):
-    N, C, D, H, W = input.size()
+def separable_conv_3d(field, kernel, padding_sz):
+    N, C, D, H, W = field.size()
 
-    input = input.view(N, C, D * H * W)
-    input = F.pad(input, padding, mode='replicate')
-    input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
+    padding_3d = (0, 0, 0, 0, padding_sz, padding_sz)
 
-    input = input.permute((0, 1, 3, 4, 2))
-    input = input.reshape(N, C, D * H * W)
-    input = F.pad(input, padding, mode='replicate')
-    input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
-    
-    input = input.permute((0, 1, 3, 4, 2))
-    input = input.reshape(N, C, D * H * W)
-    input = F.pad(input, padding, mode='replicate')
-    input = F.conv1d(input, filter, groups=3).view(N, C, D, H, W)
+    field = F.pad(field, padding_3d, mode='replicate')
+    field = field.view(N, C, (D + 2 * padding_sz) * H * W)
+    field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
+    field = field.reshape(N, C, (D + 2 * padding_sz), H, W)
+    field = field[:, :, padding_sz:-padding_sz]
 
-    return input.permute((0, 1, 3, 4, 2))
+    field = field.permute((0, 1, 3, 4, 2))  # permute depth, height, and width
+
+    field = F.pad(field, padding_3d, mode='replicate')
+    field = field.view(N, C, (D + 2 * padding_sz) * H * W)
+    field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
+    field = field.reshape(N, C, (D + 2 * padding_sz), H, W)
+    field = field[:, :, padding_sz:-padding_sz]
+
+    field = field.permute((0, 1, 3, 4, 2))
+
+    field = F.pad(field, padding_3d, mode='replicate')
+    field = field.view(N, C, (D + 2 * padding_sz) * H * W)
+    field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
+    field = field.reshape(N, C, (D + 2 * padding_sz), H, W)
+    field = field[:, :, padding_sz:-padding_sz]
+
+    field[:, :, 0] = 0.0
+    field[:, :, -1] = 0.0
+
+    field[:, :, :, 0] = 0.0
+    field[:, :, :, -1] = 0.0
+
+    field[:, :, :, :, 0] = 0.0
+    field[:, :, :, :, -1] = 0.0
+
+    return field.permute((0, 1, 3, 4, 2))
 
 
 class MetricTracker:

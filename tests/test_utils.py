@@ -1,4 +1,5 @@
-from utils import compute_norm, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d, sobolev_kernel_1D, separable_conv_3d, SVF_2D, SVF_3D
+from utils import compute_norm, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d,\
+    sobolev_kernel_1D, separable_conv_3d, SVF_2D, SVF_3D
 
 import math
 import numpy as np
@@ -87,7 +88,7 @@ class UtilsTestMethods(unittest.TestCase):
 
     def test_separable_conv_3d(self):
         N = 2  # batch size
-        D = H = W = 5  # no. of voxels in each dimension
+        D = H = W = 16  # no. of voxels in each dimension
 
         _s = 3  # Sobolev kernel size
         S_numpy = np.ones(_s)
@@ -95,23 +96,23 @@ class UtilsTestMethods(unittest.TestCase):
         S.unsqueeze_(0)
         S = torch.stack((S, S, S), 0)
 
-        padding = (_s // 2, _s // 2)
+        padding_sz = _s // 2
 
         # velocity fields
-        v = torch.zeros([N, 3, 16, 16, 16]).float()  # velocity fields
+        v = torch.zeros([N, 3, D, H, W]).float()  # velocity fields
 
         v[0, 1] = 1.0
         v[1, 2] = 1.0
 
         # separable convolution
-        v_out = separable_conv_3d(v, S, padding)
+        v_out = separable_conv_3d(v, S, padding_sz)
         v_out_size = v_out.size()
 
         assert v_out_size[0] == 2
         assert v_out_size[1] == 3
-        assert v_out_size[2] == 16
-        assert v_out_size[3] == 16
-        assert v_out_size[4] == 16
+        assert v_out_size[2] == D
+        assert v_out_size[3] == H
+        assert v_out_size[4] == W
 
         # assert torch.all(torch.eq(v[0, 0], 0.0))
         # assert torch.all(torch.eq(v[0, 1], 27.0))
