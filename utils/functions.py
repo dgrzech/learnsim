@@ -50,15 +50,15 @@ def sobolev_kernel_3D(_s, _lambda):
 
 class SobolevGrad(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, S, padding):
-        ctx.save_for_backward(input, S)
+    def forward(ctx, input, S_x, S_y, S_z, padding):
+        ctx.save_for_backward(input, S_x, S_y, S_z)
         ctx.padding = padding
 
         return input
 
     @staticmethod
     def backward(ctx, grad_output):
-        input, S = ctx.saved_variables
-        grad_input = separable_conv_3d(grad_output, S, ctx.padding)
+        input, S_x, S_y, S_z = ctx.saved_tensors
+        grad_input = separable_conv_3d(grad_output, S_x, S_y, S_z, ctx.padding)
 
-        return grad_input, None, None
+        return grad_input, None, None, None, None

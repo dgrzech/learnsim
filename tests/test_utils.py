@@ -96,6 +96,10 @@ class UtilsTestMethods(unittest.TestCase):
         S.unsqueeze_(0)
         S = torch.stack((S, S, S), 0)
 
+        S_x = S.unsqueeze(2).unsqueeze(2)
+        S_y = S.unsqueeze(2).unsqueeze(4)
+        S_z = S.unsqueeze(3).unsqueeze(4)
+
         padding_sz = _s // 2
 
         # velocity fields
@@ -105,7 +109,8 @@ class UtilsTestMethods(unittest.TestCase):
         v[1, 2] = 1.0
 
         # separable convolution
-        v_out = separable_conv_3d(v, S, padding_sz)
+        # v_out = separable_conv_3d(v, S, padding_sz)
+        v_out = separable_conv_3d(v, S_x, S_y, S_z, padding_sz)
         v_out_size = v_out.size()
 
         assert v_out_size[0] == 2

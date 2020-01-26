@@ -2,7 +2,7 @@ from torch.optim import Adam, SGD
 
 from model.loss import LCC, SSD, RegLossL2, EntropyMultivariateNormal
 from model.model import SimEnc
-from utils import pixel_to_normalised_3d, sample_qf, sample_qv, save_im_to_disk, RegistrationModule, SVF_3D
+from utils import pixel_to_normalised_3d, sample_qf, sample_qv, save_im_to_disk, separable_conv_3d, sobolev_kernel_1D, RegistrationModule, SobolevGrad, SVF_3D
 
 import numpy as np
 import torch
@@ -22,7 +22,7 @@ class RegistrationTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName + '\n')
 
-        n = 64
+        n = 128
 
         self.dim_x, self.dim_y, self.dim_z = n, n, n
         self.dims_im = (1, 1, self.dim_x, self.dim_y, self.dim_z)
@@ -320,3 +320,124 @@ class RegistrationTestMethods(unittest.TestCase):
             im_moving_warped = self.registration_module(im_moving, transformation)
 
             save_im_to_disk(im_moving_warped[0, 0].cpu().numpy(), './temp/moving_warped_SSD_all.nii.gz')
+
+    def test_sphere_translation_LCC_data_only_sobolev(self):
+        """
+        initialise 3D images of spheres
+        """
+
+        im_fixed = -1.0 + torch.zeros(self.dims_im).to('cuda:0')
+        im_moving = -1.0 + torch.zeros(self.dims_im).to('cuda:0')
+
+        r = 0.02
+
+        offset_x = 5
+        offset_y = 5
+        offset_z = 5
+
+        for idx_z in range(im_fixed.shape[2]):
+            for idx_y in range(im_fixed.shape[3]):
+                for idx_x in range(im_fixed.shape[4]):
+                    x, y, z = pixel_to_normalised_3d(idx_x, idx_y, idx_z, self.dim_x, self.dim_y, self.dim_z)
+
+                    if x ** 2 + y ** 2 + z ** 2 <= r:
+                        im_fixed[0, 0, idx_x, idx_y, idx_z] = 1.0
+                        im_moving[0, 0, idx_x + offset_x, idx_y + offset_y, idx_z + offset_z] = 1.0
+
+        """"
+        save the volumetric images to disk
+        """
+
+        save_im_to_disk(im_fixed[0, 0].cpu().numpy(), './temp/fixed.nii.gz')
+        save_im_to_disk(im_moving[0, 0].cpu().numpy(), './temp/moving.nii.gz')
+        
+        """
+        loss, parameters to learn, and optimiser
+        """
+
+        data_loss = LCC(self.s).to('cuda:0')
+        mu_v = torch.zeros(self.dims_v).to('cuda:0').requires_grad_(True)
+        optimizer_v = Adam([mu_v], lr=5e-4)
+
+        """
+        Sobolev kernel
+        """
+
+        _s = 7
+        _lambda = 0.5
+
+        S, S_sqrt = sobolev_kernel_1D(_s, _lambda)
+
+        S = torch.from_numpy(S).float()
+        S.unsqueeze_(0)
+        S = torch.stack((S, S, S), 0)
+
+        S_x = S.unsqueeze(2).unsqueeze(2).to('cuda:0')
+        S_y = S.unsqueeze(2).unsqueeze(4).to('cuda:0')
+        S_z = S.unsqueeze(3).unsqueeze(4).to('cuda:0')
+
+        S_sqrt = torch.from_numpy(S_sqrt).float()
+        S_sqrt.unsqueeze_(0)
+        S_sqrt = torch.stack((S_sqrt, S_sqrt, S_sqrt), 0)
+
+        S_sqrt_x = S_sqrt.unsqueeze(2).unsqueeze(2).to('cuda:0')
+        S_sqrt_y = S_sqrt.unsqueeze(2).unsqueeze(4).to('cuda:0')
+        S_sqrt_z = S_sqrt.unsqueeze(3).unsqueeze(4).to('cuda:0')
+
+        padding_sz = _s // 2
+
+        """
+        registration
+        """
+
+        with torch.no_grad():
+            mu_v_conv_sqrt = separable_conv_3d(mu_v, S_sqrt_x, S_sqrt_y, S_sqrt_z, padding_sz)
+
+            transformation, displacement = self.transformation_model(mu_v)
+            im_moving_warped = self.registration_module(im_moving, transformation)
+
+            print(f'PRE-REGISTRATION: ' +
+                  f'{data_loss(im_fixed, im_moving).item():.2f}' +
+                  f', {data_loss(im_fixed, im_moving_warped).item():.2f}\n'
+                  )
+
+        """
+        q_v
+        """
+
+        for iter_no in range(self.no_steps_v):
+            optimizer_v.zero_grad()
+
+            v_sample = separable_conv_3d(mu_v, S_sqrt_x, S_sqrt_y, S_sqrt_z, padding_sz)
+            v_sample = SobolevGrad.apply(v_sample, S_x, S_y, S_z, padding_sz)
+
+            transformation, displacement = self.transformation_model(v_sample)
+            im_moving_warped = self.registration_module(im_moving, transformation)
+
+            data_term = data_loss(im_fixed, im_moving_warped).sum()
+            reg_term = self.reg_loss(v_sample).sum()
+
+            loss_qv = data_term + reg_term
+            loss_qv.backward()
+            optimizer_v.step()
+
+            if iter_no % 32 == 0:
+                print(f'ITERATION ' + str(iter_no) + '/' + str(self.no_steps_v - 1) +
+                      f', TOTAL ENERGY: {loss_qv.item():.2f}' +
+                      f'\ndata: {data_term.item():.2f}' +
+                      f', regularisation: {reg_term.item():.2f}'
+                      )
+
+        mu_v.requires_grad_(False)
+
+        """
+        save image of the warped sphere to disk
+        """
+
+        with torch.no_grad():
+            mu_v_conv_sqrt = separable_conv_3d(mu_v, S_sqrt_x, S_sqrt_y, S_sqrt_z, padding_sz)
+
+            transformation, displacement = self.transformation_model(mu_v_conv_sqrt)
+            im_moving_warped = self.registration_module(im_moving, transformation)
+
+            save_im_to_disk(im_moving_warped[0, 0].cpu().numpy(), './temp/moving_warped_LCC_data_only.nii.gz')

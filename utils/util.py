@@ -180,7 +180,7 @@ def save_field_to_disk(field, file_path):
     field_y = field[1]
     field_z = field[2]
 
-    dim = field.shape[1:]  # FIXME (dig15): why is the no. cells < no. points?
+    dim = field.shape[1:]  # FIXME: why is the no. cells < no. points?
 
     vectors = np.empty(field_x.shape + (3,), dtype=float)
     vectors[..., 0] = field_x
@@ -230,41 +230,66 @@ def save_optimiser_to_disk(optimiser, file_path):
 def separable_conv_3d(field, kernel, padding_sz):
     N, C, D, H, W = field.size()
 
-    padding_3d = (0, 0, 0, 0, padding_sz, padding_sz)
+    padding_3d = (padding_sz, padding_sz, 0, 0, 0, 0)
 
     field = F.pad(field, padding_3d, mode='replicate')
-    field = field.view(N, C, (D + 2 * padding_sz) * H * W)
+    field = field.view(N, C, -1)
     field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
-    field = field.reshape(N, C, (D + 2 * padding_sz), H, W)
-    field = field[:, :, padding_sz:-padding_sz]
+    field = field.reshape(N, C, D, H, -1)
+    field = field[:, :, :, :, padding_sz:-padding_sz]
 
     field = field.permute((0, 1, 3, 4, 2))  # permute depth, height, and width
 
     field = F.pad(field, padding_3d, mode='replicate')
-    field = field.view(N, C, (D + 2 * padding_sz) * H * W)
+    field = field.view(N, C, -1)
     field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
-    field = field.reshape(N, C, (D + 2 * padding_sz), H, W)
-    field = field[:, :, padding_sz:-padding_sz]
+    field = field.reshape(N, C, D, H, -1)
+    field = field[:, :, :, :, padding_sz:-padding_sz]
 
     field = field.permute((0, 1, 3, 4, 2))
 
     field = F.pad(field, padding_3d, mode='replicate')
-    field = field.view(N, C, (D + 2 * padding_sz) * H * W)
+    field = field.view(N, C, -1)
     field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
-    field = field.reshape(N, C, (D + 2 * padding_sz), H, W)
-    field = field[:, :, padding_sz:-padding_sz]
+    field = field.reshape(N, C, D, H, -1)
+    field = field[:, :, :, :, padding_sz:-padding_sz]
+    
+    field = field.permute((0, 1, 3, 4, 2))
 
-    field[:, :, 0] = 0.0
-    field[:, :, -1] = 0.0
+    field[:, 2, 0] = 0.0
+    field[:, 2, -1] = 0.0
 
-    field[:, :, :, 0] = 0.0
-    field[:, :, :, -1] = 0.0
+    field[:, 1, :, 0] = 0.0
+    field[:, 1, :, -1] = 0.0
 
-    field[:, :, :, :, 0] = 0.0
-    field[:, :, :, :, -1] = 0.0
+    field[:, 0, :, :, 0] = 0.0
+    field[:, 0, :, :, -1] = 0.0
 
-    return field.permute((0, 1, 3, 4, 2))
+    return field
 
+def separable_conv_3d(field, kernel_x, kernel_y, kernel_z, padding_sz):
+    padding_x = (padding_sz, padding_sz, 0, 0, 0, 0)
+    field = F.pad(field, padding_x, mode='replicate')
+    field = F.conv3d(field, kernel_x, groups=3)
+
+    padding_y = (0, 0, padding_sz, padding_sz, 0, 0)
+    field = F.pad(field, padding_y, mode='replicate')
+    field = F.conv3d(field, kernel_y, groups=3)
+    
+    padding_z = (0, 0, 0, 0, padding_sz, padding_sz)
+    field = F.pad(field, padding_z, mode='replicate')
+    field = F.conv3d(field, kernel_z, groups=3)
+    
+    field[:, 2, 0] = 0.0
+    field[:, 2, -1] = 0.0
+
+    field[:, 1, :, 0] = 0.0
+    field[:, 1, :, -1] = 0.0
+
+    field[:, 0, :, :, 0] = 0.0
+    field[:, 0, :, :, -1] = 0.0
+
+    return field
 
 class MetricTracker:
     def __init__(self, *keys, writer=None):
