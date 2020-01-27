@@ -103,13 +103,11 @@ class BiobankDataset(Dataset):
                     np.transpose(sitk.GetArrayFromImage(mask_fixed), (2, 1, 0)),
                     (self.dim_x, self.dim_y, self.dim_z), order=0))
 
-            im_fixed -= torch.min(im_fixed)  # make pixel intensities positive
-            im_fixed *= mask_fixed
-
         im_fixed = standardise_im(im_fixed)  # standardise image
         im_fixed = rescale_im(im_fixed)  # rescale to range (-1, 1)
 
         self.im_fixed = im_fixed.unsqueeze(0)
+        self.mask_fixed = mask_fixed.unsqueeze(0)
         self.seg_fixed = seg_fixed.unsqueeze(0)
 
     def __len__(self):
@@ -144,9 +142,6 @@ class BiobankDataset(Dataset):
                 transform.resize(
                     np.transpose(sitk.GetArrayFromImage(mask_moving), (2, 1, 0)),
                     (self.dim_x, self.dim_y, self.dim_z), order=0))
-
-            im_moving -= torch.min(im_moving)  # make pixel intensities positive
-            im_moving *= mask_moving
 
         im_moving = standardise_im(im_moving)  # standardise image
         im_moving = rescale_im(im_moving)  # rescale to range (-1, 1)
@@ -188,4 +183,5 @@ class BiobankDataset(Dataset):
         else:
             u_f = init_u_f(self.dims_im)
 
-        return idx, self.im_fixed, self.seg_fixed, im_moving, seg_moving, mu_v, log_var_v, u_v, log_var_f, u_f
+        return idx, self.im_fixed, self.seg_fixed, self.mask_fixed, \
+               im_moving, seg_moving, mu_v, log_var_v, u_v, log_var_f, u_f

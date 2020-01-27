@@ -40,8 +40,10 @@ class Trainer(BaseTrainer):
         self.do_validation = self.valid_data_loader is not None
 
         self.log_step = config['trainer']['log_step']
-        self.train_metrics = MetricTracker('loss', 'loss_q_v', 'loss_q_f_q_phi',
-                                           *[m for m in self.metric_ftns], writer=self.writer)
+        self.train_metrics = \
+            MetricTracker('loss', 'loss_q_v', 'loss_q_f_q_phi', *[m for m in self.metric_ftns], writer=self.writer)
+
+        self.mask_fixed = None
 
         # Sobolev kernel
         if self.sobolev_grad:
@@ -161,9 +163,9 @@ class Trainer(BaseTrainer):
 
                 if self.learn_sim_metric:
                     im_out = self.enc(im_fixed, im_moving_warped)
-                    data_term += self.data_loss(None, None, im_out).sum()
+                    data_term += self.data_loss(None, None, im_out, self.mask_fixed).sum()
                 else:
-                    data_term += self.data_loss(im_fixed, im_moving_warped).sum()
+                    data_term += self.data_loss(im_fixed, im_moving_warped, None, self.mask_fixed).sum()
 
                 reg_term += self.reg_loss(v_sample).sum()
             elif self.no_samples == 2:
@@ -188,30 +190,22 @@ class Trainer(BaseTrainer):
                     im_out1 = self.enc(im_fixed, im_moving_warped1)
                     im_out2 = self.enc(im_fixed, im_moving_warped2)
 
-                    data_term += self.data_loss(None, None, im_out1).sum() / 2.0
-                    data_term += self.data_loss(None, None, im_out2).sum() / 2.0
+                    data_term += self.data_loss(None, None, im_out1, self.mask_fixed).sum() / 2.0
+                    data_term += self.data_loss(None, None, im_out2, self.mask_fixed).sum() / 2.0
                 else:
-                    data_term += self.data_loss(im_fixed, im_moving_warped1).sum() / 2.0
-                    data_term += self.data_loss(im_fixed, im_moving_warped2).sum() / 2.0
+                    data_term += self.data_loss(im_fixed, im_moving_warped1, None, self.mask_fixed).sum() / 2.0
+                    data_term += self.data_loss(im_fixed, im_moving_warped2, None, self.mask_fixed).sum() / 2.0
 
                 reg_term += self.reg_loss(v_sample1).sum() / 2.0
                 reg_term += self.reg_loss(v_sample2).sum() / 2.0
-            
-            if self.sobolev_grad:
-                log_var_v_conv_sqrt = \
-                    separable_conv_3d(log_var_v, self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-                u_v_conv_sqrt = separable_conv_3d(u_v, self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
 
-                entropy_term = self.entropy(log_var_v_conv_sqrt, u_v_conv_sqrt).sum()
-            else:
-                entropy_term = self.entropy(log_var_v, u_v).sum()
-
+            entropy_term = self.entropy(log_var_v, u_v).sum()
             return data_term, reg_term, entropy_term
 
         transformation, displacement = self.transformation_model(mu_v)
         im_moving_warped = self.registration_module(im_moving, transformation)
 
-        return self.data_loss(im_fixed, im_moving_warped).sum(), self.reg_loss(mu_v).sum()
+        return self.data_loss(im_fixed, im_moving_warped, self.mask_fixed).sum(), self.reg_loss(mu_v).sum()
 
     def _step_q_v(self, epoch, batch_idx, curr_batch_size, im_pair_idxs, im_fixed, im_moving, mu_v, log_var_v, u_v):
         """
@@ -260,25 +254,22 @@ class Trainer(BaseTrainer):
 
                             if self.learn_sim_metric:
                                 im_out = self.enc(im_fixed, im_moving_warped)
-                                data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
+                                data_term_value = \
+                                    self.data_loss(None, None, im_out, self.mask_fixed).sum().item() / curr_batch_size
                             else:
                                 data_term_value = \
-                                    self.data_loss(im_fixed, im_moving_warped).sum().item() / curr_batch_size
+                                    self.data_loss(im_fixed, im_moving_warped, None, self.mask_fixed).sum().item() \
+                                    / curr_batch_size
                             
                             if self.sobolev_grad:
+                                mu_v_conv_sqrt = \
+                                    separable_conv_3d(mu_v, self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z,
+                                                      self.padding_sz)
                                 reg_term_value = self.reg_loss(mu_v_conv_sqrt).sum().item() / curr_batch_size
-
-                                log_var_v_conv_sqrt = \
-                                    separable_conv_3d(log_var_v,
-                                                      self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-                                u_v_conv_sqrt = \
-                                    separable_conv_3d(u_v, self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-
-                                entropy_term_value = \
-                                    self.entropy(log_var_v_conv_sqrt, u_v_conv_sqrt).sum().item() / curr_batch_size
                             else:
                                 reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
-                                entropy_term_value = self.entropy(log_var_v, u_v).sum().item() / curr_batch_size
+
+                            entropy_term_value = self.entropy(log_var_v, u_v).sum().item() / curr_batch_size
 
                             self.train_metrics.update('data_term', data_term_value)
                             self.train_metrics.update('reg_term', reg_term_value)
@@ -296,14 +287,7 @@ class Trainer(BaseTrainer):
                                 self.writer, im_pair_idxs, transformation, get_module_attr(self.reg_loss, 'diff_op'))
 
                             if self.sobolev_grad:
-                                log_var_v_conv_sqrt = \
-                                    separable_conv_3d(log_var_v,
-                                                      self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-                                u_v_conv_sqrt = \
-                                    separable_conv_3d(u_v,
-                                                      self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-                                log_q_v(self.writer, im_pair_idxs,
-                                        mu_v_conv_sqrt, displacement, log_var_v_conv_sqrt, u_v_conv_sqrt)
+                                log_q_v(self.writer, im_pair_idxs, mu_v_conv_sqrt, displacement, log_var_v, u_v)
                             else:
                                 log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
 
@@ -348,15 +332,14 @@ class Trainer(BaseTrainer):
 
                             if self.learn_sim_metric:
                                 im_out = self.enc(im_fixed, im_moving_warped)
-                                data_term_value = self.data_loss(None, None, im_out).sum().item() / curr_batch_size
+                                data_term_value = \
+                                    self.data_loss(None, None, im_out, self.mask_fixed).sum().item() / curr_batch_size
                             else:
                                 data_term_value = \
-                                    self.data_loss(im_fixed, im_moving_warped).sum().item() / curr_batch_size
+                                    self.data_loss(im_fixed, im_moving_warped, None, self.mask_fixed).sum().item() \
+                                    / curr_batch_size
 
-                            if self.sobolev_grad:
-                                reg_term_value = self.reg_loss(mu_v_conv_sqrt).sum().item() / curr_batch_size
-                            else:
-                                reg_term_value = self.reg_loss(mu_v).sum().item() / curr_batch_size
+                            reg_term_value = self.reg_loss(mu_v_conv_sqrt).sum().item() / curr_batch_size
 
                             self.train_metrics.update('data_term', data_term_value)
                             self.train_metrics.update('reg_term', reg_term_value)
@@ -372,13 +355,7 @@ class Trainer(BaseTrainer):
                                 self.writer, im_pair_idxs, transformation, get_module_attr(self.reg_loss, 'diff_op'))
 
                             if self.sobolev_grad:
-                                log_var_v_conv_sqrt = \
-                                    separable_conv_3d(log_var_v,
-                                                      self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-                                u_v_conv_sqrt = \
-                                    separable_conv_3d(u_v, self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-                                log_q_v(self.writer, im_pair_idxs,
-                                        mu_v_conv_sqrt, displacement, log_var_v_conv_sqrt, u_v_conv_sqrt)
+                                log_q_v(self.writer, im_pair_idxs, mu_v_conv_sqrt, displacement, log_var_v, u_v)
                             else:
                                 log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
 
@@ -423,18 +400,18 @@ class Trainer(BaseTrainer):
 
         if self.learn_sim_metric:
             im_out = self.enc(im_fixed, im_moving_warped)
-            loss_q_f_q_phi += self.data_loss(None, None, im_out).sum()
+            loss_q_f_q_phi += self.data_loss(None, None, im_out, self.mask_fixed).sum()
         else:
-            loss_q_f_q_phi += self.data_loss(im_fixed, im_moving_warped).sum()
+            loss_q_f_q_phi += self.data_loss(im_fixed, im_moving_warped, None, self.mask_fixed).sum()
 
         if self.no_samples == 1:
             im_fixed_sample = sample_qf(im_fixed, log_var_f, u_f, 1)  # draw sample from q_f
 
             if self.learn_sim_metric:
                 im_out = self.enc(im_fixed_sample, im_moving_warped)
-                loss_q_f_q_phi -= self.data_loss(None, None, im_out).sum()
+                loss_q_f_q_phi -= self.data_loss(None, None, im_out, self.mask_fixed).sum()
             else:
-                loss_q_f_q_phi -= self.data_loss(im_fixed_sample, im_moving_warped).sum()
+                loss_q_f_q_phi -= self.data_loss(im_fixed_sample, im_moving_warped, None, self.mask_fixed).sum()
         elif self.no_samples == 2:
             im_fixed_sample1, im_fixed_sample2 = sample_qf(im_fixed, log_var_f, u_f, 2)
 
@@ -442,11 +419,11 @@ class Trainer(BaseTrainer):
                 im_out1 = self.enc(im_fixed_sample1, im_moving_warped)
                 im_out2 = self.enc(im_fixed_sample2, im_moving_warped)
 
-                loss_q_f_q_phi -= self.data_loss(None, None, im_out1).sum() / 2.0
-                loss_q_f_q_phi -= self.data_loss(None, None, im_out2).sum() / 2.0
+                loss_q_f_q_phi -= self.data_loss(None, None, im_out1, self.mask_fixed).sum() / 2.0
+                loss_q_f_q_phi -= self.data_loss(None, None, im_out2, self.mask_fixed).sum() / 2.0
             else:
-                loss_q_f_q_phi -= self.data_loss(im_fixed_sample1, im_moving_warped).sum() / 2.0
-                loss_q_f_q_phi -= self.data_loss(im_fixed_sample2, im_moving_warped).sum() / 2.0
+                loss_q_f_q_phi -= self.data_loss(im_fixed_sample1, im_moving_warped, None, self.mask_fixed).sum() / 2.0
+                loss_q_f_q_phi -= self.data_loss(im_fixed_sample2, im_moving_warped, None, self.mask_fixed).sum() / 2.0
 
         loss_q_f_q_phi /= curr_batch_size
         loss_q_f_q_phi.backward()
@@ -483,7 +460,7 @@ class Trainer(BaseTrainer):
 
         self.train_metrics.reset()
 
-        for batch_idx, (im_pair_idxs, im_fixed, seg_fixed, im_moving, seg_moving,
+        for batch_idx, (im_pair_idxs, im_fixed, seg_fixed, mask_fixed, im_moving, seg_moving,
                         mu_v, log_var_v, u_v, log_var_f, u_f) in enumerate(self.data_loader):
             curr_batch_size = float(im_pair_idxs.numel())
 
@@ -492,6 +469,9 @@ class Trainer(BaseTrainer):
 
             seg_fixed, seg_moving = seg_fixed.to(self.device, non_blocking=True), \
                                     seg_moving.to(self.device, non_blocking=True)  # corresponding segmentations
+
+            if self.mask_fixed is None:
+                self.mask_fixed = mask_fixed.to(self.device, non_blocking=True)
 
             mu_v = mu_v.to(self.device, non_blocking=True)  # mean velocity field
 
@@ -515,11 +495,13 @@ class Trainer(BaseTrainer):
                     im_out_unwarped = self.enc(im_fixed, im_moving)
                     im_out = self.enc(im_fixed, im_moving_warped)
                 
-                    loss_unwarped = self.data_loss(None, None, im_out_unwarped).sum() / curr_batch_size
-                    loss_warped = self.data_loss(None, None, im_out).sum() / curr_batch_size
+                    loss_unwarped = self.data_loss(None, None, im_out_unwarped, self.mask_fixed).sum() / curr_batch_size
+                    loss_warped = \
+                        self.data_loss(None, None, im_out, self.mask_fixed).sum() / curr_batch_size
                 else:
-                    loss_unwarped = self.data_loss(im_fixed, im_moving).sum() / curr_batch_size
-                    loss_warped = self.data_loss(im_fixed, im_moving_warped).sum() / curr_batch_size
+                    loss_unwarped = self.data_loss(im_fixed, im_moving, None, self.mask_fixed).sum() / curr_batch_size
+                    loss_warped = \
+                        self.data_loss(im_fixed, im_moving_warped, None, self.mask_fixed).sum() / curr_batch_size
 
                 self.logger.info(f'\nPRE-REGISTRATION: ' +
                                  f'unwarped: {loss_unwarped:.5f}' +
@@ -577,12 +559,8 @@ class Trainer(BaseTrainer):
                 log_det_J_transformation_batch = torch.log10(det_J_transformation_batch)
 
                 if self.sobolev_grad:
-                    log_var_v_conv_sqrt = \
-                        separable_conv_3d(log_var_v, self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-                    u_v_conv_sqrt = separable_conv_3d(u_v, self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz)
-
                     save_images(self.data_loader.save_dirs, im_pair_idxs, im_fixed, im_moving, im_moving_warped,
-                                mu_v_conv_sqrt, log_var_v_conv_sqrt, u_v_conv_sqrt, log_var_f, u_f, displacement,
+                                mu_v_conv_sqrt, log_var_v, u_v, log_var_f, u_f, displacement,
                                 log_det_J_transformation_batch, seg_fixed, seg_moving, seg_moving_warped)
                 else:
                     save_images(self.data_loader.save_dirs, im_pair_idxs, im_fixed, im_moving, im_moving_warped,

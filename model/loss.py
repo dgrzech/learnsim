@@ -16,7 +16,7 @@ class DataLoss(nn.Module, ABC):
         super(DataLoss, self).__init__()
 
     @abstractmethod
-    def forward(self, im_fixed, im_moving, z):
+    def forward(self, im_fixed, im_moving, z, mask):
         pass
     
     @abstractmethod
@@ -47,12 +47,15 @@ class LCC(DataLoss):
             nn.init.ones_(self.kernel.weight)
             self.kernel.weight.requires_grad_(False)
 
-    def forward(self, im_fixed=None, im_moving=None, z=None):
+    def forward(self, im_fixed=None, im_moving=None, z=None, mask=None):
         if z is not None:
-            return -1.0 * torch.sum(z)
+            if mask is not None:
+                return -1.0 * torch.sum(z * mask)
+            else:
+                return -1.0 * torch.sum(z)
 
         cross, var_F, var_M = self.map(im_fixed, im_moving)
-        return self.reduce(cross, var_F, var_M)
+        return self.reduce(cross, var_F, var_M, mask)
 
     def map(self, im_fixed, im_moving):
         im_fixed = F.pad(im_fixed, self.padding, mode='replicate')
@@ -67,8 +70,12 @@ class LCC(DataLoss):
 
         return cross, var_F, var_M
 
-    def reduce(self, cross, var_F, var_M):
+    def reduce(self, cross, var_F, var_M, mask=None):
         lcc = cross * cross / (var_F * var_M + 1e-5)
+
+        if mask is not None:
+            return -1.0 * torch.sum(lcc * mask)
+
         return -1.0 * torch.sum(lcc)
 
 
@@ -80,17 +87,23 @@ class SSD(DataLoss):
     def __init__(self):
         super(SSD, self).__init__()
 
-    def forward(self, im_fixed=None, im_moving=None, z=None):
+    def forward(self, im_fixed=None, im_moving=None, z=None, mask=None):
         if z is not None:
-            return self.reduce(z)
+            if mask is not None:
+                return self.reduce(z * mask)
+            else:
+                return self.reduce(z)
 
         z = self.map(im_fixed, im_moving)
-        return self.reduce(z)
+        return self.reduce(z, mask)
 
     def map(self, im_fixed, im_moving):
         return im_fixed - im_moving
 
-    def reduce(self, z):
+    def reduce(self, z, mask=None):
+        if mask is not None:
+            return 0.5 * torch.sum(torch.pow(z * mask, 2))
+
         return 0.5 * torch.sum(torch.pow(z, 2))
 
 
