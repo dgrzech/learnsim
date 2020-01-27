@@ -227,69 +227,55 @@ def save_optimiser_to_disk(optimiser, file_path):
     torch.save(state_dict, file_path)
 
 
-def separable_conv_3d(field, kernel, padding_sz):
-    N, C, D, H, W = field.size()
+def separable_conv_3d(field_out, *args, **kwargs):
+    if len(args) == 2:
+        kernel = args[0]
+        padding_sz = args[1]
 
-    padding_3d = (padding_sz, padding_sz, 0, 0, 0, 0)
+        N, C, D, H, W = field_out.size()
 
-    field = F.pad(field, padding_3d, mode='replicate')
-    field = field.view(N, C, -1)
-    field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
-    field = field.reshape(N, C, D, H, -1)
-    field = field[:, :, :, :, padding_sz:-padding_sz]
+        padding_3d = (padding_sz, padding_sz, 0, 0, 0, 0)
 
-    field = field.permute((0, 1, 3, 4, 2))  # permute depth, height, and width
+        field_out = F.pad(field_out, padding_3d, mode='replicate')
+        field_out = field_out.view(N, C, -1)
+        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # depth
+        field_out = field_out.reshape(N, C, D, H, -1)
+        field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
-    field = F.pad(field, padding_3d, mode='replicate')
-    field = field.view(N, C, -1)
-    field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
-    field = field.reshape(N, C, D, H, -1)
-    field = field[:, :, :, :, padding_sz:-padding_sz]
+        field_out = field_out.permute((0, 1, 3, 4, 2))  # permute depth, height, and width
 
-    field = field.permute((0, 1, 3, 4, 2))
+        field_out = F.pad(field_out, padding_3d, mode='replicate')
+        field_out = field_out.view(N, C, -1)
+        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # height
+        field_out = field_out.reshape(N, C, D, H, -1)
+        field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
-    field = F.pad(field, padding_3d, mode='replicate')
-    field = field.view(N, C, -1)
-    field = F.conv1d(field, kernel, padding=padding_sz, groups=3)
-    field = field.reshape(N, C, D, H, -1)
-    field = field[:, :, :, :, padding_sz:-padding_sz]
-    
-    field = field.permute((0, 1, 3, 4, 2))
+        field_out = field_out.permute((0, 1, 3, 4, 2))
 
-    field[:, 2, 0] = 0.0
-    field[:, 2, -1] = 0.0
+        field_out = F.pad(field_out, padding_3d, mode='replicate')
+        field_out = field_out.view(N, C, -1)
+        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # width
+        field_out = field_out.reshape(N, C, D, H, -1)
+        field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
-    field[:, 1, :, 0] = 0.0
-    field[:, 1, :, -1] = 0.0
+        field_out = field_out.permute((0, 1, 3, 4, 2))  # back to the orig. dimensions
 
-    field[:, 0, :, :, 0] = 0.0
-    field[:, 0, :, :, -1] = 0.0
+    elif len(args) == 4:
+        kernel_x = args[0]
+        kernel_y = args[1]
+        kernel_z = args[2]
 
-    return field
+        padding_sz = args[3]
 
-def separable_conv_3d(field, kernel_x, kernel_y, kernel_z, padding_sz):
-    padding_x = (padding_sz, padding_sz, 0, 0, 0, 0)
-    field = F.pad(field, padding_x, mode='replicate')
-    field = F.conv3d(field, kernel_x, groups=3)
+        padding = (padding_sz, padding_sz, padding_sz, padding_sz, padding_sz, padding_sz)
+        field_out = F.pad(field_out, padding, mode='replicate')
 
-    padding_y = (0, 0, padding_sz, padding_sz, 0, 0)
-    field = F.pad(field, padding_y, mode='replicate')
-    field = F.conv3d(field, kernel_y, groups=3)
-    
-    padding_z = (0, 0, 0, 0, padding_sz, padding_sz)
-    field = F.pad(field, padding_z, mode='replicate')
-    field = F.conv3d(field, kernel_z, groups=3)
-    
-    field[:, 2, 0] = 0.0
-    field[:, 2, -1] = 0.0
+        field_out = F.conv3d(field_out, kernel_z, groups=3)
+        field_out = F.conv3d(field_out, kernel_y, groups=3)
+        field_out = F.conv3d(field_out, kernel_x, groups=3)
 
-    field[:, 1, :, 0] = 0.0
-    field[:, 1, :, -1] = 0.0
+    return field_out
 
-    field[:, 0, :, :, 0] = 0.0
-    field[:, 0, :, :, -1] = 0.0
-
-    return field
 
 class MetricTracker:
     def __init__(self, *keys, writer=None):

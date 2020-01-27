@@ -50,6 +50,7 @@ class ConfigParser:
         self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
         self._displacement_dir = save_dir / exper_name / run_id / 'fields' / 'displacement'
         self._grid_dir = save_dir / exper_name / run_id / 'grids'
+        self._log_det_J_dir = save_dir / exper_name / run_id / 'fields' / 'log_det_J'
         
         self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
 
@@ -72,6 +73,7 @@ class ConfigParser:
         self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.displacement_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.grid_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.log_det_J_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
         
@@ -213,7 +215,6 @@ class ConfigParser:
     def u_f_dir(self):
         return self._u_f_dir
 
-
     @property
     def optimiser_dir(self):
         return self._optimiser_dir
@@ -231,6 +232,10 @@ class ConfigParser:
         return self._grid_dir
 
     @property
+    def log_det_J_dir(self):
+        return self._log_det_J_dir
+
+    @property
     def im_dir(self):
         return self._im_dir
     
@@ -244,11 +249,11 @@ class ConfigParser:
     
     @property
     def save_dirs(self):
-        return {'mu_v': self.mu_v_dir,
-                'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
+        return {'images': self.im_dir, 'norms': self.norms_dir, 'segs': self.seg_dir,
+                'mu_v': self.mu_v_dir, 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
                 'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
                 'mu_v_field': self.mu_v_field_dir, 'displacement': self.displacement_dir, 'grids': self.grid_dir,
-                'images': self.im_dir, 'norms': self.norms_dir, 'segs': self.seg_dir,
+                'log_det_J': self.log_det_J_dir,
                 'optimisers': self.optimiser_dir}
 
 

@@ -79,6 +79,11 @@ def save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, l
     save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm)
 
 
+def save_log_det_J(save_dirs_dict, im_pair_idx, log_det_J):
+    log_det_J_path = path.join(save_dirs_dict['log_det_J'], 'log_det_J_' + str(im_pair_idx) + '.nii.gz')
+    save_im_to_disk(log_det_J, log_det_J_path)
+
+
 def save_log_var_f_image(save_dirs_dict, log_var_f):
     log_var_f_im_path = path.join(save_dirs_dict['images'], 'log_var_f.nii.gz')
     save_im_to_disk(log_var_f, log_var_f_im_path)
@@ -115,7 +120,7 @@ def save_seg_moving_warped(save_dirs_dict, im_pair_idx, seg_moving_warped):
 
 def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch,
                 mu_v_batch, log_var_v_batch, u_v_batch, log_var_f_batch, u_f_batch, displacement_batch,
-                seg_fixed_batch=None, seg_moving_batch=None, seg_moving_warped_batch=None):
+                log_det_J_batch=None, seg_fixed_batch=None, seg_moving_batch=None, seg_moving_warped_batch=None):
     """
     save the input and output images as well as norms of vectors in the vector fields to disk
     """
@@ -130,6 +135,9 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
     log_var_f, u_f = log_var_f[0].cpu().numpy(), u_f[0].cpu().numpy()
 
     save_images_q_f(save_dirs_dict, log_var_f, u_f)
+
+    if log_det_J_batch is not None:
+        log_det_J_batch = log_det_J_batch.cpu().numpy()
 
     if seg_fixed_batch is not None:
         seg_fixed_batch = seg_fixed_batch.cpu().numpy()
@@ -164,6 +172,10 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
         save_im_moving(save_dirs_dict, im_pair_idx, im_moving)
         save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped)
         save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, log_var_v_norm, u_v_norm)
+
+        if log_det_J_batch is not None:
+            log_det_J = log_det_J_batch[loop_idx]
+            save_log_det_J(save_dirs_dict, im_pair_idx, log_det_J)
 
         if seg_fixed_batch is not None:
             seg_fixed = seg_fixed_batch[loop_idx, 0]

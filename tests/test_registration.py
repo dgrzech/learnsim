@@ -2,7 +2,8 @@ from torch.optim import Adam, SGD
 
 from model.loss import LCC, SSD, RegLossL2, EntropyMultivariateNormal
 from model.model import SimEnc
-from utils import pixel_to_normalised_3d, sample_qf, sample_qv, save_im_to_disk, separable_conv_3d, sobolev_kernel_1D, RegistrationModule, SobolevGrad, SVF_3D
+from utils import pixel_to_normalised_3d, sample_qf, sample_qv, save_im_to_disk, separable_conv_3d, sobolev_kernel_1d, \
+    RegistrationModule, SobolevGrad, SVF_3D
 
 import numpy as np
 import torch
@@ -366,7 +367,7 @@ class RegistrationTestMethods(unittest.TestCase):
         _s = 7
         _lambda = 0.5
 
-        S, S_sqrt = sobolev_kernel_1D(_s, _lambda)
+        S, S_sqrt = sobolev_kernel_1d(_s, _lambda)
 
         S = torch.from_numpy(S).float()
         S.unsqueeze_(0)

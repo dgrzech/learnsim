@@ -58,7 +58,7 @@ def main(config):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    if enc.is not None:
+    if enc is not None:
         enc.load_state_dict(state_dict)
         enc = enc.to(device)
 

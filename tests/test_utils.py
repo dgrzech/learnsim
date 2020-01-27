@@ -1,8 +1,9 @@
 from utils import compute_norm, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d,\
-    sobolev_kernel_1D, separable_conv_3d, SVF_2D, SVF_3D
+    sobolev_kernel_1d, separable_conv_3d, SVF_2D, SVF_3D
 
 import math
 import numpy as np
+import pytest
 import torch
 import unittest
 
@@ -20,7 +21,7 @@ class UtilsTestMethods(unittest.TestCase):
         print(self._testMethodName + '\n')
 
         n = 8
-        self.dim_x, self.dim_y, self.dim_z = n, n, n
+        self.dim_x = self.dim_y = self.dim_z = n
 
     def test_norm(self):
         v = torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
@@ -33,25 +34,15 @@ class UtilsTestMethods(unittest.TestCase):
     def test_scaling_and_squaring_2d_translation(self):
         transformation_module = SVF_2D(self.dim_x, self.dim_y)
 
-        # v = torch.zeros(1, 2, self.dim_x, self.dim_y)
-        # transformation, displacement = transformation_module(v)
-        # print('zero velocity field\n', transformation)
-
         v = 0.2 * torch.ones(1, 2, self.dim_x, self.dim_y)
         transformation, displacement = transformation_module(v)
-        # print('uniform velocity field\n', transformation)
         plot_2d(v, transformation)
 
     def test_scaling_and_squaring_3d_translation(self):
         transformation_module = SVF_3D(self.dim_x, self.dim_y, self.dim_z)
 
-        # v = torch.zeros(1, 3, self.dim_x, self.dim_y, self.dim_z)
-        # transformation, displacement = transformation_module(v)
-        # print('zero velocity field\n', transformation)
-
         v = 0.2 * torch.ones(1, 3, self.dim_x, self.dim_y, self.dim_z)
         transformation, displacement = transformation_module(v)
-        # print('uniform velocity field\n', transformation)
         plot_3d(v, transformation)
 
     def test_scaling_and_squaring_2d_rotation(self):
@@ -66,7 +57,6 @@ class UtilsTestMethods(unittest.TestCase):
                 v[0, 1, idx_x, idx_y] = -1.0 * x
 
         transformation, displacement = transformation_module(v)
-        # print(transformation)
         plot_2d(v, transformation)
 
     def test_scaling_and_squaring_3d_rotation(self):
@@ -83,7 +73,6 @@ class UtilsTestMethods(unittest.TestCase):
                     v[0, 2, idx_x, idx_y, idx_z] = 0.0
 
         transformation, displacement = transformation_module(v)
-        # print(transformation)
         plot_3d(v, transformation)
 
     def test_separable_conv_3d(self):
@@ -108,8 +97,36 @@ class UtilsTestMethods(unittest.TestCase):
         v[0, 1] = 1.0
         v[1, 2] = 1.0
 
-        # separable convolution
-        # v_out = separable_conv_3d(v, S, padding_sz)
+        # separable convolution implemented as three 1D convolutions
+        v_out = separable_conv_3d(v, S, padding_sz)
+        v_out_size = v_out.size()
+
+        assert v_out_size[0] == 2
+        assert v_out_size[1] == 3
+        assert v_out_size[2] == D
+        assert v_out_size[3] == H
+        assert v_out_size[4] == W
+
+        for idx_z in range(self.dim_z - 1):
+            for idx_y in range(self.dim_y - 1):
+                for idx_x in range(self.dim_x - 1):
+                    v_out_0_x = v_out[0, 0, idx_z, idx_y, idx_x].item()
+                    v_out_0_y = v_out[0, 1, idx_z, idx_y, idx_x].item()
+                    v_out_0_z = v_out[0, 2, idx_z, idx_y, idx_x].item()
+
+                    assert pytest.approx(v_out_0_x, 1e-5) == 0.0
+                    assert pytest.approx(v_out_0_y, 1e-5) == 27.0
+                    assert pytest.approx(v_out_0_z, 1e-5) == 0.0
+
+                    v_out_1_x = v_out[1, 0, idx_z, idx_y, idx_x].item()
+                    v_out_1_y = v_out[1, 1, idx_z, idx_y, idx_x].item()
+                    v_out_1_z = v_out[1, 2, idx_z, idx_y, idx_x].item()
+
+                    assert pytest.approx(v_out_1_x, 1e-5) == 0.0
+                    assert pytest.approx(v_out_1_y, 1e-5) == 0.0
+                    assert pytest.approx(v_out_1_z, 1e-5) == 27.0
+
+        # separable convolution implemented as 3D convolutions
         v_out = separable_conv_3d(v, S_x, S_y, S_z, padding_sz)
         v_out_size = v_out.size()
 
@@ -119,11 +136,21 @@ class UtilsTestMethods(unittest.TestCase):
         assert v_out_size[3] == H
         assert v_out_size[4] == W
 
-        # assert torch.all(torch.eq(v[0, 0], 0.0))
-        # assert torch.all(torch.eq(v[0, 1], 27.0))
-        # assert torch.all(torch.eq(v[0, 2], 0.0))
+        for idx_z in range(self.dim_z - 1):
+            for idx_y in range(self.dim_y - 1):
+                for idx_x in range(self.dim_x - 1):
+                    v_out_0_x = v_out[0, 0, idx_z, idx_y, idx_x].item()
+                    v_out_0_y = v_out[0, 1, idx_z, idx_y, idx_x].item()
+                    v_out_0_z = v_out[0, 2, idx_z, idx_y, idx_x].item()
 
-        # assert torch.all(torch.eq(v[1, 0], 0.0))
-        # assert torch.all(torch.eq(v[1, 1], 0.0))
-        # assert torch.all(torch.eq(v[1, 2], 27.0))
+                    assert pytest.approx(v_out_0_x, 1e-5) == 0.0
+                    assert pytest.approx(v_out_0_y, 1e-5) == 27.0
+                    assert pytest.approx(v_out_0_z, 1e-5) == 0.0
 
+                    v_out_1_x = v_out[1, 0, idx_z, idx_y, idx_x].item()
+                    v_out_1_y = v_out[1, 1, idx_z, idx_y, idx_x].item()
+                    v_out_1_z = v_out[1, 2, idx_z, idx_y, idx_x].item()
+
+                    assert pytest.approx(v_out_1_x, 1e-5) == 0.0
+                    assert pytest.approx(v_out_1_y, 1e-5) == 0.0
+                    assert pytest.approx(v_out_1_z, 1e-5) == 27.0

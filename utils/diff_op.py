@@ -19,10 +19,6 @@ class DifferentialOperator(nn.Module, ABC):
 
 
 class GradientOperator(DifferentialOperator):
-    """
-    Jacobian differential operator
-    """
-
     def __init__(self):
         super(GradientOperator, self).__init__()
 
@@ -31,9 +27,9 @@ class GradientOperator(DifferentialOperator):
         self.pz = (0, 0, 0, 0, 0, 1)
 
     def forward(self, v):
-        dv_dx = F.pad(v[:, :, :, :, 1:] - v[:, :, :, :, :-1], self.px, 'replicate')
-        dv_dy = F.pad(v[:, :, :, 1:, :] - v[:, :, :, :-1, :], self.py, 'replicate')
-        dv_dz = F.pad(v[:, :, 1:, :, :] - v[:, :, :-1, :, :], self.pz, 'replicate')
+        dv_dx = F.pad(v[:, :, :, :, 1:] - v[:, :, :, :, :-1], self.px, mode='replicate')
+        dv_dy = F.pad(v[:, :, :, 1:, :] - v[:, :, :, :-1, :], self.py, mode='replicate')
+        dv_dz = F.pad(v[:, :, 1:, :, :] - v[:, :, :-1, :, :], self.pz, mode='replicate')
 
         nabla_vx = torch.stack((dv_dx[:, 0], dv_dy[:, 0], dv_dz[:, 0]), 1)
         nabla_vy = torch.stack((dv_dx[:, 1], dv_dy[:, 1], dv_dz[:, 1]), 1)

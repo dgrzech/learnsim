@@ -5,21 +5,21 @@ import scipy.sparse as sp
 import torch
 
 
-def laplacian_1D(N):
+def laplacian_1d(N):
     diag = np.ones(N)
     return sp.spdiags([diag, -2.0 * diag, diag], [-1, 0, 1], N, N)
 
 
-def laplacian_3D(N):
-    L_1D = laplacian_1D(N)
+def laplacian_3d(N):
+    L_1D = laplacian_1d(N)
     I = sp.eye(N)
 
     return sp.kron(L_1D, sp.kron(I, I)) + sp.kron(I, sp.kron(L_1D, I)) + sp.kron(I, sp.kron(I, L_1D))
 
 
-def sobolev_kernel_1D(_s, _lambda):
+def sobolev_kernel_1d(_s, _lambda):
     # we do the eigendecomposition anyway for the sqrt, so might as well compute the smoothing kernel while at it
-    L = np.asarray(laplacian_1D(_s).todense())
+    L = np.asarray(laplacian_1d(_s).todense())
     w, v = np.linalg.eigh(L)
     w = 1.0 - _lambda * w
 
@@ -35,9 +35,9 @@ def sobolev_kernel_1D(_s, _lambda):
     return smoothing_kernel / np.sum(smoothing_kernel), smoothing_kernel_sqrt / np.sum(smoothing_kernel_sqrt)
 
 
-def sobolev_kernel_3D(_s, _lambda):
+def sobolev_kernel_3d(_s, _lambda):
     I = np.eye(_s ** 3)  # identity matrix
-    L = laplacian_3D(_s).todense()  # Laplacian matrix discretised via a 7-point finite-difference stencil
+    L = laplacian_3d(_s).todense()  # Laplacian matrix discretised via a 7-point finite-difference stencil
 
     v = np.zeros(_s ** 3)  # one-hot vector that corresponds to a discretised Dirac impulse of size s ** 3 voxels
     v[(_s ** 3) // 2] = 1.0
