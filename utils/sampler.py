@@ -6,7 +6,7 @@ import torch
 def sample_qv(mu_v, log_var_v, u_v, *args, **kwargs):
     sigma = torch.exp(0.5 * log_var_v) + 1e-5
     eps = torch.randn_like(sigma)
-    x = torch.randn_like(u_v)
+    x = torch.randn(1, device=u_v.device)
 
     no_samples = kwargs.get('no_samples', 1)
 
@@ -32,7 +32,7 @@ def sample_qv(mu_v, log_var_v, u_v, *args, **kwargs):
 def sample_qf(mu_f, log_var_f, u_f, no_samples=1):
     sigma = torch.exp(0.5 * log_var_f) + 1e-5
     eps = torch.randn_like(sigma)
-    x = torch.randn_like(u_f)
+    x = torch.randn(1, device=u_f.device)
 
     if no_samples == 1:
         return mu_f + eps * sigma + x * u_f
