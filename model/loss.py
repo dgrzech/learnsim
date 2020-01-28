@@ -209,7 +209,7 @@ class EntropyMultivariateNormal(Entropy):
             u_v = kwargs['u_v']
 
             sigma_v = torch.exp(0.5 * log_var_v)
-            return 0.5 * (torch.log(1.0 + torch.sum(torch.pow(u_v / sigma_v, 2))) + torch.sum(log_var_v))
+            return 0.5 * (torch.log1p(torch.sum(torch.pow(u_v / sigma_v, 2))) + torch.sum(log_var_v))
         elif len(kwargs) == 4:
             v_sample = kwargs['v_sample']
 
@@ -218,11 +218,11 @@ class EntropyMultivariateNormal(Entropy):
             u_v = kwargs['u_v']
 
             sigma_v = torch.exp(0.5 * log_var_v)
-            sample_centred = v_sample - mu_v
 
-            t1 = torch.sum(torch.pow(sample_centred / sigma_v, 2))
-            t2 = torch.sum(sample_centred *
-                           torch.pow(u_v * torch.pow(sigma_v, -2), 2) / (1.0 + torch.sum(torch.pow(u_v / sigma_v, 2)))
-                           * sample_centred)
+            v = (v_sample - mu_v) / sigma_v
+            u_n = u_v / sigma_v
+
+            t1 = torch.sum(torch.pow(v, 2))
+            t2 = torch.pow(torch.sum(v * u_n), 2) / (1.0 + torch.sum(torch.pow(u_n, 2)))
 
             return 0.5 * (t1 - t2)
