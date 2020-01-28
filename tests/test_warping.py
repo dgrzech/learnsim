@@ -1,5 +1,6 @@
 from model.loss import SSD
-from utils import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, standardise_im, save_im_to_disk, RegistrationModule
+from utils import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, standardise_im, save_im_to_disk, \
+    RegistrationModule
 
 from skimage import transform
 
@@ -26,7 +27,7 @@ class WarpingTestMethods(unittest.TestCase):
 
         n = 8
 
-        self.dim_x, self.dim_y, self.dim_z = n, n, n
+        self.dim_x = self.dim_y = self.dim_z = n
         self.dims_im = (1, 1, self.dim_x, self.dim_y, self.dim_z)
         self.dims_v = (1, 3, self.dim_x, self.dim_y, self.dim_z)
 
@@ -51,11 +52,13 @@ class WarpingTestMethods(unittest.TestCase):
         im_fixed = torch.randn(self.dims_im).to('cuda:0')
         im_moving = torch.randn(self.dims_im).to('cuda:0')
 
+        mask = torch.ones_like(im_fixed)
+
         transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + torch.zeros(self.dims_v).to('cuda:0')
         im_moving_warped = self.registration_module(im_moving, transformation)
 
-        unwarped_loss_value = self.loss(im_fixed, im_moving).item()
-        warped_loss_value = self.loss(im_fixed, im_moving_warped).item()
+        unwarped_loss_value = self.loss(im_fixed=im_fixed, im_moving=im_moving, mask=mask).item()
+        warped_loss_value = self.loss(im_fixed=im_fixed, im_moving=im_moving_warped, mask=mask).item()
 
         assert pytest.approx(unwarped_loss_value, 0.001) == warped_loss_value
 
@@ -162,7 +165,8 @@ class WarpingTestMethods(unittest.TestCase):
         load image and warp it
         """
 
-        im_path = '/vol/bitbucket/dig15/learnsim_biobank_train/biobank_9/1007582_T2_FLAIR_unbiased_brain_affine_to_mni.nii.gz'
+        im_path = \
+            '/vol/bitbucket/dig15/learnsim_biobank_train/biobank_8/1034854_T2_FLAIR_unbiased_brain_affine_to_mni.nii.gz'
         im_moving = sitk.ReadImage(im_path, sitk.sitkFloat32)
 
         im_moving = torch.from_numpy(transform.resize(

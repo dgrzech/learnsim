@@ -56,7 +56,7 @@ class LCC(DataLoss):
         elif len(kwargs) == 3:
             im_fixed = kwargs['im_fixed']
             im_moving = kwargs['im_moving']
-            mask = kwargs.get('mask', torch.ones_like(im_fixed))
+            mask = kwargs['mask']
 
             cross, var_F, var_M = self.map(im_fixed, im_moving)
             return self.reduce(cross, var_F, var_M, mask)
@@ -90,13 +90,13 @@ class SSD(DataLoss):
     def forward(self, **kwargs):
         if len(kwargs) == 2:
             z = kwargs['z']
-            mask = kwargs.get('mask', torch.ones_like(z))
+            mask = kwargs['mask']
 
             return self.reduce(z, mask)
         elif len(kwargs) == 3:
             im_fixed = kwargs['im_fixed']
             im_moving = kwargs['im_moving']
-            mask = kwargs.get('mask', torch.ones_like(im_fixed))
+            mask = kwargs['mask']
 
             z = self.map(im_fixed, im_moving)
             return self.reduce(z, mask)

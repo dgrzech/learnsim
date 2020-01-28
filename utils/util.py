@@ -227,7 +227,9 @@ def save_optimiser_to_disk(optimiser, file_path):
     torch.save(state_dict, file_path)
 
 
-def separable_conv_3d(field_out, *args, **kwargs):
+def separable_conv_3d(field, *args, **kwargs):
+    field_out = field.clone()
+
     if len(args) == 2:
         kernel = args[0]
         padding_sz = args[1]

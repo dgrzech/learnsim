@@ -20,7 +20,7 @@ class DiffTestMethods(unittest.TestCase):
         print(self._testMethodName + '\n')
 
         n = 8
-        self.dim_x, self.dim_y, self.dim_z = n, n, n
+        self.dim_x = self.dim_y = self.dim_z = n
         self.dims_v = (1, 3, self.dim_x, self.dim_y, self.dim_z)
 
         """
@@ -60,44 +60,32 @@ class DiffTestMethods(unittest.TestCase):
         test the derivative values are correct
         """
 
-        dv_x_dx = nabla_vx[0, 0]
-        dv_y_dx = nabla_vy[0, 0]
-        dv_z_dx = nabla_vz[0, 0]
-
-        dv_x_dy = nabla_vx[0, 1]
-        dv_y_dy = nabla_vy[0, 1]
-        dv_z_dy = nabla_vz[0, 1]
-
-        dv_x_dz = nabla_vx[0, 2]
-        dv_y_dz = nabla_vy[0, 2]
-        dv_z_dz = nabla_vz[0, 2]
-
         for idx_z in range(self.dim_z - 1):
             for idx_y in range(self.dim_y - 1):
                 for idx_x in range(self.dim_x - 1):
-                    dv_x_dx_val = dv_x_dx[idx_z, idx_y, idx_x].item()
-                    dv_y_dx_val = dv_y_dx[idx_z, idx_y, idx_x].item()
-                    dv_z_dx_val = dv_z_dx[idx_z, idx_y, idx_x].item()
+                    dvx_dx_val = nabla_vx[0, 0, idx_z, idx_y, idx_x].item()
+                    dvy_dx_val = nabla_vy[0, 0, idx_z, idx_y, idx_x].item()
+                    dvz_dx_val = nabla_vz[0, 0, idx_z, idx_y, idx_x].item()
 
-                    dv_x_dy_val = dv_x_dy[idx_z, idx_y, idx_x].item()
-                    dv_y_dy_val = dv_y_dy[idx_z, idx_y, idx_x].item()
-                    dv_z_dy_val = dv_z_dy[idx_z, idx_y, idx_x].item()
+                    dvx_dy_val = nabla_vx[0, 1, idx_z, idx_y, idx_x].item()
+                    dvy_dy_val = nabla_vy[0, 1, idx_z, idx_y, idx_x].item()
+                    dvz_dy_val = nabla_vz[0, 1, idx_z, idx_y, idx_x].item()
 
-                    dv_x_dz_val = dv_x_dz[idx_z, idx_y, idx_x].item()
-                    dv_y_dz_val = dv_y_dz[idx_z, idx_y, idx_x].item()
-                    dv_z_dz_val = dv_z_dz[idx_z, idx_y, idx_x].item()
+                    dvx_dz_val = nabla_vx[0, 2, idx_z, idx_y, idx_x].item()
+                    dvy_dz_val = nabla_vy[0, 2, idx_z, idx_y, idx_x].item()
+                    dvz_dz_val = nabla_vz[0, 2, idx_z, idx_y, idx_x].item()
 
-                    assert pytest.approx(dv_x_dx_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_y_dx_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_z_dx_val, 1e-5) == 0.0
+                    assert pytest.approx(dvx_dx_val, 1e-5) == 0.0
+                    assert pytest.approx(dvy_dx_val, 1e-5) == 0.0
+                    assert pytest.approx(dvz_dx_val, 1e-5) == 0.0
 
-                    assert pytest.approx(dv_x_dy_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_y_dy_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_z_dy_val, 1e-5) == 0.0
+                    assert pytest.approx(dvx_dy_val, 1e-5) == 0.0
+                    assert pytest.approx(dvy_dy_val, 1e-5) == 0.0
+                    assert pytest.approx(dvz_dy_val, 1e-5) == 0.0
 
-                    assert pytest.approx(dv_x_dz_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_y_dz_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_z_dz_val, 1e-5) == 0.0
+                    assert pytest.approx(dvx_dz_val, 1e-5) == 0.0
+                    assert pytest.approx(dvy_dz_val, 1e-5) == 0.0
+                    assert pytest.approx(dvz_dz_val, 1e-5) == 0.0
 
     def test_diff_v(self):
         """
@@ -127,49 +115,37 @@ class DiffTestMethods(unittest.TestCase):
         test the derivative values are correct
         """
 
-        dv_x_dx = nabla_vx[0, 0]
-        dv_y_dx = nabla_vy[0, 0]
-        dv_z_dx = nabla_vz[0, 0]
-
-        dv_x_dy = nabla_vx[0, 1]
-        dv_y_dy = nabla_vy[0, 1]
-        dv_z_dy = nabla_vz[0, 1]
-
-        dv_x_dz = nabla_vx[0, 2]
-        dv_y_dz = nabla_vy[0, 2]
-        dv_z_dz = nabla_vz[0, 2]
-
         for idx_z in range(self.dim_z):
             for idx_y in range(self.dim_y):
-                for idx_x in range(self.dim_z):
-                    dv_x_dx_val = dv_x_dx[idx_z, idx_y, idx_x].item()
-                    dv_y_dx_val = dv_y_dx[idx_z, idx_y, idx_x].item()
-                    dv_z_dx_val = dv_z_dx[idx_z, idx_y, idx_x].item()
+                for idx_x in range(self.dim_x):
+                    dvx_dx_val = nabla_vx[0, 0, idx_z, idx_y, idx_x].item()
+                    dvy_dx_val = nabla_vy[0, 0, idx_z, idx_y, idx_x].item()
+                    dvz_dx_val = nabla_vz[0, 0, idx_z, idx_y, idx_x].item()
 
-                    dv_x_dy_val = dv_x_dy[idx_z, idx_y, idx_x].item()
-                    dv_y_dy_val = dv_y_dy[idx_z, idx_y, idx_x].item()
-                    dv_z_dy_val = dv_z_dy[idx_z, idx_y, idx_x].item()
+                    dvx_dy_val = nabla_vx[0, 1, idx_z, idx_y, idx_x].item()
+                    dvy_dy_val = nabla_vy[0, 1, idx_z, idx_y, idx_x].item()
+                    dvz_dy_val = nabla_vz[0, 1, idx_z, idx_y, idx_x].item()
 
-                    dv_x_dz_val = dv_x_dz[idx_z, idx_y, idx_x].item()
-                    dv_y_dz_val = dv_y_dz[idx_z, idx_y, idx_x].item()
-                    dv_z_dz_val = dv_z_dz[idx_z, idx_y, idx_x].item()
+                    dvx_dz_val = nabla_vx[0, 2, idx_z, idx_y, idx_x].item()
+                    dvy_dz_val = nabla_vy[0, 2, idx_z, idx_y, idx_x].item()
+                    dvz_dz_val = nabla_vz[0, 2, idx_z, idx_y, idx_x].item()
 
-                    if idx_x == 0 or idx_x == self.dim_x - 1 \
-                            or idx_y == 0 or idx_y == self.dim_y - 1 \
-                            or idx_z == 0 or idx_z == self.dim_z - 1:
+                    if idx_x == self.dim_x - 1 \
+                            or idx_y == self.dim_y - 1 \
+                            or idx_z == self.dim_z - 1:
                         continue
 
-                    assert pytest.approx(dv_x_dx_val, 1e-5) == 1.0
-                    assert pytest.approx(dv_y_dx_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_z_dx_val, 1e-5) == 0.0
+                    assert pytest.approx(dvx_dx_val, 1e-5) == 1.0
+                    assert pytest.approx(dvy_dx_val, 1e-5) == 0.0
+                    assert pytest.approx(dvz_dx_val, 1e-5) == 0.0
 
-                    assert pytest.approx(dv_x_dy_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_y_dy_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_z_dy_val, 1e-5) == 0.0
+                    assert pytest.approx(dvx_dy_val, 1e-5) == 0.0
+                    assert pytest.approx(dvy_dy_val, 1e-5) == 0.0
+                    assert pytest.approx(dvz_dy_val, 1e-5) == 0.0
 
-                    assert pytest.approx(dv_x_dz_val, 1e-5) == 0.0
-                    assert pytest.approx(dv_y_dz_val, 1e-5) == 2.0 * idx_z
-                    assert pytest.approx(dv_z_dz_val, 1e-5) == 0.0
+                    assert pytest.approx(dvx_dz_val, 1e-5) == 0.0
+                    assert pytest.approx(dvy_dz_val, 1e-5) == 2.0 * (float(idx_z) + 0.5)
+                    assert pytest.approx(dvz_dz_val, 1e-5) == 0.0
 
     def test_det_J(self):
         """

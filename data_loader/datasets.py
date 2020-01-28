@@ -14,7 +14,7 @@ def init_mu_v(dims):
 
 
 def init_log_var_v(dims):
-    len_voxel = float(dims[1] / 2.0)
+    len_voxel = float(dims[1]) / 2.0
     var_v = float(len_voxel ** (-2)) * torch.ones(dims)
 
     return torch.log(var_v)
@@ -102,6 +102,8 @@ class BiobankDataset(Dataset):
                 transform.resize(
                     np.transpose(sitk.GetArrayFromImage(mask_fixed), (2, 1, 0)),
                     (self.dim_x, self.dim_y, self.dim_z), order=0))
+        else:
+            mask_fixed = torch.ones_like(im_fixed)
 
         im_fixed = standardise_im(im_fixed)  # standardise image
         im_fixed = rescale_im(im_fixed)  # rescale to range (-1, 1)
@@ -142,6 +144,8 @@ class BiobankDataset(Dataset):
                 transform.resize(
                     np.transpose(sitk.GetArrayFromImage(mask_moving), (2, 1, 0)),
                     (self.dim_x, self.dim_y, self.dim_z), order=0))
+        else:
+            mask_moving = torch.ones_like(im_moving)
 
         im_moving = standardise_im(im_moving)  # standardise image
         im_moving = rescale_im(im_moving)  # rescale to range (-1, 1)

@@ -21,7 +21,7 @@ class EncInitTestMethods(unittest.TestCase):
         print(self._testMethodName + '\n')
 
         n = 64
-        self.dim_x, self.dim_y, self.dim_z = n, n, n
+        self.dim_x = self.dim_y = self.dim_z = n
         self.dims_im = (1, 1, self.dim_x, self.dim_y, self.dim_z)
 
         """
@@ -40,6 +40,8 @@ class EncInitTestMethods(unittest.TestCase):
         self.loss_SSD = SSD().to('cuda:0')
         self.loss_LCC = LCC(self.s).to('cuda:0')
 
+        """"""
+
     def tearDown(self):
         del self.CNN_SSD, self.loss_SSD
 
@@ -47,10 +49,12 @@ class EncInitTestMethods(unittest.TestCase):
         im_fixed = torch.randn(self.dims_im).to('cuda:0')
         im_moving_warped = torch.randn(self.dims_im).to('cuda:0')
 
+        mask = torch.ones_like(im_fixed)
+
         z = self.CNN_SSD(im_fixed, im_moving_warped)
 
-        val = self.loss_SSD(None, None, z).item()
-        val_true = self.loss_SSD(im_fixed, im_moving_warped).item()
+        val = self.loss_SSD(z=z, mask=mask).item()
+        val_true = self.loss_SSD(im_fixed=im_fixed, im_moving=im_moving_warped, mask=mask).item()
 
         assert pytest.approx(val, 0.01) == val_true
 
@@ -58,14 +62,14 @@ class EncInitTestMethods(unittest.TestCase):
         im_fixed = torch.randn(self.dims_im).to('cuda:0')
         im_moving_warped = torch.randn(self.dims_im).to('cuda:0')
 
+        mask = torch.ones_like(im_fixed)
+
         # single feature map
         CNN_LCC_one_feature_map = CNN_LCC(self.s, 1).to('cuda:0')
-        loss_LCC = LCC(self.s).to('cuda:0')
-
         z = CNN_LCC_one_feature_map(im_fixed, im_moving_warped)
 
-        val = loss_LCC(None, None, z).item()
-        val_true = self.loss_LCC(im_fixed, im_moving_warped).item()
+        val = self.loss_LCC(z=z, mask=mask).item()
+        val_true = self.loss_LCC(im_fixed=im_fixed, im_moving=im_moving_warped, mask=mask).item()
 
         assert -1.0 * val > 0.0
         assert pytest.approx(val, 0.01) == val_true
@@ -74,8 +78,8 @@ class EncInitTestMethods(unittest.TestCase):
         CNN_LCC_multiple_feature_maps = CNN_LCC(self.s, self.no_feature_maps).to('cuda:0')
         z = CNN_LCC_multiple_feature_maps(im_fixed, im_moving_warped)
 
-        val = self.loss_LCC(None, None, z).item()
-        val_true = self.loss_LCC(im_fixed, im_moving_warped).item()
+        val = self.loss_LCC(z=z, mask=mask).item()
+        val_true = self.loss_LCC(im_fixed=im_fixed, im_moving=im_moving_warped, mask=mask).item()
 
         assert -1.0 * val > 0.0
         assert pytest.approx(val, 0.01) == val_true

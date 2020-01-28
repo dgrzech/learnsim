@@ -22,7 +22,7 @@ class LossTestMethods(unittest.TestCase):
         print(self._testMethodName + '\n')
 
         n = 4
-        self.dim_x, self.dim_y, self.dim_z = n, n, n
+        self.dim_x = self.dim_y = self.dim_z = n
 
         """
         LCC
@@ -40,18 +40,18 @@ class LossTestMethods(unittest.TestCase):
 
     def test_entropy(self):
         # initialise the loss object
-        entropy = EntropyMultivariateNormal()
+        entropy = EntropyMultivariateNormal().to('cuda:0')
 
         # initialise sigma_v
-        log_var_v = torch.log(torch.abs(torch.randn(self.dim_x, self.dim_y, self.dim_z)))
-        sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
+        log_var_v = torch.log(torch.abs(torch.randn(self.dim_x, self.dim_y, self.dim_z))).to('cuda:0')
+        sigma_v = torch.exp(0.5 * log_var_v)
         var_v = sigma_v ** 2
 
         # initialise the first mode of variation
-        u_v = torch.zeros((self.dim_x, self.dim_y, self.dim_z))
+        u_v = torch.zeros((self.dim_x, self.dim_y, self.dim_z)).to('cuda:0')
 
         # calculate the entropy
-        val = entropy(log_var_v, u_v).item()
+        val = entropy(log_var_v=log_var_v, u_v=u_v).item()
         val_true = -0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
 
         assert pytest.approx(val, 0.01) == val_true
@@ -60,6 +60,8 @@ class LossTestMethods(unittest.TestCase):
         # initialise the images
         im_fixed = torch.zeros(1, 1, self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
         im_moving = 2.0 * torch.ones(1, 1, self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
+
+        mask = torch.ones_like(im_fixed)
     
         # calculate the local means
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
@@ -80,7 +82,7 @@ class LossTestMethods(unittest.TestCase):
         assert torch.all(torch.eq(var_M, zero_tensor))
 
         # calculate the value of loss
-        val = self.loss_LCC(im_fixed, im_moving).item()
+        val = self.loss_LCC(im_fixed=im_fixed, im_moving=im_moving, mask=mask).item()
         val_true = 0.0
 
         assert pytest.approx(val, 0.01) == val_true
@@ -89,6 +91,8 @@ class LossTestMethods(unittest.TestCase):
         # initialise the images
         im_fixed = torch.randn(1, 1, self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
         im_moving = 4.0 * im_fixed
+
+        mask = torch.ones_like(im_fixed)
 
         # calculate the local means
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
@@ -104,7 +108,7 @@ class LossTestMethods(unittest.TestCase):
         assert torch.all(torch.eq(16.0 * var_F, var_M))
 
         # calculate the value of loss
-        val = self.loss_LCC(im_fixed, im_moving).item()
+        val = self.loss_LCC(im_fixed=im_fixed, im_moving=im_moving, mask=mask).item()
         no_voxels = float(self.dim_x * self.dim_y * self.dim_z)
 
         assert pytest.approx(val, 0.01) == -1.0 * no_voxels
