@@ -50,7 +50,7 @@ class LCC(DataLoss):
     def forward(self, **kwargs):
         if len(kwargs) == 2:
             z = kwargs['z']
-            mask = kwargs.get('mask', torch.ones_like(z))
+            mask = kwargs['mask']
 
             return -1.0 * torch.sum(z * mask)
         elif len(kwargs) == 3:

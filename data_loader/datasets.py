@@ -111,6 +111,9 @@ class BiobankDataset(Dataset):
         self.im_fixed = im_fixed.unsqueeze(0)
         self.mask_fixed = mask_fixed.unsqueeze(0)
         self.seg_fixed = seg_fixed.unsqueeze(0)
+        
+        self.log_var_f = init_log_var_f(self.dims_im)
+        self.u_f = init_u_f(self.dims_im)
 
     def __len__(self):
         return len(self.im_seg_pairs)
@@ -176,16 +179,5 @@ class BiobankDataset(Dataset):
         else:
             u_v = init_u_v(self.dims_v)
 
-        # sigma_f
-        if path.exists(path.join(self.save_paths['log_var_f'], 'log_var_f.pt')):
-            log_var_f = torch.load(path.join(self.save_paths['log_var_f'], 'log_var_f.pt'))
-        else:
-            log_var_f = init_log_var_f(self.dims_im)
-        # u_f
-        if path.exists(path.join(self.save_paths['u_f'], 'u_f.pt')):
-            u_f = torch.load(path.join(self.save_paths['u_f'], 'u_f.pt'))
-        else:
-            u_f = init_u_f(self.dims_im)
-
         return idx, self.im_fixed, self.seg_fixed, self.mask_fixed, \
-               im_moving, seg_moving, mu_v, log_var_v, u_v, log_var_f, u_f
+               im_moving, seg_moving, mu_v, log_var_v, u_v, self.log_var_f, self.u_f
