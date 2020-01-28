@@ -99,6 +99,19 @@ def init_identity_grid_3d(nx, ny, nz):
     return torch.cat((x, y, z), 4)
 
 
+def absolute_to_normalised(field, dim):
+    """
+    pixel coordinates to (-1, 1)
+    """
+
+    field_out = field.clone()
+    
+    for idx in range(3):
+        field_out[:, idx] *= (2.0 / float(dim - 1.0))
+
+    return field_out
+
+
 def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
     """
     normalise the coordinates of a pixel to range (-1, 1)

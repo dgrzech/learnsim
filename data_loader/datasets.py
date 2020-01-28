@@ -14,9 +14,7 @@ def init_mu_v(dims):
 
 
 def init_log_var_v(dims):
-    len_voxel = float(dims[1]) / 2.0
-    var_v = float(len_voxel ** (-2)) * torch.ones(dims)
-
+    var_v = torch.ones(dims)
     return torch.log(var_v)
 
 
