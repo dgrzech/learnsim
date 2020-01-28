@@ -262,7 +262,7 @@ class RegistrationTestMethods(unittest.TestCase):
             entropy_term = self.entropy(log_var_v=log_var_v, u_v=u_v).sum()
             entropy_term += self.entropy(v_sample=v_sample, mu_v=mu_v, log_var_v=log_var_v, u_v=u_v)
 
-            loss_qv = data_term + reg_term + entropy_term
+            loss_qv = data_term + reg_term - entropy_term
             loss_qv.backward()
             optimizer_v.step()
 

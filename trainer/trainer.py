@@ -238,7 +238,7 @@ class Trainer(BaseTrainer):
                 self.optimizer_q_v.zero_grad()
 
                 data_term, reg_term, entropy_term = self._registration_step(im_fixed, im_moving, mu_v, log_var_v, u_v)
-                loss_q_v = data_term + reg_term + entropy_term
+                loss_q_v = data_term + reg_term - entropy_term
 
                 loss_q_v.backward()
                 self.optimizer_q_v.step()  # backprop
