@@ -16,7 +16,7 @@ class DataLoss(nn.Module, ABC):
         super(DataLoss, self).__init__()
 
     @abstractmethod
-    def forward(self, im_fixed, im_moving, z, mask):
+    def forward(self, **kwargs):
         pass
     
     @abstractmethod
@@ -47,15 +47,19 @@ class LCC(DataLoss):
             nn.init.ones_(self.kernel.weight)
             self.kernel.weight.requires_grad_(False)
 
-    def forward(self, im_fixed=None, im_moving=None, z=None, mask=None):
-        if z is not None:
-            if mask is not None:
-                return -1.0 * torch.sum(z * mask)
-            else:
-                return -1.0 * torch.sum(z)
+    def forward(self, **kwargs):
+        if len(kwargs) == 2:
+            z = kwargs['z']
+            mask = kwargs.get('mask', torch.ones_like(z))
 
-        cross, var_F, var_M = self.map(im_fixed, im_moving)
-        return self.reduce(cross, var_F, var_M, mask)
+            return -1.0 * torch.sum(z * mask)
+        elif len(kwargs) == 3:
+            im_fixed = kwargs['im_fixed']
+            im_moving = kwargs['im_moving']
+            mask = kwargs.get('mask', torch.ones_like(im_fixed))
+
+            cross, var_F, var_M = self.map(im_fixed, im_moving)
+            return self.reduce(cross, var_F, var_M, mask)
 
     def map(self, im_fixed, im_moving):
         im_fixed = F.pad(im_fixed, self.padding, mode='replicate')
@@ -70,13 +74,9 @@ class LCC(DataLoss):
 
         return cross, var_F, var_M
 
-    def reduce(self, cross, var_F, var_M, mask=None):
+    def reduce(self, cross, var_F, var_M, mask):
         lcc = cross * cross / (var_F * var_M + 1e-5)
-
-        if mask is not None:
-            return -1.0 * torch.sum(lcc * mask)
-
-        return -1.0 * torch.sum(lcc)
+        return -1.0 * torch.sum(lcc * mask)
 
 
 class SSD(DataLoss):
@@ -87,24 +87,25 @@ class SSD(DataLoss):
     def __init__(self):
         super(SSD, self).__init__()
 
-    def forward(self, im_fixed=None, im_moving=None, z=None, mask=None):
-        if z is not None:
-            if mask is not None:
-                return self.reduce(z * mask)
-            else:
-                return self.reduce(z)
+    def forward(self, **kwargs):
+        if len(kwargs) == 2:
+            z = kwargs['z']
+            mask = kwargs.get('mask', torch.ones_like(z))
 
-        z = self.map(im_fixed, im_moving)
-        return self.reduce(z, mask)
+            return self.reduce(z, mask)
+        elif len(kwargs) == 3:
+            im_fixed = kwargs['im_fixed']
+            im_moving = kwargs['im_moving']
+            mask = kwargs.get('mask', torch.ones_like(im_fixed))
+
+            z = self.map(im_fixed, im_moving)
+            return self.reduce(z, mask)
 
     def map(self, im_fixed, im_moving):
         return im_fixed - im_moving
 
-    def reduce(self, z, mask=None):
-        if mask is not None:
-            return 0.5 * torch.sum(torch.pow(z * mask, 2))
-
-        return 0.5 * torch.sum(torch.pow(z, 2))
+    def reduce(self, z, mask):
+        return 0.5 * torch.sum(torch.pow(z * mask, 2))
 
 
 """
@@ -190,7 +191,7 @@ class Entropy(nn.Module, ABC):
         super(Entropy, self).__init__()
 
     @abstractmethod
-    def forward(self, log_var_v, u_v):
+    def forward(self, **kwargs):
         pass
 
 
@@ -202,34 +203,26 @@ class EntropyMultivariateNormal(Entropy):
     def __init__(self):
         super(EntropyMultivariateNormal, self).__init__()
 
-    def forward(self, log_var_v, u_v):
-        sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
-        return -0.5 * (torch.log(1.0 + torch.sum(u_v * torch.pow(sigma_v, -2) * u_v)) + torch.sum(log_var_v))
+    def forward(self, **kwargs):
+        if len(kwargs) == 2:
+            log_var_v = kwargs['log_var_v']
+            u_v = kwargs['u_v']
 
+            sigma_v = torch.exp(0.5 * log_var_v)
+            return -0.5 * (torch.log(1.0 + torch.sum(torch.pow(u_v / sigma_v, 2))) + torch.sum(log_var_v))
+        elif len(kwargs) == 4:
+            v_sample = kwargs['v_sample']
 
-"""
-KL divergence
-"""
+            mu_v = kwargs['mu_v']
+            log_var_v = kwargs['log_var_v']
+            u_v = kwargs['u_v']
 
+            sigma_v = torch.exp(0.5 * log_var_v)
+            sample_centred = v_sample - mu_v
 
-class KL(nn.Module):
-    def __init__(self, diff_op):
-        super(KL, self).__init__()
+            t1 = torch.sum(torch.pow(sample_centred / sigma_v, 2))
+            t2 = torch.sum(sample_centred *
+                           torch.pow(u_v * torch.pow(sigma_v, -2), 2) / (1.0 + torch.sum(torch.pow(u_v / sigma_v, 2)))
+                           * sample_centred)
 
-        if diff_op == 'GradientOperator':
-            self.diff_op = GradientOperator()
-        else:
-            raise Exception('Unknown differential operator')
-
-    def forward(self, mu_v, log_var_v, u_v):
-        nabla_ux, nabla_uy, nabla_uz = self.diff_op(u_v)
-        nabla_vx, nabla_vy, nabla_vz = self.diff_op(mu_v)
-
-        sigma_v = torch.exp(0.5 * log_var_v) + 1e-5
-
-        t1 = 36.0 * torch.sum(sigma_v ** 2) \
-             + torch.sum(torch.pow(nabla_ux, 2)) + torch.sum(torch.pow(nabla_uy, 2)) + torch.sum(torch.pow(nabla_uz, 2))
-        t2 = torch.sum(nabla_vx ** 2) + torch.sum(nabla_vy ** 2) + torch.sum(nabla_vz ** 2)
-        t3 = -1.0 * (torch.log(1.0 + torch.sum(u_v * torch.pow(sigma_v, -2) * u_v)) + torch.sum(log_var_v))
-
-        return -0.5 * (t1 + t2 + t3)
+            return 0.5 * (t1 - t2)
