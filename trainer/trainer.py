@@ -112,9 +112,6 @@ class Trainer(BaseTrainer):
         save the variational parameters to disk in order to load at the next epoch
         """
         im_pair_idxs = im_pair_idxs.tolist()
-        
-        log_var_f, u_f = torch.mean(self.log_var_f, dim=0), torch.mean(self.u_f, dim=0)
-        log_var_f, u_f = log_var_f.cpu(), u_f.cpu()
 
         self._save_u_f()
         self._save_log_var_f()
@@ -367,7 +364,7 @@ class Trainer(BaseTrainer):
 
         return loss_q_v.item() / curr_batch_size
 
-    def _step_q_f_q_phi(self, epoch, batch_idx, curr_batch_size, im_moving, mu_v, log_var_v, u_v):
+    def _step_q_f_q_phi(self, epoch, curr_batch_size, im_moving, mu_v, log_var_v, u_v):
         """
         update parameters of q_f and q_phi
         """
@@ -401,7 +398,8 @@ class Trainer(BaseTrainer):
             im_out = self.enc(self.im_fixed, im_moving_warped)
             loss_q_f_q_phi += self.data_loss(z=im_out, mask=self.mask_fixed).sum()
         else:
-            loss_q_f_q_phi += self.data_loss(im_fixed=self.im_fixed, im_moving=im_moving_warped, mask=self.mask_fixed).sum()
+            loss_q_f_q_phi += self.data_loss(im_fixed=self.im_fixed, im_moving=im_moving_warped,
+                                             mask=self.mask_fixed).sum()
 
         if self.no_samples == 1:
             im_fixed_sample = sample_qf(self.im_fixed, self.log_var_f, self.u_f, 1)  # draw sample from q_f
@@ -431,7 +429,10 @@ class Trainer(BaseTrainer):
         loss_q_f_q_phi.backward()
 
         self.optimizer_q_f.step()  # backprop
-        self.optimizer_q_phi.step()  
+        self.optimizer_q_phi.step()
+
+        self.log_var_f = torch.mean(self.log_var_f, dim=0)
+        self.u_f = torch.mean(self.u_f, dim=0)
 
         # disable gradients
         self.enc.eval()
@@ -516,14 +517,12 @@ class Trainer(BaseTrainer):
             total_loss = 0.0
 
             # q_v
-            loss_q_v = self._step_q_v(epoch, batch_idx, curr_batch_size, im_pair_idxs,
-                                      im_moving, mu_v, log_var_v, u_v)
+            loss_q_v = self._step_q_v(epoch, batch_idx, curr_batch_size, im_pair_idxs, im_moving, mu_v, log_var_v, u_v)
             total_loss += loss_q_v
 
             if self.learn_sim_metric:  # q_f and q_phi
                 self.logger.info('\noptimising q_f and q_phi..')
-                loss_q_f_q_phi = self._step_q_f_q_phi(epoch, batch_idx, curr_batch_size,
-                                                      im_moving, mu_v, log_var_v, u_v)
+                loss_q_f_q_phi = self._step_q_f_q_phi(epoch, curr_batch_size, im_moving, mu_v, log_var_v, u_v)
                 total_loss += loss_q_f_q_phi
 
             # save tensors with the updated variational parameters
@@ -550,12 +549,6 @@ class Trainer(BaseTrainer):
 
                 # save images, fields etc.
                 nabla_x_batch, nabla_y_batch, nabla_z_batch = get_module_attr(self.reg_loss, 'diff_op')(transformation)
-
-                dim = nabla_x_batch.size()[-1]
-                nabla_x_batch *= (dim - 1.0) / 2.0
-                nabla_y_batch *= (dim - 1.0) / 2.0
-                nabla_z_batch *= (dim - 1.0) / 2.0
-
                 det_J_transformation_batch = calc_det_J(nabla_x_batch, nabla_y_batch, nabla_z_batch) + 1e-5
                 log_det_J_transformation_batch = torch.log10(det_J_transformation_batch)
 

@@ -8,7 +8,6 @@ import json
 import nibabel as nib
 import numpy as np
 import pandas as pd
-import SimpleITK as sitk
 import torch
 import torch.nn.functional as F
 
@@ -33,7 +32,7 @@ def write_json(content, fname):
 
 def inf_loop(data_loader):
     """
-    wrapper function for endless data loader.
+    wrapper function for endless data loader
     """
 
     for loader in repeat(data_loader):
@@ -64,7 +63,7 @@ def get_module_attr(module, name):
 
 def init_identity_grid_2d(nx, ny):
     """
-    initialise a 2D grid to use with grid_sample
+    initialise a 2D identity grid
     """
 
     x = torch.linspace(-1, 1, steps=nx)
@@ -81,7 +80,7 @@ def init_identity_grid_2d(nx, ny):
 
 def init_identity_grid_3d(nx, ny, nz):
     """
-    initialise a 3D grid to use with grid_sample
+    initialise a 3D identity grid
     """
 
     x = torch.linspace(-1, 1, steps=nx)
@@ -99,22 +98,9 @@ def init_identity_grid_3d(nx, ny, nz):
     return torch.cat((x, y, z), 4)
 
 
-def absolute_to_normalised(field, dim):
-    """
-    pixel coordinates to (-1, 1)
-    """
-
-    field_out = field.clone()
-    
-    for idx in range(3):
-        field_out[:, idx] *= (2.0 / float(dim - 1.0))
-
-    return field_out
-
-
 def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
     """
-    normalise the coordinates of a pixel to range (-1, 1)
+    transform the coordinates of a pixel to range (-1, 1)
     """
 
     x = -1.0 + 2.0 * px_idx_x / (dim_x - 1.0)
@@ -125,7 +111,7 @@ def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
 
 def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     """
-    normalise the coordinates of a pixel to range (-1, 1)
+    transform the coordinates of a pixel to range (-1, 1)
     """
 
     x = -1.0 + 2.0 * px_idx_x / (dim_x - 1.0)
@@ -133,33 +119,6 @@ def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     z = -1.0 + 2.0 * px_idx_z / (dim_z - 1.0)
 
     return x, y, z
-
-
-def normalised_3d_to_pixel_idx(x, y, z, dim_x, dim_y, dim_z):
-    px_idx_x = (x + 1.0) * (dim_x - 1.0) / 2.0
-    px_idx_y = (y + 1.0) * (dim_y - 1.0) / 2.0
-    px_idx_z = (z + 1.0) * (dim_z - 1.0) / 2.0
-
-    return px_idx_x, px_idx_y, px_idx_z
-
-
-def resample_im_to_be_isotropic(im):
-    im_spacing = im.GetSpacing()
-    im_size = im.GetSize()
-
-    min_spacing = min(im_spacing)
-
-    new_spacing = [min_spacing, min_spacing, min_spacing]
-    new_size = [int(round(im_size[0] * (im_spacing[0] / min_spacing))),
-                int(round(im_size[1] * (im_spacing[1] / min_spacing))),
-                int(round(im_size[2] * (im_spacing[2] / min_spacing)))]
-
-    resampled_im = sitk.Resample(im, new_size, sitk.Transform(),
-                                 sitk.sitkLinear, im.GetOrigin(),
-                                 new_spacing, im.GetDirection(), 0.0,
-                                 im.GetPixelID())
-
-    return resampled_im
 
 
 def rescale_im(im, range_min=-1.0, range_max=1.0):
@@ -170,19 +129,6 @@ def rescale_im(im, range_min=-1.0, range_max=1.0):
     im_min, im_max = torch.min(im), torch.max(im)
 
     im = (range_max - range_min) * (im - im_min) / (im_max - im_min) + range_min
-    return im
-
-
-def standardise_im(im):
-    """
-    standardise an image to zero mean and unit variance 
-    """
-
-    im_mean, im_std = torch.mean(im), torch.std(im)
-    
-    im -= im_mean
-    im /= im_std
-
     return im
 
 
@@ -288,6 +234,33 @@ def separable_conv_3d(field, *args, **kwargs):
         field_out = F.conv3d(field_out, kernel_z, groups=3)
         field_out = F.conv3d(field_out, kernel_y, groups=3)
         field_out = F.conv3d(field_out, kernel_x, groups=3)
+
+    return field_out
+
+
+def standardise_im(im):
+    """
+    standardise an image to zero mean and unit variance
+    """
+
+    im_mean, im_std = torch.mean(im), torch.std(im)
+
+    im -= im_mean
+    im /= im_std
+
+    return im
+
+
+def transform_coordinates(field):
+    """
+    coordinate transformation from absolute coordinates (0, 1, ..., n) to normalised (-1, ..., 1)
+    """
+
+    field_out = field.clone()
+    dims = field.size()[2:]
+
+    for idx in range(3):
+        field_out[:, idx] = field_out[:, idx] * 2.0 / float(dims[idx] - 1)
 
     return field_out
 

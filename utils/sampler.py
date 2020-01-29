@@ -1,13 +1,11 @@
-from utils import absolute_to_normalised, separable_conv_3d
+from utils import separable_conv_3d, transform_coordinates
 
 import torch
 
 
 def sample_qv(mu_v, log_var_v, u_v, *args, **kwargs):
-    dim = log_var_v.size()[-1]
-
-    sigma = absolute_to_normalised(torch.exp(0.5 * log_var_v), dim)
-    u = absolute_to_normalised(u_v, dim)
+    sigma = transform_coordinates(torch.exp(0.5 * log_var_v))
+    u = transform_coordinates(u_v)
 
     eps = torch.randn(sigma.size(), device=sigma.device)
     x = torch.randn(1, device=u_v.device)

@@ -1,4 +1,4 @@
-from utils import calc_det_J, init_identity_grid_3d, GradientOperator
+from utils import calc_det_J, init_identity_grid_3d, pixel_to_normalised_3d, GradientOperator
 
 import numpy as np
 import pytest
@@ -97,13 +97,11 @@ class DiffTestMethods(unittest.TestCase):
         for idx_z in range(v.shape[2]):
             for idx_y in range(v.shape[3]):
                 for idx_x in range(v.shape[4]):
-                    v_x = idx_x
-                    v_y = idx_z ** 2
-                    v_z = 0.0
+                    x, y, z = pixel_to_normalised_3d(idx_x, idx_y, idx_z, v.shape[4], v.shape[3], v.shape[2])
 
-                    v[0, 0, idx_z, idx_y, idx_x] = v_x
-                    v[0, 1, idx_z, idx_y, idx_x] = v_y
-                    v[0, 2, idx_z, idx_y, idx_x] = v_z
+                    v[0, 0, idx_z, idx_y, idx_x] = x
+                    v[0, 1, idx_z, idx_y, idx_x] = 1.5 * y + 3.0 * z + 1.0
+                    v[0, 2, idx_z, idx_y, idx_x] = 0.0
 
         """
         calculate its derivative
@@ -140,11 +138,11 @@ class DiffTestMethods(unittest.TestCase):
                     assert pytest.approx(dvz_dx_val, 1e-5) == 0.0
 
                     assert pytest.approx(dvx_dy_val, 1e-5) == 0.0
-                    assert pytest.approx(dvy_dy_val, 1e-5) == 0.0
+                    assert pytest.approx(dvy_dy_val, 1e-5) == 1.5
                     assert pytest.approx(dvz_dy_val, 1e-5) == 0.0
 
                     assert pytest.approx(dvx_dz_val, 1e-5) == 0.0
-                    assert pytest.approx(dvy_dz_val, 1e-5) == 2.0 * (float(idx_z) + 0.5)
+                    assert pytest.approx(dvy_dz_val, 1e-5) == 3.0
                     assert pytest.approx(dvz_dz_val, 1e-5) == 0.0
 
     def test_det_J(self):
@@ -218,10 +216,6 @@ class DiffTestMethods(unittest.TestCase):
 
         nabla_x, nabla_y, nabla_z = self.diff_op(identity_transformation)
 
-        nabla_x *= (self.dim_x - 1.0) / 2.0
-        nabla_y *= (self.dim_y - 1.0) / 2.0
-        nabla_z *= (self.dim_z - 1.0) / 2.0
-
         """
         calculate the log determinant of the Jacobian
         """
@@ -266,11 +260,6 @@ class DiffTestMethods(unittest.TestCase):
         """
 
         nabla_x, nabla_y, nabla_z = self.diff_op(transformation)
-
-        nabla_x *= (self.dim_x - 1.0) / 2.0
-        nabla_y *= (self.dim_y - 1.0) / 2.0
-        nabla_z *= (self.dim_z - 1.0) / 2.0
-
         det_J = calc_det_J(nabla_x, nabla_y, nabla_z)
 
         log_det_J = torch.log10(det_J)

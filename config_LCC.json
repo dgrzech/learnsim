@@ -1,5 +1,5 @@
 {
-    "name": "LearnSim",
+    "name": "lcc_var_params_learn_sim",
     "n_gpu": 1,
 
     "arch": {
@@ -20,7 +20,7 @@
         "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 1000.0
+            "w_reg": 0.05
         }
     },
 

@@ -33,27 +33,32 @@ class LossTestMethods(unittest.TestCase):
         self.sz = float(self.kernel_size ** 3)
 
         self.padding = (self.s, self.s, self.s, self.s, self.s, self.s)
+
+        self.entropy = EntropyMultivariateNormal().to('cuda:0')
         self.loss_LCC = LCC(self.s).to('cuda:0')
 
     def tearDown(self):
         del self.loss_LCC
 
     def test_entropy(self):
-        # initialise the loss object
-        entropy = EntropyMultivariateNormal().to('cuda:0')
-
-        # initialise sigma_v
-        log_var_v = torch.log(torch.abs(torch.randn(self.dim_x, self.dim_y, self.dim_z))).to('cuda:0')
-        sigma_v = torch.exp(0.5 * log_var_v)
-        var_v = sigma_v ** 2
-
-        # initialise the first mode of variation
+        # initialise variance to 1 and the first mode of variation to zero
+        log_var_v = torch.log(torch.ones(self.dim_x, self.dim_y, self.dim_z)).to('cuda:0')
         u_v = torch.zeros((self.dim_x, self.dim_y, self.dim_z)).to('cuda:0')
 
         # calculate the entropy
-        val = entropy(log_var_v=log_var_v, u_v=u_v).item()
-        val_true = -0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
+        val = self.entropy(log_var_v=log_var_v, u_v=u_v).item()
+        val_true = 0.0
+        assert pytest.approx(val, 0.01) == val_true
 
+        # initialise variance randomly
+        log_var_v = torch.log(torch.abs(torch.randn(self.dim_x, self.dim_y, self.dim_z))).to('cuda:0')
+        sigma_v = torch.exp(0.5 * log_var_v)
+
+        # calculate the entropy
+        val = self.entropy(log_var_v=log_var_v, u_v=u_v).item()
+
+        var_v = sigma_v ** 2
+        val_true = 0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
         assert pytest.approx(val, 0.01) == val_true
 
     def test_lcc_uniform(self):
@@ -62,7 +67,7 @@ class LossTestMethods(unittest.TestCase):
         im_moving = 2.0 * torch.ones(1, 1, self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
 
         mask = torch.ones_like(im_fixed)
-    
+
         # calculate the local means
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
         im_moving_padded = F.pad(im_moving, self.padding, mode='replicate')

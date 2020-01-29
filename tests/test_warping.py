@@ -34,16 +34,16 @@ class WarpingTestMethods(unittest.TestCase):
         self.identity_grid = init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
 
         """
-        modules
-        """
-
-        self.registration_module = RegistrationModule().to('cuda:0')
-
-        """
         losses
         """
 
         self.loss = SSD().to('cuda:0')
+
+        """
+        modules
+        """
+
+        self.registration_module = RegistrationModule().to('cuda:0')
 
     def tearDown(self):
         del self.registration_module
@@ -54,7 +54,7 @@ class WarpingTestMethods(unittest.TestCase):
 
         mask = torch.ones_like(im_fixed)
 
-        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + torch.zeros(self.dims_v).to('cuda:0')
+        transformation = self.identity_grid.permute([0, 4, 1, 2, 3])
         im_moving_warped = self.registration_module(im_moving, transformation)
 
         unwarped_loss_value = self.loss(im_fixed=im_fixed, im_moving=im_moving, mask=mask).item()
@@ -157,9 +157,7 @@ class WarpingTestMethods(unittest.TestCase):
             for idx_y in range(transformation.shape[3]):
                 for idx_x in range(transformation.shape[4]):
                     p = transformation[0, :, idx_z, idx_y, idx_x]
-
-                    p_new = torch.mv(R, p)
-                    transformation[0, :, idx_z, idx_y, idx_x] = p_new
+                    transformation[0, :, idx_z, idx_y, idx_x] = torch.mv(R, p)
 
         """
         load image and warp it
