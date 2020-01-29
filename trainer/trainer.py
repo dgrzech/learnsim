@@ -431,8 +431,8 @@ class Trainer(BaseTrainer):
         self.optimizer_q_f.step()  # backprop
         self.optimizer_q_phi.step()
 
-        self.log_var_f = torch.mean(self.log_var_f, dim=0)
-        self.u_f = torch.mean(self.u_f, dim=0)
+        self.log_var_f = torch.mean(self.log_var_f, dim=0, keepdim=True)
+        self.u_f = torch.mean(self.u_f, dim=0, keepdim=True)
 
         # disable gradients
         self.enc.eval()

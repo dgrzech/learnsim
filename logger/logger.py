@@ -1,7 +1,5 @@
 from os import path
 
-import torch
-
 from pathlib import Path
 from utils import compute_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk
 
@@ -119,7 +117,7 @@ def save_seg_moving_warped(save_dirs_dict, im_pair_idx, seg_moving_warped):
 
 
 def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch,
-                mu_v_batch, log_var_v_batch, u_v_batch, log_var_f_batch, u_f_batch, displacement_batch,
+                mu_v_batch, log_var_v_batch, u_v_batch, log_var_f, u_f, displacement_batch,
                 log_det_J_batch=None, seg_fixed_batch=None, seg_moving_batch=None, seg_moving_warped_batch=None):
     """
     save the input and output images as well as norms of vectors in the vector fields to disk
@@ -131,9 +129,7 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
-    log_var_f, u_f = torch.mean(log_var_f_batch, dim=0), torch.mean(u_f_batch, dim=0)
-    log_var_f, u_f = log_var_f[0].cpu().numpy(), u_f[0].cpu().numpy()
-
+    log_var_f, u_f = log_var_f[0, 0].cpu().numpy(), u_f[0, 0].cpu().numpy()
     save_images_q_f(save_dirs_dict, log_var_f, u_f)
 
     if log_det_J_batch is not None:

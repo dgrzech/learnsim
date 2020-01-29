@@ -162,21 +162,13 @@ def log_q_v(writer, im_pair_idxs, mu_v_batch, displacement_batch, log_var_v_batc
 def log_log_det_J_transformation(writer, im_pair_idxs, transformation_batch, diff_op):
     im_pair_idxs = im_pair_idxs.tolist()
 
-    dim_x = float(transformation_batch.shape[4])
-    dim_y = float(transformation_batch.shape[3])
-    dim_z = float(transformation_batch.shape[2])
-
-    mid_x = int(dim_x / 2)
-    mid_y = int(dim_y / 2)
-    mid_z = int(dim_z / 2)
+    mid_x = transformation_batch.shape[4] // 2
+    mid_y = transformation_batch.shape[3] // 2
+    mid_z = transformation_batch.shape[2] // 2
 
     nabla_x_batch, nabla_y_batch, nabla_z_batch = diff_op(transformation_batch)
 
-    nabla_x_batch *= (dim_x - 1.0) / 2.0
-    nabla_y_batch *= (dim_y - 1.0) / 2.0
-    nabla_z_batch *= (dim_z - 1.0) / 2.0
-
-    det_J_transformation_batch = calc_det_J(nabla_x_batch, nabla_y_batch, nabla_z_batch) + 1e-5
+    det_J_transformation_batch = calc_det_J(nabla_x_batch, nabla_y_batch, nabla_z_batch)
     log_det_J_transformation_batch = torch.log10(det_J_transformation_batch).cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -189,22 +181,20 @@ def log_log_det_J_transformation(writer, im_pair_idxs, transformation_batch, dif
                           log_det_J_transformation_grid(log_det_J_transformation_slices))
 
 
-def log_q_f(writer, log_var_f_batch, u_f_batch):
-    log_var_f, u_f = torch.mean(log_var_f_batch, dim=0), torch.mean(u_f_batch, dim=0)
+def log_q_f(writer, log_var_f, u_f):
     log_var_f, u_f = log_var_f.cpu(), u_f.cpu()
 
-    mid_x = int(log_var_f_batch.shape[4] / 2)
-    mid_y = int(log_var_f_batch.shape[3] / 2)
-    mid_z = int(log_var_f_batch.shape[2] / 2)
+    mid_x = log_var_f.shape[4] // 2
+    mid_y = log_var_f.shape[3] // 2
+    mid_z = log_var_f.shape[2] // 2
 
-    log_var_f = log_var_f[0]
+    log_var_f = log_var_f[0, 0]
     log_var_f_slices = [log_var_f[:, :, mid_x], log_var_f[:, mid_y, :], log_var_f[mid_z, :, :]]
 
-    u_f = u_f[0]
+    u_f = u_f[0, 0]
     u_f_slices = [u_f[:, :, mid_x], u_f[:, mid_y, :], u_f[mid_z, :, :]]
 
-    writer.add_figure('q_f',
-                      var_params_q_f_grid(log_var_f_slices, u_f_slices))
+    writer.add_figure('q_f', var_params_q_f_grid(log_var_f_slices, u_f_slices))
 
 
 class TensorboardWriter:

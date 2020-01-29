@@ -20,7 +20,7 @@
         "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 0.05
+            "w_reg": 1.0
         }
     },
 
