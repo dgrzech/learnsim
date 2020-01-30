@@ -165,7 +165,7 @@ class Trainer(BaseTrainer):
             elif self.no_samples == 2:
                 if self.sobolev_grad:
                     v_sample1, v_sample2 = sample_qv(mu_v, log_var_v, u_v,
-                                                     self.S_sqrt, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz,
+                                                     self.S_sqrt_x, self.S_sqrt_y, self.S_sqrt_z, self.padding_sz,
                                                      no_samples=2)
                     v_sample1, v_sample2 = SobolevGrad.apply(v_sample1,
                                                              self.S_x, self.S_y, self.S_z, self.padding_sz), \

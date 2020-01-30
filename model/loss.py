@@ -75,7 +75,7 @@ class LCC(DataLoss):
         return cross, var_F, var_M
 
     def reduce(self, cross, var_F, var_M, mask):
-        lcc = cross * cross / (var_F * var_M + 1e-5)
+        lcc = cross * cross / (var_F * var_M + 1e-10)
         return -1.0 * torch.sum(lcc * mask)
 
 

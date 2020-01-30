@@ -60,7 +60,7 @@ class CNN_LCC(BaseModel):
 
     def forward(self, im_fixed, im_moving_warped):
         cross, F_var, M_var = self.encode(im_fixed, im_moving_warped)
-        return cross * cross / (F_var * M_var + 1e-5)
+        return cross * cross / (F_var * M_var + 1e-10)
 
 
 class CNN_SSD(BaseModel):

@@ -25,7 +25,7 @@ def sobolev_kernel_1d(_s, _lambda):
 
     mask = np.abs(w) > 1e-10
     inv_sqrt_w = np.zeros(_s)
-    inv_sqrt_w[mask] = 1 / np.sqrt(w[mask])
+    inv_sqrt_w[mask] = 1.0 / np.sqrt(w[mask])
 
     half = v * inv_sqrt_w
 

@@ -6,8 +6,8 @@
         "type": "SimEnc",
         "args": {
 	        "init_type": "SSD",
-            "s": 4,
-            "no_feature_maps": 6
+            "s": 3,
+            "no_feature_maps": 4
         }
     },
 
