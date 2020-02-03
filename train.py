@@ -8,7 +8,6 @@ import numpy as np
 
 import data_loader.data_loaders as module_data
 import model.loss as model_loss
-import model.model as module_arch
 import utils.registration as registration
 import utils.transformation as transformation
 
@@ -23,18 +22,8 @@ torch.autograd.set_detect_anomaly(True)
 
 
 def main(config):
-    logger = config.get_logger('train')
-
-    # setup data_loader instances
+    # setup data_loader instance
     data_loader = config.init_obj('data_loader', module_data, save_dirs=config.save_dirs)
-    valid_data_loader = data_loader.split_validation()
-
-    # build model architecture, then print to console
-    enc = None
-
-    if config['trainer']['learn_sim_metric']:
-        enc = config.init_obj('arch', module_arch)
-        logger.info(enc)
 
     # initialise the transformation model and registration modules
     dim_x = config['data_loader']['args']['dim_x']
@@ -44,17 +33,18 @@ def main(config):
     transformation_model = config.init_obj('transformation_model', transformation, dim_x, dim_y, dim_z)
     registration_module = config.init_obj('registration_module', registration)
 
-    # initialise the loss
+    # losses
     data_loss = config.init_obj('data_loss', model_loss)
     reg_loss = config.init_obj('reg_loss', model_loss)
-    entropy = config.init_obj('entropy', model_loss)
+    entropy_loss = config.init_obj('entropy_loss', model_loss)
 
-    # get function handle of metrics
-    metrics = ['data_term', 'reg_term', 'entropy_term', 'dice_1', 'dice_2', 'dice_3']
+    # metrics
+    metrics = ['data_term', 'reg_term', 'entropy_term', 'total_loss',
+               'sample_data_term', 'sample_reg_term']
 
     # run training
-    trainer = Trainer(enc, data_loss, reg_loss, entropy, transformation_model, registration_module, metrics,
-                      config=config, data_loader=data_loader, valid_data_loader=valid_data_loader)
+    trainer = Trainer(data_loss, reg_loss, entropy_loss, transformation_model, registration_module, metrics,
+                      config=config, data_loader=data_loader)
     trainer.train()
 
 
@@ -63,8 +53,6 @@ if __name__ == '__main__':
 
     args.add_argument('-c', '--config', default=None, type=str,
                       help='config file path (default: None)')
-    args.add_argument('-r', '--resume', default=None, type=str,
-                      help='path to latest checkpoint (default: None)')
     args.add_argument('-d', '--device', default=None, type=str,
                       help='indices of GPUs to enable (default: all)')
 

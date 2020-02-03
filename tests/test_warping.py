@@ -1,5 +1,5 @@
 from model.loss import SSD
-from utils import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, standardise_im, save_im_to_disk, \
+from utils import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, save_im_to_disk, standardise_im, \
     RegistrationModule
 
 from skimage import transform

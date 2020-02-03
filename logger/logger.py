@@ -7,7 +7,7 @@ import logging
 import logging.config
 
 
-def registration_print(logger, iter_no, no_steps_v, loss_q_v, data_term, reg_term, entropy_term=0.0):
+def registration_print(logger, iter_no, no_steps_v, loss_q_v, data_term, reg_term, entropy_term):
     """
     print value of the energy function at a given step of registration
     """
@@ -17,6 +17,18 @@ def registration_print(logger, iter_no, no_steps_v, loss_q_v, data_term, reg_ter
                 f'\ndata: {data_term:.5f}' +
                 f', regularisation: {reg_term:.5f}' +
                 f', entropy: {entropy_term:.5f}'
+                )
+
+
+def mixing_print(logger, sample_idx, no_samples, loss_q_v, data_term, reg_term):
+    """
+    print value of the energy function at a given current state
+    """
+
+    logger.info(f'SAMPLE ' + str(sample_idx) + '/' + str(no_samples - 1) +
+                f', TOTAL ENERGY: {loss_q_v:.5f}' +
+                f'\ndata: {data_term:.5f}' +
+                f', regularisation: {reg_term:.5f}'
                 )
 
 
@@ -49,9 +61,9 @@ def save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped):
     save_im_to_disk(im_moving_warped, im_moving_warped_path)
 
 
-def save_mu_v_norm(save_dirs_dict, im_pair_idx, mu_v_norm):
-    mu_v_norm_path = path.join(save_dirs_dict['norms'], 'mu_v_norm_' + str(im_pair_idx) + '.nii.gz')
-    save_im_to_disk(mu_v_norm, mu_v_norm_path)
+def save_v_norm(save_dirs_dict, im_pair_idx, v_norm):
+    v_norm_path = path.join(save_dirs_dict['norms'], 'v_norm_' + str(im_pair_idx) + '.nii.gz')
+    save_im_to_disk(v_norm, v_norm_path)
 
 
 def save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm):
@@ -60,65 +72,13 @@ def save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm):
     save_im_to_disk(displacement_norm, displacement_norm_path)
 
 
-def save_log_var_v_norm(save_dirs_dict, im_pair_idx, log_var_v_norm):
-    log_var_v_norm_path = path.join(save_dirs_dict['norms'], 'log_var_v_norm_' + str(im_pair_idx) + '.nii.gz')
-    save_im_to_disk(log_var_v_norm, log_var_v_norm_path)
-
-
-def save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm):
-    u_v_norm_path = path.join(save_dirs_dict['norms'], 'u_v_norm_' + str(im_pair_idx) + '.nii.gz')
-    save_im_to_disk(u_v_norm, u_v_norm_path)
-
-
-def save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, log_var_v_norm, u_v_norm):
-    save_mu_v_norm(save_dirs_dict, im_pair_idx, mu_v_norm)
-    save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm)
-    save_log_var_v_norm(save_dirs_dict, im_pair_idx, log_var_v_norm)
-    save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm)
-
-
 def save_log_det_J(save_dirs_dict, im_pair_idx, log_det_J):
     log_det_J_path = path.join(save_dirs_dict['log_det_J'], 'log_det_J_' + str(im_pair_idx) + '.nii.gz')
     save_im_to_disk(log_det_J, log_det_J_path)
 
 
-def save_log_var_f_image(save_dirs_dict, log_var_f):
-    log_var_f_im_path = path.join(save_dirs_dict['images'], 'log_var_f.nii.gz')
-    save_im_to_disk(log_var_f, log_var_f_im_path)
-
-
-def save_u_f_image(save_dirs_dict, u_f):
-    u_f_im_path = path.join(save_dirs_dict['images'], 'u_f.nii.gz')
-    save_im_to_disk(u_f, u_f_im_path)
-
-
-def save_images_q_f(save_dirs_dict, log_var_f, u_f):
-    save_log_var_f_image(save_dirs_dict, log_var_f)
-    save_u_f_image(save_dirs_dict, u_f)
-
-
-def save_seg_fixed(save_dirs_dict, im_pair_idx, seg_fixed):
-    seg_fixed_path = path.join(save_dirs_dict['segs'], 'seg_fixed_' + str(im_pair_idx) + '.nii.gz')
-
-    if not path.exists(seg_fixed_path):
-        save_im_to_disk(seg_fixed, seg_fixed_path)
-
-
-def save_seg_moving(save_dirs_dict, im_pair_idx, seg_moving):
-    seg_moving_path = path.join(save_dirs_dict['segs'], 'seg_moving_' + str(im_pair_idx) + '.nii.gz')
-
-    if not path.exists(seg_moving_path):
-        save_im_to_disk(seg_moving, seg_moving_path)
-
-
-def save_seg_moving_warped(save_dirs_dict, im_pair_idx, seg_moving_warped):
-    save_im_to_disk(seg_moving_warped,
-                    path.join(save_dirs_dict['segs'], 'seg_moving_warped_' + str(im_pair_idx) + '.nii.gz'))
-
-
 def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch,
-                mu_v_batch, log_var_v_batch, u_v_batch, log_var_f, u_f, displacement_batch,
-                log_det_J_batch=None, seg_fixed_batch=None, seg_moving_batch=None, seg_moving_warped_batch=None):
+                v_batch, displacement_batch, log_det_J_batch):
     """
     save the input and output images as well as norms of vectors in the vector fields to disk
     """
@@ -128,62 +88,30 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
     im_fixed_batch = im_fixed_batch.cpu().numpy()
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
-
-    log_var_f, u_f = log_var_f[0, 0].cpu().numpy(), u_f[0, 0].cpu().numpy()
-    save_images_q_f(save_dirs_dict, log_var_f, u_f)
-
-    if log_det_J_batch is not None:
-        log_det_J_batch = log_det_J_batch.cpu().numpy()
-
-    if seg_fixed_batch is not None:
-        seg_fixed_batch = seg_fixed_batch.cpu().numpy()
-
-    if seg_moving_batch is not None:
-        seg_moving_batch = seg_moving_batch.cpu().numpy()
-
-    if seg_moving_warped_batch is not None:
-        seg_moving_warped_batch = seg_moving_warped_batch.cpu().numpy()
+    log_det_J_batch = log_det_J_batch.cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_fixed = im_fixed_batch[loop_idx, 0]
         im_moving = im_moving_batch[loop_idx, 0]
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
 
-        mu_v_field_path = path.join(save_dirs_dict['mu_v_field'], 'mu_v_' + str(im_pair_idx) + '.vtk')
-        save_field_to_disk(mu_v_batch[loop_idx], mu_v_field_path)
+        v_field_path = path.join(save_dirs_dict['v_field'], 'v_' + str(im_pair_idx) + '.vtk')
+        save_field_to_disk(v_batch[loop_idx], v_field_path)
 
-        temp = compute_norm(mu_v_batch[loop_idx])
-        mu_v_norm = temp[0].cpu().numpy()
+        temp = compute_norm(v_batch[loop_idx])
+        v_norm = temp[0].cpu().numpy()
 
         temp = compute_norm(displacement_batch[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
-
-        temp = compute_norm(log_var_v_batch[loop_idx])
-        log_var_v_norm = temp[0].cpu().numpy()
-
-        temp = compute_norm(u_v_batch[loop_idx])
-        u_v_norm = temp[0].cpu().numpy()
         
         save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed)
         save_im_moving(save_dirs_dict, im_pair_idx, im_moving)
         save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped)
-        save_images_q_v(save_dirs_dict, im_pair_idx, mu_v_norm, displacement_norm, log_var_v_norm, u_v_norm)
+        save_v_norm(save_dirs_dict, im_pair_idx, v_norm)
+        save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm)
 
-        if log_det_J_batch is not None:
-            log_det_J = log_det_J_batch[loop_idx]
-            save_log_det_J(save_dirs_dict, im_pair_idx, log_det_J)
-
-        if seg_fixed_batch is not None:
-            seg_fixed = seg_fixed_batch[loop_idx, 0]
-            save_seg_fixed(save_dirs_dict, im_pair_idx, seg_fixed)
-
-        if seg_moving_batch is not None:
-            seg_moving = seg_moving_batch[loop_idx, 0]
-            save_seg_moving(save_dirs_dict, im_pair_idx, seg_moving)
-
-        if seg_moving_warped_batch is not None:
-            seg_moving_warped = seg_moving_warped_batch[loop_idx, 0]
-            save_seg_moving_warped(save_dirs_dict, im_pair_idx, seg_moving_warped)
+        log_det_J = log_det_J_batch[loop_idx]
+        save_log_det_J(save_dirs_dict, im_pair_idx, log_det_J)
 
 
 def setup_logging(save_dir, log_config='logger/logger_config.json', default_level=logging.INFO):

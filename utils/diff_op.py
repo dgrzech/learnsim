@@ -22,9 +22,9 @@ class GradientOperator(DifferentialOperator):
     def __init__(self):
         super(GradientOperator, self).__init__()
 
-        self.px = (0, 1, 0, 0, 0, 0)  # paddings
-        self.py = (0, 0, 0, 1, 0, 0)
-        self.pz = (0, 0, 0, 0, 0, 1)
+        self.px = (1, 1, 0, 0, 0, 0)  # paddings
+        self.py = (0, 0, 1, 1, 0, 0)
+        self.pz = (0, 0, 0, 0, 1, 1)
 
         self.pixel_spacing = None
 
@@ -36,9 +36,10 @@ class GradientOperator(DifferentialOperator):
 
             self.pixel_spacing = (2.0 / float(dim_x - 1), 2.0 / float(dim_y - 1), 2.0 / float(dim_z - 1))
 
-        dv_dx = F.pad(v[:, :, :, :, 1:] - v[:, :, :, :, :-1], self.px, mode='replicate') / self.pixel_spacing[0]
-        dv_dy = F.pad(v[:, :, :, 1:, :] - v[:, :, :, :-1, :], self.py, mode='replicate') / self.pixel_spacing[1]
-        dv_dz = F.pad(v[:, :, 1:, :, :] - v[:, :, :-1, :, :], self.pz, mode='replicate') / self.pixel_spacing[2]
+        # central differences
+        dv_dx = F.pad(v[:, :, :, :, 2:] - v[:, :, :, :, :-2], self.px) / (2.0 * self.pixel_spacing[0])
+        dv_dy = F.pad(v[:, :, :, 2:, :] - v[:, :, :, :-2, :], self.py) / (2.0 * self.pixel_spacing[1])
+        dv_dz = F.pad(v[:, :, 2:, :, :] - v[:, :, :-2, :, :], self.pz) / (2.0 * self.pixel_spacing[2])
 
         nabla_vx = torch.stack((dv_dx[:, 0], dv_dy[:, 0], dv_dz[:, 0]), 1)
         nabla_vy = torch.stack((dv_dx[:, 1], dv_dy[:, 1], dv_dz[:, 1]), 1)

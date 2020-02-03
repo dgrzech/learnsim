@@ -1,5 +1,4 @@
 from datetime import datetime
-from distutils.dir_util import copy_tree
 from functools import reduce, partial
 from operator import getitem
 from pathlib import Path
@@ -36,66 +35,28 @@ class ConfigParser:
         
         self._save_dir = save_dir / exper_name / run_id / 'models'
         self._log_dir = save_dir / exper_name / run_id / 'log'
+
         self._im_dir = save_dir / exper_name / run_id / 'images'
-        self._seg_dir = save_dir / exper_name / run_id / 'images' / 'segs'
-
-        self._mu_v_dir = save_dir / exper_name / run_id / 'models' / 'mu_v'
-        self._log_var_v_dir = save_dir / exper_name / run_id / 'models' / 'log_var_v'
-        self._u_v_dir = save_dir / exper_name / run_id / 'models' / 'u_v'
-        self._log_var_f_dir = save_dir / exper_name / run_id / 'models' / 'log_var_f'
-        self._u_f_dir = save_dir / exper_name / run_id / 'models' / 'u_f'
-
-        self._optimiser_dir = save_dir / exper_name / run_id / 'models' / 'optimisers'
-        
-        self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
-        self._displacement_dir = save_dir / exper_name / run_id / 'fields' / 'displacement'
+        self._v_dir = save_dir / exper_name / run_id / 'models' / 'v'
+        self._v_field_dir = save_dir / exper_name / run_id / 'fields' / 'v'
+        self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
         self._grid_dir = save_dir / exper_name / run_id / 'grids'
         self._log_det_J_dir = save_dir / exper_name / run_id / 'fields' / 'log_det_J'
-        
-        self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
+        self._displacement_dir = save_dir / exper_name / run_id / 'fields' / 'displacement'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
 
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+
         self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.seg_dir.mkdir(parents=True, exist_ok=exist_ok)
-
-        self.mu_v_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.log_var_v_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.u_v_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.log_var_f_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.u_f_dir.mkdir(parents=True, exist_ok=exist_ok)
-
-        self.optimiser_dir.mkdir(parents=True, exist_ok=exist_ok)
-        
-        self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.displacement_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.v_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.grid_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_det_J_dir.mkdir(parents=True, exist_ok=exist_ok)
-
-        self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
-        
-        # copy values of variational parameters
-        if self.resume is not None: 
-            print('copying previous values of variational parameters..')
-            copy_tree((self.resume.parent / 'mu_v').absolute().as_posix(), 
-                       self._mu_v_dir.absolute().as_posix())
-            copy_tree((self.resume.parent / 'log_var_v').absolute().as_posix(), 
-                       self._log_var_v_dir.absolute().as_posix())
-            copy_tree((self.resume.parent / 'u_v').absolute().as_posix(), 
-                       self._u_v_dir.absolute().as_posix())
-
-            copy_tree((self.resume.parent / 'log_var_f').absolute().as_posix(), 
-                       self._log_var_f_dir.absolute().as_posix())
-            copy_tree((self.resume.parent / 'u_f').absolute().as_posix(), 
-                       self._u_f_dir.absolute().as_posix())
-
-            copy_tree((self.resume.parent / 'optimisers').absolute().as_posix(),
-                      self._optimiser_dir.absolute().as_posix())
-
-            print('done!\n')
+        self.displacement_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -120,9 +81,6 @@ class ConfigParser:
 
         if args.device is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-        if args.resume is not None:
-            resume = Path(args.resume)
-            cfg_fname = resume.parent / 'config.json'
         else:
             msg_no_cfg = "Configuration file need to be specified. Add '-c config.json', for example."
             assert args.config is not None, msg_no_cfg
@@ -196,36 +154,20 @@ class ConfigParser:
         return self._log_dir
 
     @property
-    def mu_v_dir(self):
-        return self._mu_v_dir
+    def im_dir(self):
+        return self._im_dir
 
     @property
-    def log_var_v_dir(self):
-        return self._log_var_v_dir
+    def v_dir(self):
+        return self._v_dir
 
     @property
-    def u_v_dir(self):
-        return self._u_v_dir
+    def v_field_dir(self):
+        return self._v_field_dir
 
     @property
-    def log_var_f_dir(self):
-        return self._log_var_f_dir
-
-    @property
-    def u_f_dir(self):
-        return self._u_f_dir
-
-    @property
-    def optimiser_dir(self):
-        return self._optimiser_dir
-
-    @property
-    def mu_v_field_dir(self):
-        return self._mu_v_field_dir
-
-    @property
-    def displacement_dir(self):
-        return self._displacement_dir
+    def norms_dir(self):
+        return self._norms_dir
 
     @property
     def grid_dir(self):
@@ -236,25 +178,14 @@ class ConfigParser:
         return self._log_det_J_dir
 
     @property
-    def im_dir(self):
-        return self._im_dir
-    
-    @property
-    def norms_dir(self):
-        return self._norms_dir
+    def displacement_dir(self):
+        return self._displacement_dir
 
     @property
-    def seg_dir(self):
-        return self._seg_dir
-    
-    @property
     def save_dirs(self):
-        return {'images': self.im_dir, 'norms': self.norms_dir, 'segs': self.seg_dir,
-                'mu_v': self.mu_v_dir, 'log_var_v': self.log_var_v_dir, 'u_v': self.u_v_dir,
-                'log_var_f': self.log_var_f_dir, 'u_f': self.u_f_dir,
-                'mu_v_field': self.mu_v_field_dir, 'displacement': self.displacement_dir, 'grids': self.grid_dir,
-                'log_det_J': self.log_det_J_dir,
-                'optimisers': self.optimiser_dir}
+        return {'images': self.im_dir, 'v': self.v_dir, 'v_field': self.v_field_dir,
+                'norms': self.norms_dir, 'grids': self.grid_dir, 'log_det_J': self.log_det_J_dir,
+                'displacement': self.displacement_dir}
 
 
 # helper functions to update config dict with custom cli options

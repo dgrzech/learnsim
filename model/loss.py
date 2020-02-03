@@ -16,7 +16,7 @@ class DataLoss(nn.Module, ABC):
         super(DataLoss, self).__init__()
 
     @abstractmethod
-    def forward(self, **kwargs):
+    def forward(self, im_fixed, im_moving, mask):
         pass
     
     @abstractmethod
@@ -33,33 +33,22 @@ class LCC(DataLoss):
     local cross-correlation
     """
 
-    def __init__(self, s=None):
+    def __init__(self, s):
         super(LCC, self).__init__()
 
-        if s is not None:
-            self.s = s
-            self.kernel_size = self.s * 2 + 1
-            self.sz = float(self.kernel_size ** 3)
+        self.s = s
+        self.padding = (s, s, s, s, s, s)
 
-            self.padding = (self.s, self.s, self.s, self.s, self.s, self.s)
+        self.kernel_size = self.s * 2 + 1
+        self.sz = float(self.kernel_size ** 3)
 
-            self.kernel = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, bias=False)
-            nn.init.ones_(self.kernel.weight)
-            self.kernel.weight.requires_grad_(False)
+        self.kernel = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, bias=False)
+        nn.init.ones_(self.kernel.weight)
+        self.kernel.weight.requires_grad_(False)
 
-    def forward(self, **kwargs):
-        if len(kwargs) == 2:
-            z = kwargs['z']
-            mask = kwargs['mask']
-
-            return -1.0 * torch.sum(z * mask)
-        elif len(kwargs) == 3:
-            im_fixed = kwargs['im_fixed']
-            im_moving = kwargs['im_moving']
-            mask = kwargs['mask']
-
-            cross, var_F, var_M = self.map(im_fixed, im_moving)
-            return self.reduce(cross, var_F, var_M, mask)
+    def forward(self, im_fixed, im_moving, mask):
+        cross, var_F, var_M = self.map(im_fixed, im_moving)
+        return self.reduce(cross, var_F, var_M, mask)
 
     def map(self, im_fixed, im_moving):
         im_fixed = F.pad(im_fixed, self.padding, mode='replicate')
@@ -87,19 +76,9 @@ class SSD(DataLoss):
     def __init__(self):
         super(SSD, self).__init__()
 
-    def forward(self, **kwargs):
-        if len(kwargs) == 2:
-            z = kwargs['z']
-            mask = kwargs['mask']
-
-            return self.reduce(z, mask)
-        elif len(kwargs) == 3:
-            im_fixed = kwargs['im_fixed']
-            im_moving = kwargs['im_moving']
-            mask = kwargs['mask']
-
-            z = self.map(im_fixed, im_moving)
-            return self.reduce(z, mask)
+    def forward(self, im_fixed, im_moving, mask):
+        z = self.map(im_fixed, im_moving)
+        return self.reduce(z, mask)
 
     def map(self, im_fixed, im_moving):
         return im_fixed - im_moving

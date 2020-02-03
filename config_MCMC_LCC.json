@@ -1,30 +1,21 @@
 {
-    "name": "lcc_var_params_learn_sim",
+    "name": "mcmc_lcc_sobolev",
     "n_gpu": 1,
-
-    "arch": {
-        "type": "SimEnc",
-        "args": {
-	        "init_type": "LCC",
-            "s": 3,
-            "no_feature_maps": 4
-        }
-    },
 
     "data_loss": {
         "type": "LCC",
-        "args": {}
+        "args": {
+            "s": 3
+        }
     },
-
     "reg_loss": {
         "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 1.0
+            "w_reg": 0.5
         }
     },
-
-    "entropy": {
+    "entropy_loss": {
         "type": "EntropyMultivariateNormal",
         "args": {}
     },
@@ -33,7 +24,6 @@
         "type": "SVF_3D",
         "args": {}
     },
-
     "registration_module": {
         "type": "RegistrationModule",
         "args": {}
@@ -43,54 +33,48 @@
         "type": "Adam",
         "args": {
             "lr": 5e-4,
-	        "amsgrad": true
+            "amsgrad": true
         }
     },
-    "optimizer_f": {
-        "type": "Adam",
+    "optimizer_mala": {
+        "type": "SGD",
         "args": {
-            "lr": 5e-4,
-	        "amsgrad": true
+            "lr": 5e-4
         }
     },
-    "optimizer_phi": {
-        "type": "Adam",
-        "args": {
-            "lr": 1e-4,
-	        "amsgrad": true
-        }
-    },
+
 
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
-            "data_dir": "/vol/bitbucket/dig15/learnsim_biobank_train/biobank_2/",
-	        "dim_x": 128,
+            "data_dir": "/vol/bitbucket/dig15/learnsim_biobank_train/biobank_1/",
+            "dim_x": 128,
 	        "dim_y": 128,
 	        "dim_z": 128,
-            "batch_size": 2,
-            "num_workers": 2,
+            "batch_size": 1,
+            "num_workers": 1,
             "shuffle": false
         }
     },
 
     "sobolev_grad": {
-        "enabled": false
+        "enabled": true,
+	    "s": 7,
+	    "lambda": 0.5
     },
 
     "trainer": {
-        "epochs": 100,
-        "no_samples": 1,
-	    "no_steps_v": 256,
+        "no_steps_v": 2048,
 
-	    "learn_q_v": true,
-	    "learn_sim_metric": true,
+        "no_steps_burn_in": 1000,
+	    "no_samples": 5000,
 
         "save_dir": "saved/",
         "save_period": 1,
+
         "verbosity": 2,
-        
         "tensorboard": true,
-	    "log_step": 32
+
+	    "log_step": 512
     }
 }
