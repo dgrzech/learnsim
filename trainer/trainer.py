@@ -1,10 +1,7 @@
-from os import path
-
 from base import BaseTrainer
-from logger import log_images, log_log_det_J_transformation, log_q_v, log_v, mixing_print, registration_print, \
-    save_grids, save_images
-from utils import add_noise, calc_det_J, get_module_attr, inf_loop, sample_q_v, save_optimiser_to_disk, \
-    separable_conv_3d, sobolev_kernel_1d, transform_coordinates, MetricTracker, SobolevGrad
+from logger import log_images, log_q_v, log_sample_q_v, print_log, save_grids, save_images
+from utils import add_noise, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
+    save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, MetricTracker, SobolevGrad
 
 import math
 import numpy as np
@@ -16,21 +13,37 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, data_loss, reg_loss, entropy_loss,
-                 transformation_model, registration_module, metric_ftns, config, data_loader):
-        super().__init__(data_loss, reg_loss, entropy_loss,
-                         transformation_model, registration_module, metric_ftns, config)
+    def __init__(self, data_loss, reg_loss, entropy_loss, transformation_model, registration_module,
+                 metric_ftns_vi, metric_ftns_mcmc, config, data_loader):
+        super().__init__(data_loss, reg_loss, entropy_loss, transformation_model, registration_module, config)
 
         self.config = config
         self.data_loader = data_loader
-        self.train_metrics = MetricTracker('loss', *[m for m in self.metric_ftns], writer=self.writer)
-        
-        # Sobolev kernel
+        self.im_fixed, self.seg_fixed, self.mask_fixed = None, None, None
+
+        # variational inference
+        self.start_iter = 1
+        self.mu_v, self.log_var_v, self.u_v = None, None, None
+
+        self.VI = config['trainer']['vi']
+        self.optimizer_v = None
+        self.train_metrics_vi = MetricTracker(*[m for m in metric_ftns_vi], writer=self.writer)
+
+        # Markov chain Monte Carlo
+        self.start_sample = 1
+        self.v_curr_state, self.sigma_scaled, self.u_scaled = None, None, None
+
+        self.MCMC = config['trainer']['mcmc']
+        self.optimizer_mala = None
+        self.train_metrics_mcmc = MetricTracker(*[m for m in metric_ftns_mcmc], writer=self.writer)
+
+        # Sobolev gradients
         self.sobolev_grad = config['sobolev_grad']['enabled']
 
         if self.sobolev_grad:
             _s = config['sobolev_grad']['s']
             _lambda = config['sobolev_grad']['lambda']
+            self.padding_sz = _s // 2
 
             S, S_sqrt = sobolev_kernel_1d(_s, _lambda)
 
@@ -46,49 +59,34 @@ class Trainer(BaseTrainer):
             self.S_y = S_y.to(self.device, non_blocking=True)
             self.S_z = S_z.to(self.device, non_blocking=True)
 
-            self.padding_sz = _s // 2
-        
-        self.im_fixed = None
-        self.seg_fixed = None
-        self.mask_fixed = None
+        # resuming
+        if config.resume is not None and self.VI:
+            self._resume_checkpoint_vi(config.resume)
+        elif config.resume is not None and self.MCMC:
+            self._resume_checkpoint_mcmc(config.resume)
 
-        self.optimizer_v = None  # VI
-        self.optimizer_mala = None  # MCMC
-
-        self.tau = 0.0
-        self.sqrt_tau_twice = 0.0
-
-        self.mu_v = None
-        self.sigma = None
-        self.u = None
-
-        self.no_samples_accepted = 0.0
-        self.no_samples_rejected = 0.0
-
-    def _save_v(self, im_pair_idx, v):
-        torch.save(v, path.join(self.data_loader.save_dirs['v'], 'v_' + str(im_pair_idx) + '.pt'))
-
-    def _save_tensors(self, im_pair_idxs, v):
-        im_pair_idxs = im_pair_idxs.tolist()
-        v = v.cpu()
-
-        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            self._save_v(im_pair_idx, v[loop_idx])
-
-    def _step_VI(self, im_pair_idxs, im_moving, mu_v, log_var_v, u_v):
+    def _step_VI(self, im_pair_idxs, im_moving):
         if self.optimizer_v is None:
-            mu_v.requires_grad_(True)
-            log_var_v.requires_grad_(True)
-            u_v.requires_grad_(True)
+            self.mu_v.requires_grad_(True)
+            self.log_var_v.requires_grad_(True)
+            self.u_v.requires_grad_(True)
 
-            self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [mu_v, log_var_v, u_v])
+            self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
 
-        for iter_no in range(self.no_steps_v):
+        for iter_no in range(self.start_iter, self.no_iters_vi + 1):
+            self.train_metrics_vi.reset()
+            self.optimizer_v.zero_grad()
+
+            if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
+                mu_v_old = self.mu_v.detach().clone()  # neded to calculate the maximum update in terms of the L2 norm
+                log_var_v_old = self.log_var_v.detach().clone()
+                u_v_old = self.u_v.detach().clone()
+
             data_term = 0.0
             reg_term = 0.0
             entropy_term = 0.0
 
-            v_sample1, v_sample2 = sample_q_v(mu_v, log_var_v, u_v, no_samples=2)
+            v_sample1, v_sample2 = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=2)
             if self.sobolev_grad:
                 v_sample1 = SobolevGrad.apply(v_sample1, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 v_sample2 = SobolevGrad.apply(v_sample2, self.S_x, self.S_y, self.S_z, self.padding_sz)
@@ -105,90 +103,104 @@ class Trainer(BaseTrainer):
             reg_term += self.reg_loss(v_sample1).sum() / 2.0
             reg_term += self.reg_loss(v_sample2).sum() / 2.0
 
-            entropy_term += self.entropy_loss(v_sample=v_sample1, mu_v=mu_v, log_var_v=log_var_v, u_v=u_v).sum() / 2.0
-            entropy_term += self.entropy_loss(v_sample=v_sample2, mu_v=mu_v, log_var_v=log_var_v, u_v=u_v).sum() / 2.0
+            entropy_term += self.entropy_loss(v_sample=v_sample1,
+                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
+            entropy_term += self.entropy_loss(v_sample=v_sample2,
+                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
+            entropy_term += self.entropy_loss(log_var_v=self.log_var_v, u_v=self.u_v).sum()
 
-            entropy_term += self.entropy_loss(log_var_v=log_var_v, u_v=u_v).sum()
-
-            self.optimizer_v.zero_grad()
             loss_q_v = data_term + reg_term - entropy_term
             loss_q_v.backward()
             self.optimizer_v.step()
 
-            # metrics and prints
+            # scalar metrics
             self.writer.set_step(iter_no)
 
-            self.train_metrics.update('data_term', data_term.item())
-            self.train_metrics.update('reg_term', reg_term.item())
-            self.train_metrics.update('entropy_term', entropy_term.item())
-            self.train_metrics.update('total_loss', loss_q_v.item())
+            self.train_metrics_vi.update('VI/data_term', data_term.item())
+            self.train_metrics_vi.update('VI/reg_term', reg_term.item())
+            self.train_metrics_vi.update('VI/entropy_term', entropy_term.item())
+            self.train_metrics_vi.update('VI/total_loss', loss_q_v.item())
 
-            if iter_no % self.log_step == 0 or iter_no == self.no_steps_v:
-                registration_print(self.logger, iter_no, self.no_steps_v,
-                                   loss_q_v.item(), data_term.item(), reg_term.item(), entropy_term.item())
+            if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
+                with torch.no_grad():
+                    max_update_mu_v, max_update_mu_v_idx = max_field_update(mu_v_old, self.mu_v)
+                    max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
+                    max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-            step = iter_no + 1
-            self.writer.set_step(step)
+                self.train_metrics_vi.update('max_updates/mu_v', max_update_mu_v.item())
+                self.train_metrics_vi.update('max_updates/log_var_v', max_update_log_var_v.item())
+                self.train_metrics_vi.update('max_updates/u_v', max_update_u_v.item())
 
-            if math.log2(step).is_integer():
+                log = {'iter_no': iter_no}
+                log.update(self.train_metrics_vi.result())
+                print_log(self.logger, log)
+
+            # images and vector fields
+            if math.log2(iter_no).is_integer():
                 with torch.no_grad():
                     if self.sobolev_grad:
-                        mu_v_smoothed = SobolevGrad.apply(mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                        mu_v_smoothed = SobolevGrad.apply(self.mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
                         transformation, displacement = self.transformation_model(mu_v_smoothed)
                     else:
-                        transformation, displacement = self.transformation_model(mu_v)
+                        transformation, displacement = self.transformation_model(self.mu_v)
 
                     im_moving_warped = self.registration_module(im_moving, transformation)
 
-                    # log to tensorboard and save images, fields etc.
                     nabla_x, nabla_y, nabla_z = get_module_attr(self.reg_loss, 'diff_op')(transformation)
                     det_J_transformation = calc_det_J(nabla_x, nabla_y, nabla_z)
                     log_det_J_transformation = torch.log10(det_J_transformation)
 
                     log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
-                    log_log_det_J_transformation(self.writer, im_pair_idxs, log_det_J_transformation)
-                    save_grids(self.data_loader.save_dirs, im_pair_idxs, transformation)
 
                     if self.sobolev_grad:
-                        log_var_v_smoothed = SobolevGrad.apply(log_var_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                        u_v_smoothed = SobolevGrad.apply(u_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                        log_var_v_smoothed = \
+                            SobolevGrad.apply(self.log_var_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                        u_v_smoothed = SobolevGrad.apply(self.u_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
 
-                        log_q_v(self.writer, im_pair_idxs,
-                                mu_v_smoothed, displacement, log_var_v_smoothed, u_v_smoothed)
-                        save_images(self.data_loader.save_dirs, im_pair_idxs,
-                                    self.im_fixed, im_moving, im_moving_warped,
-                                    mu_v_smoothed, log_det_J_transformation, displacement)
+                        var_params = {'mu_v': mu_v_smoothed, 'log_var_v': log_var_v_smoothed, 'u_v': u_v_smoothed}
                     else:
-                        log_q_v(self.writer, im_pair_idxs, mu_v, displacement, log_var_v, u_v)
+                        var_params = {'mu_v': self.mu_v, 'log_var_v': self.log_var_v, 'u_v': self.u_v}
+
+                    log_q_v(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
+
+                    if self.sobolev_grad:
                         save_images(self.data_loader.save_dirs, im_pair_idxs,
                                     self.im_fixed, im_moving, im_moving_warped,
-                                    mu_v, log_det_J_transformation, displacement)
+                                    var_params, displacement, log_det_J_transformation)
+                    else:
+                        save_images(self.data_loader.save_dirs, im_pair_idxs,
+                                    self.im_fixed, im_moving, im_moving_warped,
+                                    var_params, displacement, log_det_J_transformation)
 
-        mu_v.requires_grad_(False)
-        log_var_v.requires_grad_(False)
-        u_v.requires_grad_(False)
-        
+                    save_grids(self.data_loader.save_dirs, im_pair_idxs, transformation)
+
+            # checkpoint
+            if iter_no % self.save_period == 0 or iter_no == self.no_iters_vi:
+                self._save_checkpoint_vi(iter_no)
+
+        self.mu_v.requires_grad_(False)
+        self.log_var_v.requires_grad_(False)
+        self.u_v.requires_grad_(False)
+
     def _step_MCMC(self, im_pair_idxs, im_moving):
-        v_curr_state = self.mu_v.clone()
-
         if self.optimizer_mala is None:
-            v_curr_state.requires_grad_(True)
-            self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [v_curr_state])
+            self.v_curr_state.requires_grad_(True)
+            self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
 
         self.logger.info('\nBURNING IN THE MARKOV CHAIN\n')
 
-        for sample_no in range(self.no_samples):
+        for sample_no in range(self.start_sample, self.no_samples + 1):
+            self.train_metrics_mcmc.reset()
             self.optimizer_mala.zero_grad()
 
-            if sample_no % 100 == 0:
-                self.logger.info('burn-in sample no. ' + str(sample_no) + '/' + str(self.no_steps_burn_in))
+            if sample_no < self.no_iters_burn_in and sample_no % 2000 == 0:
+                self.logger.info('burn-in sample no. ' + str(sample_no) + '/' + str(self.no_iters_burn_in))
             
             """
             stochastic gradient Langevin dynamics
             """
-            
-            v_prev_state = v_curr_state.clone()
-            v_curr_state_noise = add_noise(v_curr_state, self.sigma_scaled, self.u_v_scaled)
+
+            v_curr_state_noise = add_noise(self.v_curr_state, self.sigma_scaled, self.u_v_scaled)
 
             if self.sobolev_grad:
                 v_curr_state_noise_smoothed = \
@@ -207,87 +219,55 @@ class Trainer(BaseTrainer):
             self.optimizer_mala.step()
 
             """
-            Metropolis-Hastings
+            metrics and prints
             """
 
-            with torch.no_grad():
-                log_pi_prev = loss.item()
-                log_pi_next = 0.0
-                
-                v_next_state = v_curr_state.clone()
-                v_next_state_noise = add_noise(v_next_state, self.sigma_scaled, self.u_v_scaled)
+            self.writer.set_step(sample_no)
 
-                if self.sobolev_grad:
-                    v_next_state_noise_smoothed = \
-                        SobolevGrad.apply(v_next_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                    transformation_next, displacement_next = self.transformation_model(v_next_state_noise_smoothed)
-                    log_pi_next += self.reg_loss(v_next_state_noise_smoothed).sum().item()
-                else:
-                    transformation_next, displacement_next = self.transformation_model(v_next_state_noise)
-                    log_pi_next += self.reg_loss(v_next_state_noise).sum().item()
+            self.train_metrics_mcmc.update('MCMC/data_term', data_term.item())
+            self.train_metrics_mcmc.update('MCMC/reg_term', reg_term.item())
 
-                im_moving_warped_next = self.registration_module(im_moving, transformation_next)
-                log_pi_next += self.data_loss(self.im_fixed, im_moving_warped_next, self.mask_fixed).sum().item()
-
-                log_alpha = log_pi_next - log_pi_prev
-                log_u = torch.log(torch.rand(1))
-
-                if log_u > log_alpha:  # reject the sample
-                    self.no_samples_rejected += 1.0
-                    v_curr_state = v_prev_state
-                else:
-                    self.no_samples_accepted += 1.0
-
-            # metrics and prints
-            if sample_no == self.no_steps_burn_in - 1:
+            if sample_no == self.no_iters_burn_in:
                 self.logger.info('\nENDED BURNING IN\n')
 
-            if sample_no % 50 == 0:
-                r = self.no_samples_accepted / (self.no_samples_accepted + self.no_samples_rejected)
-                self.logger.info(f'acceptance rate: {r:.5f}')
-
-            if sample_no >= self.no_steps_burn_in:
+            if sample_no > self.no_iters_burn_in and sample_no % 10000 == 0:
                 with torch.no_grad():
-                    self.writer.set_step(sample_no)
+                    log = {'sample_no': sample_no}
+                    log.update(self.train_metrics_mcmc.result())
+                    print_log(self.logger, log)
 
-                    self.train_metrics.update('sample_data_term', data_term.item())
-                    self.train_metrics.update('sample_reg_term', reg_term.item())
+                    if self.sobolev_grad:
+                        log_sample_q_v(self.writer, im_pair_idxs,
+                                       im_moving_warped, v_curr_state_noise_smoothed, displacement)
+                    else:
+                        log_sample_q_v(self.writer, im_pair_idxs,
+                                       im_moving_warped, self.v_curr_state, displacement)
 
-                    mixing_print(self.logger, sample_no, self.no_samples,
-                                 loss.item(), data_term.item(), reg_term.item())
+            if sample_no % 10000 == 0 or sample_no == self.no_samples:
+                self._save_checkpoint_mcmc(sample_no)
 
-                    # # log to tensorboard and save images, fields etc.
-                    # nabla_x, nabla_y, nabla_z = get_module_attr(self.reg_loss, 'diff_op')(transformation)
-                    # det_J_transformation = calc_det_J(nabla_x, nabla_y, nabla_z)
-                    # log_det_J_transformation = torch.log10(det_J_transformation)
-
-                    # log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
-                    # log_v(self.writer, im_pair_idxs, v_curr_state, displacement)
-                    # log_log_det_J_transformation(self.writer, im_pair_idxs, log_det_J_transformation)
-
-    def _train_epoch(self, epoch):
-        self.train_metrics.reset()
-
+    def _train_epoch(self):
         for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, im_moving, mu_v, log_var_v, u_v) \
                 in enumerate(self.data_loader):
-            if self.im_fixed is None:
-                self.im_fixed = im_fixed.to(self.device, non_blocking=True)
-            if self.mask_fixed is None:
-                self.mask_fixed = mask_fixed.to(self.device, non_blocking=True)
+            self.im_fixed = im_fixed.to(self.device, non_blocking=True)
+            self.mask_fixed = mask_fixed.to(self.device, non_blocking=True)
 
             im_moving = im_moving.to(self.device, non_blocking=True)
 
-            mu_v = mu_v.to(self.device, non_blocking=True)
-            log_var_v = log_var_v.to(self.device, non_blocking=True)
-            u_v = u_v.to(self.device, non_blocking=True)
+            if self.mu_v is None:
+                self.mu_v = mu_v.to(self.device, non_blocking=True)
+            if self.log_var_v is None:
+                self.log_var_v = log_var_v.to(self.device, non_blocking=True)
+            if self.u_v is None:
+                self.u_v = u_v.to(self.device, non_blocking=True)
 
             # print value of the data term before registration
             with torch.no_grad():
                 if self.sobolev_grad:
-                    v_smoothed = SobolevGrad.apply(mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                    v_smoothed = SobolevGrad.apply(self.mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
                     transformation, displacement = self.transformation_model(v_smoothed)
                 else:
-                    transformation, displacement = self.transformation_model(mu_v)
+                    transformation, displacement = self.transformation_model(self.mu_v)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
 
@@ -295,39 +275,111 @@ class Trainer(BaseTrainer):
                 loss_warped = self.data_loss(self.im_fixed, im_moving_warped, self.mask_fixed).sum()
 
                 self.logger.info(f'\nPRE-REGISTRATION: ' +
-                                 f'unwarped: {loss_unwarped:.5f}' +
-                                 f', warped w/ the current state: {loss_warped:.5f}\n'
-                                 )
+                                 f'unwarped: {loss_unwarped:.5f}, warped w/ the current state: {loss_warped:.5f}\n')
 
             """
-            variational inference
+            VI
             """
 
-            self._step_VI(im_pair_idxs, im_moving, mu_v, log_var_v, u_v)
+            if self.VI:
+                self._step_VI(im_pair_idxs, im_moving)
 
-            self.tau = self.config['optimizer_mala']['args']['lr']
-            self.sqrt_tau_twice = np.sqrt(2.0 * self.tau)
-
-            self.mu_v = mu_v
-            self.sigma_scaled = self.sqrt_tau_twice * transform_coordinates(torch.exp(0.5 * log_var_v))
-            self.u_v_scaled = self.sqrt_tau_twice * transform_coordinates(u_v)
-            
             """
-            sampling from the posterior
+            MCMC
             """
 
-            self._step_MCMC(im_pair_idxs, im_moving)
+            if self.MCMC:
+                tau = self.config['optimizer_mala']['args']['lr']
+                sqrt_tau_twice = np.sqrt(2.0 * tau)
 
-        return self.train_metrics.result()
+                self.sigma_scaled = sqrt_tau_twice * transform_coordinates(torch.exp(0.5 * self.log_var_v))
+                self.u_v_scaled = sqrt_tau_twice * transform_coordinates(self.u_v)
 
-    def _progress(self, batch_idx):
-        base = '[{}/{} ({:.0f}%)]'
+                if self.v_curr_state is None:
+                    self.v_curr_state = self.mu_v.clone()
 
-        if hasattr(self.data_loader, 'n_samples'):
-            current = batch_idx * self.data_loader.batch_size
-            total = self.data_loader.n_samples
-        else:
-            current = batch_idx
-            total = self.len_epoch
+                self._step_MCMC(im_pair_idxs, im_moving)
 
-        return base.format(current, total, 100.0 * current / total)
+    def _save_checkpoint_vi(self, iter_no):
+        """
+        save a checkpoint
+        """
+
+        state = {
+            'config': self.config,
+            'iter': iter_no,
+
+            'mu_v': self.mu_v,
+            'log_var_v': self.log_var_v,
+            'u_v': self.u_v,
+            'optimizer_v': self.optimizer_v.state_dict()
+        }
+
+        filename = str(self.checkpoint_dir / f'checkpoint_vi_{iter_no}.pth')
+        self.logger.info("saving checkpoint: {}..".format(filename))
+        torch.save(state, filename)
+        self.logger.info("checkpoint saved\n")
+
+    def _save_checkpoint_mcmc(self, sample_no):
+        state = {
+            'config': self.config,
+            'sample_no': sample_no,
+
+            'mu_v': self.mu_v,
+            'log_var_v': self.log_var_v,
+            'u_v': self.u_v,
+
+            'v_curr_state': self.v_curr_state,
+            'optimizer_mala': self.optimizer_mala.state_dict()
+        }
+
+        filename = str(self.checkpoint_dir / f'checkpoint_mcmc_{sample_no}.pth')
+        self.logger.info("saving checkpoint: {}..".format(filename))
+        torch.save(state, filename)
+        self.logger.info("checkpoint saved\n")
+
+    def _resume_checkpoint_vi(self, resume_path):
+        """
+        resume from saved checkpoints
+
+        :param resume_path: checkpoint path to be resumed
+        """
+
+        resume_path = str(resume_path)
+        self.logger.info("\nloading checkpoint: {}..".format(resume_path))
+        checkpoint = torch.load(resume_path)
+
+        self.start_iter = checkpoint['iter'] + 1
+
+        self.mu_v = checkpoint['mu_v']
+        self.log_var_v = checkpoint['log_var_v']
+        self.u_v = checkpoint['u_v']
+
+        self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
+        self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
+
+        self.logger.info("checkpoint loaded, resuming training..")
+
+    def _resume_checkpoint_mcmc(self, resume_path):
+        """
+        resume from saved checkpoints
+
+        :param resume_path: checkpoint path to be resumed
+        """
+
+        resume_path = str(resume_path)
+        self.logger.info("\nloading checkpoint: {}..".format(resume_path))
+        checkpoint = torch.load(resume_path)
+
+        self.start_sample = checkpoint['sample_no'] + 1
+
+        self.mu_v = checkpoint['mu_v']
+        self.log_var_v = checkpoint['log_var_v']
+        self.u_v = checkpoint['u_v']
+
+        self.v_curr_state = checkpoint['v_curr_state']
+
+        self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
+        self.optimizer_mala.load_state_dict(checkpoint['optimizer_mala'])
+
+        self.logger.info("checkpoint loaded, resuming training..")

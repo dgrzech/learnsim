@@ -9,9 +9,9 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, reg_loss, entropy_loss,
-                 transformation_model, registration_module, metric_ftns, config):
+    def __init__(self, data_loss, reg_loss, entropy_loss, transformation_model, registration_module, config):
         self.config = config
+        self.checkpoint_dir = config.save_dir
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
         # setup GPU device if available and move the model and losses into configured device
@@ -32,29 +32,23 @@ class BaseTrainer:
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
 
-        # metrics
-        self.metric_ftns = metric_ftns
-
         # training logic
         cfg_trainer = config['trainer']
 
-        self.start_epoch = 1
-        self.epochs = 1
-
-        self.no_steps_v = int(cfg_trainer['no_steps_v'])
+        self.no_iters_vi = int(cfg_trainer['no_iters_vi'])
+        self.no_iters_burn_in = int(cfg_trainer['no_iters_burn_in'])
         self.no_samples = int(cfg_trainer['no_samples'])
-        self.no_steps_burn_in = int(cfg_trainer['no_steps_burn_in'])
+
+        self.log_period = cfg_trainer['log_period']
+        self.save_period = cfg_trainer['save_period']
 
         # setup visualization writer instance
-        self.log_step = cfg_trainer['log_step']
         self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])
 
     @abstractmethod
-    def _train_epoch(self, epoch):
+    def _train_epoch(self):
         """
         training logic for an epoch
-
-        :param epoch: Current epoch number
         """
 
         raise NotImplementedError
@@ -64,19 +58,7 @@ class BaseTrainer:
         full training logic
         """
 
-        for epoch in range(self.start_epoch, self.epochs + 1):
-            result = self._train_epoch(epoch)
-
-            # save logged informations into log dict
-            log = {'epoch': epoch}
-            log.update(result)
-
-            # print logged informations to the screen
-            for key, value in log.items():
-                if isinstance(value, int):
-                    self.logger.info(f'    {str(key):15s}: {value}')
-                else:
-                    self.logger.info(f'    {str(key):15s}: {value:.5f}')
+        self._train_epoch()
 
     def _prepare_device(self, n_gpu_use):
         """

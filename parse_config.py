@@ -1,4 +1,5 @@
 from datetime import datetime
+from distutils.dir_util import copy_tree
 from functools import reduce, partial
 from operator import getitem
 from pathlib import Path
@@ -27,7 +28,6 @@ class ConfigParser:
 
         # set save_dir where trained model and log will be saved.
         save_dir = Path(self.config['trainer']['save_dir'])
-
         exper_name = self.config['name']
 
         if run_id is None:  # use timestamp as default run-id
@@ -35,10 +35,9 @@ class ConfigParser:
         
         self._save_dir = save_dir / exper_name / run_id / 'models'
         self._log_dir = save_dir / exper_name / run_id / 'log'
-
         self._im_dir = save_dir / exper_name / run_id / 'images'
-        self._v_dir = save_dir / exper_name / run_id / 'models' / 'v'
-        self._v_field_dir = save_dir / exper_name / run_id / 'fields' / 'v'
+
+        self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
         self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
         self._grid_dir = save_dir / exper_name / run_id / 'grids'
         self._log_det_J_dir = save_dir / exper_name / run_id / 'fields' / 'log_det_J'
@@ -49,10 +48,9 @@ class ConfigParser:
 
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
-
         self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.v_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
+
+        self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.grid_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_det_J_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -72,7 +70,7 @@ class ConfigParser:
     @classmethod
     def from_args(cls, args, options=''):
         """
-        Initialize this class from some cli arguments. Used in train, test.
+        initialize this class from some cli arguments; used in train, test
         """
         for opt in options:
             args.add_argument(*opt.flags, default=None, type=opt.type)
@@ -81,6 +79,9 @@ class ConfigParser:
 
         if args.device is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+        if args.resume is not None:
+            resume = Path(args.resume)
+            cfg_fname = resume.parent / 'config.json'
         else:
             msg_no_cfg = "Configuration file need to be specified. Add '-c config.json', for example."
             assert args.config is not None, msg_no_cfg
@@ -92,7 +93,6 @@ class ConfigParser:
             # update new config for fine-tuning
             config.update(read_json(args.config))
 
-        # parse custom cli options into dictionary
         modification = {opt.target: getattr(args, _get_opt_name(opt.flags)) for opt in options}
         return cls(config, resume, modification)
 
@@ -146,6 +146,10 @@ class ConfigParser:
         return self._config
 
     @property
+    def checkpoint_dir(self):
+        return self._checkpoint_dir
+
+    @property
     def save_dir(self):
         return self._save_dir
 
@@ -158,12 +162,8 @@ class ConfigParser:
         return self._im_dir
 
     @property
-    def v_dir(self):
-        return self._v_dir
-
-    @property
-    def v_field_dir(self):
-        return self._v_field_dir
+    def mu_v_field_dir(self):
+        return self._mu_v_field_dir
 
     @property
     def norms_dir(self):
@@ -183,9 +183,9 @@ class ConfigParser:
 
     @property
     def save_dirs(self):
-        return {'images': self.im_dir, 'v': self.v_dir, 'v_field': self.v_field_dir,
-                'norms': self.norms_dir, 'grids': self.grid_dir, 'log_det_J': self.log_det_J_dir,
-                'displacement': self.displacement_dir}
+        return {'images': self.im_dir,
+                'mu_v_field': self.mu_v_field_dir, 'norms': self.norms_dir, 'grids': self.grid_dir,
+                'log_det_J': self.log_det_J_dir, 'displacement': self.displacement_dir}
 
 
 # helper functions to update config dict with custom cli options

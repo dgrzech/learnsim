@@ -98,6 +98,24 @@ def init_identity_grid_3d(nx, ny, nz):
     return torch.cat((x, y, z), 4)
 
 
+def max_field_update(field_old, field_new):
+    """
+    calculate the largest update to a vector field in terms of the L2 norm
+
+    :param field_old: vector field before the update
+    :param field_new: vector field after the update
+
+    :return: voxel index and value of the largest update
+    """
+
+    norm_old = compute_norm(field_old)
+    norm_new = compute_norm(field_new)
+
+    max_update = torch.max(torch.abs(norm_new - norm_old))
+    max_update_idx = torch.argmax(torch.abs(norm_new - norm_old))
+    return max_update, max_update_idx
+
+
 def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
     """
     transform the coordinates of a pixel to range (-1, 1)
@@ -186,7 +204,7 @@ def save_optimiser_to_disk(optimiser, file_path):
     torch.save(state_dict, file_path)
 
 
-def separable_conv_3d(field, *args, **kwargs):
+def separable_conv_3d(field, *args):
     field_out = field.clone()
 
     if len(args) == 2:
@@ -268,7 +286,7 @@ def transform_coordinates(field):
 class MetricTracker:
     def __init__(self, *keys, writer=None):
         self.writer = writer
-        self._data = pd.DataFrame(index=keys, columns=['total', 'counts', 'average', 'last_value'])
+        self._data = pd.DataFrame(index=keys, columns=['total', 'counts', 'average'])
         self.reset()
         
     def reset(self):

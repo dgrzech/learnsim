@@ -39,28 +39,31 @@ def main(config):
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
     # metrics
-    metrics = ['data_term', 'reg_term', 'entropy_term', 'total_loss',
-               'sample_data_term', 'sample_reg_term']
+    metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
+                  'max_updates/mu_v', 'max_updates/log_var_v', 'max_updates/u_v']
+    metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term']
 
-    # run training
-    trainer = Trainer(data_loss, reg_loss, entropy_loss, transformation_model, registration_module, metrics,
-                      config=config, data_loader=data_loader)
+    # run the model
+    trainer = Trainer(data_loss, reg_loss, entropy_loss, transformation_model, registration_module,
+                      metrics_vi, metrics_mcmc, config=config, data_loader=data_loader)
     trainer.train()
 
 
 if __name__ == '__main__':
-    args = argparse.ArgumentParser(description='LearnSim')
+    args = argparse.ArgumentParser(description='MCMC')
 
     args.add_argument('-c', '--config', default=None, type=str,
                       help='config file path (default: None)')
+    args.add_argument('-r', '--resume', default=None, type=str,
+                      help='path to latest checkpoint (default: None)')
     args.add_argument('-d', '--device', default=None, type=str,
                       help='indices of GPUs to enable (default: all)')
 
-    # custom cli options to modify configuration from default values given in json file.
+    # custom cli options to modify configuration from default values given in the .json file
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
     options = [
-        CustomArgs(['--lr', '--learning_rate'], type=float, target='optimizer;args;lr'),
-        CustomArgs(['--bs', '--batch_size'], type=int, target='data_loader;args;batch_size')
+        CustomArgs(['-vi', '--variational_inference'], type=int, target='trainer;vi'),
+        CustomArgs(['-mcmc', '--markov_chain_monte_carlo'], type=int, target='trainer;mcmc')
     ]
 
     config = ConfigParser.from_args(args, options)
