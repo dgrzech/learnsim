@@ -2,8 +2,13 @@ from datetime import datetime
 
 import importlib
 import matplotlib.pyplot as plt
+import numpy as np
 
 from utils import compute_norm
+
+
+def im_flip(array):
+    return np.fliplr(np.flipud(np.transpose(array, (1, 0))))
 
 
 def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
@@ -22,9 +27,9 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_fixed_slices[i])
-        axs[1, i].imshow(im_moving_slices[i])
-        axs[2, i].imshow(im_moving_warped_slices[i])
+        axs[0, i].imshow(im_flip(im_fixed_slices[i]))
+        axs[1, i].imshow(im_flip(im_moving_slices[i]))
+        axs[2, i].imshow(im_flip(im_moving_warped_slices[i]))
 
     return fig
 
@@ -45,10 +50,10 @@ def var_params_q_v_grid(mu_v_norm_slices, displacement_norm_slices, log_var_v_no
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(mu_v_norm_slices[i])
-        axs[1, i].imshow(displacement_norm_slices[i])
-        axs[2, i].imshow(log_var_v_norm_slices[i])
-        axs[3, i].imshow(u_v_norm_slices[i])
+        axs[0, i].imshow(im_flip(mu_v_norm_slices[i]))
+        axs[1, i].imshow(im_flip(displacement_norm_slices[i]))
+        axs[2, i].imshow(im_flip(log_var_v_norm_slices[i]))
+        axs[3, i].imshow(im_flip(u_v_norm_slices[i]))
 
     return fig
 
@@ -69,8 +74,8 @@ def v_grid(mu_v_norm_slices, displacement_norm_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(mu_v_norm_slices[i])
-        axs[1, i].imshow(displacement_norm_slices[i])
+        axs[0, i].imshow(im_flip(mu_v_norm_slices[i]))
+        axs[1, i].imshow(im_flip(displacement_norm_slices[i]))
 
     return fig
 
@@ -84,7 +89,7 @@ def log_det_J_transformation_grid(log_det_J_transformation_slices):
         ax.set_xticks([], [])
         ax.set_yticks([], [])
 
-        im = ax.imshow(log_det_J_transformation_slices[i])
+        im = ax.imshow(im_flip(log_det_J_transformation_slices[i]))
         ax.set_title(cols[i])
 
     fig.subplots_adjust(right=0.8)
