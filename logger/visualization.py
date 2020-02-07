@@ -3,203 +3,13 @@ from datetime import datetime
 import importlib
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 from utils import compute_norm
 
 
 def im_flip(array):
     return np.fliplr(np.flipud(np.transpose(array, (1, 0))))
-
-
-def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
-    fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
-
-    cols = ['axial', 'coronal', 'sagittal']
-    rows = ['im_fixed', 'im_moving', 'im_moving_warped']
-
-    for ax, col in zip(axs[0], cols):
-        ax.set_title(col)
-
-    for ax, row in zip(axs[:, 0], rows):
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
-
-        ax.set_ylabel(row, rotation=90, size='large')
-
-    for i in range(3):
-        axs[0, i].imshow(im_flip(im_fixed_slices[i]))
-        axs[1, i].imshow(im_flip(im_moving_slices[i]))
-        axs[2, i].imshow(im_flip(im_moving_warped_slices[i]))
-
-    return fig
-
-
-def log_det_J_transformation_grid(log_det_J_transformation_slices):
-    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
-    cols = ['axial', 'coronal', 'sagittal']
-
-    for i in range(3):
-        ax = axs[i]
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
-
-        im = ax.imshow(im_flip(log_det_J_transformation_slices[i]))
-        ax.set_title(cols[i])
-
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-    fig.colorbar(im, cax=cbar_ax, aspect=1)
-
-    return fig
-
-
-def sample_q_v_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_slices):
-    fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
-
-    cols = ['axial', 'coronal', 'sagittal']
-    rows = ['im_moving_warped', 'mu_v_norm', 'displacement_norm']
-
-    for ax, col in zip(axs[0], cols):
-        ax.set_title(col)
-
-    for ax, row in zip(axs[:, 0], rows):
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
-
-        ax.set_ylabel(row, rotation=90, size='large')
-
-    for i in range(3):
-        axs[0, i].imshow(im_flip(im_moving_warped_slices[i]))
-        axs[1, i].imshow(im_flip(mu_v_norm_slices[i]))
-        axs[2, i].imshow(im_flip(displacement_norm_slices[i]))
-
-    return fig
-
-
-def var_params_q_v_grid(mu_v_norm_slices, displacement_norm_slices, log_var_v_norm_slices, u_v_norm_slices):
-    fig, axs = plt.subplots(nrows=4, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
-
-    cols = ['axial', 'coronal', 'sagittal']
-    rows = ['mu_v_norm', 'displacement_norm', 'log_var_v_norm', 'u_v_norm']
-
-    for ax, col in zip(axs[0], cols):
-        ax.set_title(col)
-
-    for ax, row in zip(axs[:, 0], rows):
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
-
-        ax.set_ylabel(row, rotation=90, size='large')
-
-    for i in range(3):
-        axs[0, i].imshow(im_flip(mu_v_norm_slices[i]))
-        axs[1, i].imshow(im_flip(displacement_norm_slices[i]))
-        axs[2, i].imshow(im_flip(log_var_v_norm_slices[i]))
-        axs[3, i].imshow(im_flip(u_v_norm_slices[i]))
-
-    return fig
-
-
-def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
-    im_pair_idxs = im_pair_idxs.tolist()
-
-    im_fixed_batch = im_fixed_batch.cpu().numpy()
-    im_moving_batch = im_moving_batch.cpu().numpy()
-    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
-
-    mid_x = int(im_fixed_batch.shape[4] / 2)
-    mid_y = int(im_fixed_batch.shape[3] / 2)
-    mid_z = int(im_fixed_batch.shape[2] / 2)
-
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        im_fixed = im_fixed_batch[loop_idx, 0]
-        im_fixed_slices = [im_fixed[:, :, mid_x], im_fixed[:, mid_y, :], im_fixed[mid_z, :, :]]
-
-        im_moving = im_moving_batch[loop_idx, 0]
-        im_moving_slices = [im_moving[:, :, mid_x], im_moving[:, mid_y, :], im_moving[mid_z, :, :]]
-
-        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-        im_moving_warped_slices = [im_moving_warped[:, :, mid_x],
-                                   im_moving_warped[:, mid_y, :],
-                                   im_moving_warped[mid_z, :, :]]
-
-        writer.add_figure('im_pairs/' + str(im_pair_idx),
-                          im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
-
-
-def log_q_v(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_transformation_batch):
-    im_pair_idxs = im_pair_idxs.tolist()
-
-    mu_v_batch = var_params_batch['mu_v']
-    log_var_v_batch = var_params_batch['log_var_v']
-    u_v_batch = var_params_batch['u_v']
-
-    log_det_J_transformation_batch = log_det_J_transformation_batch.cpu().numpy()
-
-    mid_x = int(mu_v_batch.shape[4] / 2)
-    mid_y = int(mu_v_batch.shape[3] / 2)
-    mid_z = int(mu_v_batch.shape[2] / 2)
-
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        temp = compute_norm(mu_v_batch[loop_idx])
-        mu_v_norm = temp[0].cpu().numpy()
-        mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
-
-        temp = compute_norm(displacement_batch[loop_idx])
-        displacement_norm = temp[0].cpu().numpy()
-        displacement_norm_slices = [displacement_norm[:, :, mid_x],
-                                    displacement_norm[:, mid_y, :],
-                                    displacement_norm[mid_z, :, :]]
-
-        temp = compute_norm(log_var_v_batch[loop_idx])
-        log_var_v_norm = temp[0].cpu().numpy()
-        log_var_v_norm_slices = [log_var_v_norm[:, :, mid_x], log_var_v_norm[:, mid_y, :], log_var_v_norm[mid_z, :, :]]
-
-        temp = compute_norm(u_v_batch[loop_idx])
-        u_v_norm = temp[0].cpu().numpy()
-        u_v_norm_slices = [u_v_norm[:, :, mid_x], u_v_norm[:, mid_y, :], u_v_norm[mid_z, :, :]]
-
-        writer.add_figure('q_v/' + str(im_pair_idx), var_params_q_v_grid(mu_v_norm_slices, displacement_norm_slices,
-                                                                         log_var_v_norm_slices, u_v_norm_slices))
-
-        log_det_J_transformation = log_det_J_transformation_batch[loop_idx]
-        log_det_J_transformation_slices = [log_det_J_transformation[:, :, mid_x],
-                                           log_det_J_transformation[:, mid_y, :],
-                                           log_det_J_transformation[mid_z, :, :]]
-
-        writer.add_figure('log_det_J_transformation/' + str(im_pair_idx),
-                          log_det_J_transformation_grid(log_det_J_transformation_slices))
-
-
-def log_sample_q_v(writer, im_pair_idxs, im_moving_warped_batch, v_batch, displacement_batch):
-    im_pair_idxs = im_pair_idxs.tolist()
-
-    mid_x = int(v_batch.shape[4] / 2)
-    mid_y = int(v_batch.shape[3] / 2)
-    mid_z = int(v_batch.shape[2] / 2)
-
-    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
-
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-        im_moving_warped_slices = [im_moving_warped[:, :, mid_x],
-                                   im_moving_warped[:, mid_y, :],
-                                   im_moving_warped[mid_z, :, :]]
-
-        temp = compute_norm(v_batch[loop_idx])
-        mu_v_norm = temp[0].cpu().numpy()
-        mu_v_norm_slices = [mu_v_norm[:, :, mid_x],
-                            mu_v_norm[:, mid_y, :],
-                            mu_v_norm[mid_z, :, :]]
-
-        temp = compute_norm(displacement_batch[loop_idx])
-        displacement_norm = temp[0].cpu().numpy()
-        displacement_norm_slices = [displacement_norm[:, :, mid_x],
-                                    displacement_norm[:, mid_y, :],
-                                    displacement_norm[mid_z, :, :]]
-
-        writer.add_figure('samples_q_v/' + str(im_pair_idx),
-                          sample_q_v_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_slices))
 
 
 class TensorboardWriter:
@@ -265,3 +75,184 @@ class TensorboardWriter:
             except AttributeError:
                 raise AttributeError("type object '{}' has no attribute '{}'".format(self.selected_module, name))
             return attr
+
+
+"""
+images
+"""
+
+
+def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
+    fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+
+    cols = ['axial', 'coronal', 'sagittal']
+    rows = ['im_fixed', 'im_moving', 'im_moving_warped']
+
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
+
+    for ax, row in zip(axs[:, 0], rows):
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        ax.set_ylabel(row, rotation=90, size='large')
+
+    for i in range(3):
+        axs[0, i].imshow(im_flip(im_fixed_slices[i]))
+        axs[1, i].imshow(im_flip(im_moving_slices[i]))
+        axs[2, i].imshow(im_flip(im_moving_warped_slices[i]))
+
+    return fig
+
+
+def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    im_fixed_batch = im_fixed_batch.cpu().numpy()
+    im_moving_batch = im_moving_batch.cpu().numpy()
+    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
+
+    mid_x = int(im_fixed_batch.shape[4] / 2)
+    mid_y = int(im_fixed_batch.shape[3] / 2)
+    mid_z = int(im_fixed_batch.shape[2] / 2)
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        im_fixed = im_fixed_batch[loop_idx, 0]
+        im_fixed_slices = [im_fixed[:, :, mid_x], im_fixed[:, mid_y, :], im_fixed[mid_z, :, :]]
+
+        im_moving = im_moving_batch[loop_idx, 0]
+        im_moving_slices = [im_moving[:, :, mid_x], im_moving[:, mid_y, :], im_moving[mid_z, :, :]]
+
+        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
+        im_moving_warped_slices = [im_moving_warped[:, :, mid_x],
+                                   im_moving_warped[:, mid_y, :],
+                                   im_moving_warped[mid_z, :, :]]
+
+        writer.add_figure('im_pairs/' + str(im_pair_idx),
+                          im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
+
+
+"""
+vector fields
+"""
+
+
+def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices):
+    fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
+
+    cols = ['axial', 'coronal', 'sagittal']
+    rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J']
+
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
+
+    for ax, row in zip(axs[:, 0], rows):
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        ax.set_ylabel(row, rotation=90, size='large')
+
+    for i in range(3):
+        axs[0, i].imshow(im_flip(mu_v_norm_slices[i]))
+        axs[1, i].imshow(im_flip(displacement_norm_slices[i]))
+        axs[2, i].imshow(im_flip(sigma_v_norm_slices[i]))
+        axs[3, i].imshow(im_flip(u_v_norm_slices[i]))
+        axs[4, i].imshow(im_flip(log_det_J_slices[i]))
+
+    return fig
+
+
+def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    mu_v_batch = var_params_batch['mu_v']
+    log_var_v_batch = var_params_batch['log_var_v']
+    sigma_v_batch = torch.exp(0.5 * log_var_v_batch)
+    u_v_batch = var_params_batch['u_v']
+    log_det_J_batch = log_det_J_batch.cpu().numpy()
+
+    mid_x = int(mu_v_batch.shape[4] / 2)
+    mid_y = int(mu_v_batch.shape[3] / 2)
+    mid_z = int(mu_v_batch.shape[2] / 2)
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        temp = compute_norm(mu_v_batch[loop_idx])
+        mu_v_norm = temp[0].cpu().numpy()
+        mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
+
+        temp = compute_norm(displacement_batch[loop_idx])
+        displacement_norm = temp[0].cpu().numpy()
+        displacement_norm_slices = [displacement_norm[:, :, mid_x],
+                                    displacement_norm[:, mid_y, :],
+                                    displacement_norm[mid_z, :, :]]
+
+        temp = compute_norm(sigma_v_batch[loop_idx])
+        sigma_v_norm = temp[0].cpu().numpy()
+        sigma_v_norm_slices = [sigma_v_norm[:, :, mid_x], sigma_v_norm[:, mid_y, :], sigma_v_norm[mid_z, :, :]]
+
+        temp = compute_norm(u_v_batch[loop_idx])
+        u_v_norm = temp[0].cpu().numpy()
+        u_v_norm_slices = [u_v_norm[:, :, mid_x], u_v_norm[:, mid_y, :], u_v_norm[mid_z, :, :]]
+
+        log_det_J = log_det_J_batch[loop_idx]
+        log_det_J_slices = [log_det_J[:, :, mid_x], log_det_J[:, mid_y, :], log_det_J[mid_z, :, :]]
+
+        writer.add_figure('q_v/' + str(im_pair_idx),
+                          fields_grid(mu_v_norm_slices, displacement_norm_slices,
+                                      sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
+
+
+"""
+samples
+"""
+
+
+def sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_slices):
+    fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+
+    cols = ['axial', 'coronal', 'sagittal']
+    rows = ['im_moving_warped', 'mu_v_norm', 'displacement_norm']
+
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
+
+    for ax, row in zip(axs[:, 0], rows):
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
+
+        ax.set_ylabel(row, rotation=90, size='large')
+
+    for i in range(3):
+        axs[0, i].imshow(im_flip(im_moving_warped_slices[i]))
+        axs[1, i].imshow(im_flip(mu_v_norm_slices[i]))
+        axs[2, i].imshow(im_flip(displacement_norm_slices[i]))
+
+    return fig
+
+
+def log_sample(writer, im_pair_idxs, im_moving_warped_batch, v_batch, displacement_batch):
+    im_pair_idxs = im_pair_idxs.tolist()
+    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
+
+    mid_x = int(v_batch.shape[4] / 2)
+    mid_y = int(v_batch.shape[3] / 2)
+    mid_z = int(v_batch.shape[2] / 2)
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
+        im_moving_warped_slices = [im_moving_warped[:, :, mid_x],
+                                   im_moving_warped[:, mid_y, :],
+                                   im_moving_warped[mid_z, :, :]]
+
+        temp = compute_norm(v_batch[loop_idx])
+        mu_v_norm = temp[0].cpu().numpy()
+        mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
+
+        temp = compute_norm(displacement_batch[loop_idx])
+        displacement_norm = temp[0].cpu().numpy()
+        displacement_norm_slices = [displacement_norm[:, :, mid_x],
+                                    displacement_norm[:, mid_y, :],
+                                    displacement_norm[mid_z, :, :]]
+
+        writer.add_figure('samples/' + str(im_pair_idx),
+                          sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_slices))

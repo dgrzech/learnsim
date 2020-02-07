@@ -1,5 +1,4 @@
 from datetime import datetime
-from distutils.dir_util import copy_tree
 from functools import reduce, partial
 from operator import getitem
 from pathlib import Path
@@ -35,26 +34,22 @@ class ConfigParser:
         
         self._save_dir = save_dir / exper_name / run_id / 'models'
         self._log_dir = save_dir / exper_name / run_id / 'log'
-        self._im_dir = save_dir / exper_name / run_id / 'images'
 
-        self._mu_v_field_dir = save_dir / exper_name / run_id / 'fields' / 'mu_v'
-        self._norms_dir = save_dir / exper_name / run_id / 'fields' / 'norms'
-        self._grid_dir = save_dir / exper_name / run_id / 'grids'
-        self._log_det_J_dir = save_dir / exper_name / run_id / 'fields' / 'log_det_J'
-        self._displacement_dir = save_dir / exper_name / run_id / 'fields' / 'displacement'
+        self._im_dir = save_dir / exper_name / run_id / 'images'
+        self._fields_dir = save_dir / exper_name / run_id / 'fields'
+        self._norms_dir = save_dir / exper_name / run_id / 'norms'
+        self._grids_dir = save_dir / exper_name / run_id / 'grids'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
 
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        self.mu_v_field_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.grid_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.log_det_J_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.displacement_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.grids_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -162,30 +157,20 @@ class ConfigParser:
         return self._im_dir
 
     @property
-    def mu_v_field_dir(self):
-        return self._mu_v_field_dir
+    def fields_dir(self):
+        return self._fields_dir
 
     @property
     def norms_dir(self):
         return self._norms_dir
 
     @property
-    def grid_dir(self):
-        return self._grid_dir
-
-    @property
-    def log_det_J_dir(self):
-        return self._log_det_J_dir
-
-    @property
-    def displacement_dir(self):
-        return self._displacement_dir
+    def grids_dir(self):
+        return self._grids_dir
 
     @property
     def save_dirs(self):
-        return {'images': self.im_dir,
-                'mu_v_field': self.mu_v_field_dir, 'norms': self.norms_dir, 'grids': self.grid_dir,
-                'log_det_J': self.log_det_J_dir, 'displacement': self.displacement_dir}
+        return {'images': self.im_dir, 'fields': self.fields_dir, 'norms': self.norms_dir, 'grids': self.grids_dir}
 
 
 # helper functions to update config dict with custom cli options

@@ -1,5 +1,5 @@
 from base import BaseTrainer
-from logger import log_images, log_q_v, log_sample_q_v, print_log, save_grids, save_images
+from logger import log_fields, log_images, log_sample, print_log, save_fields, save_grids, save_images, save_norms
 from utils import add_noise, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
     save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, MetricTracker, SobolevGrad
 
@@ -111,9 +111,12 @@ class Trainer(BaseTrainer):
 
             loss_q_v = data_term + reg_term - entropy_term
             loss_q_v.backward()
-            self.optimizer_v.step()
+            self.optimizer_v.step()  # backprop
 
-            # scalar metrics
+            """
+            metrics and prints
+            """
+
             self.writer.set_step(iter_no)
 
             self.train_metrics_vi.update('VI/data_term', data_term.item())
@@ -135,44 +138,40 @@ class Trainer(BaseTrainer):
                 log.update(self.train_metrics_vi.result())
                 print_log(self.logger, log)
 
-            # images and vector fields
+            """
+            outputs
+            """
+
             if math.log2(iter_no).is_integer():
                 with torch.no_grad():
                     if self.sobolev_grad:
-                        mu_v_smoothed = SobolevGrad.apply(self.mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                        mu_v_smoothed = \
+                            SobolevGrad.apply(self.mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                        log_var_v_smoothed = \
+                            SobolevGrad.apply(self.log_var_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                        u_v_smoothed = \
+                            SobolevGrad.apply(self.u_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+
+                        var_params = {'mu_v': mu_v_smoothed, 'log_var_v': log_var_v_smoothed, 'u_v': u_v_smoothed}
                         transformation, displacement = self.transformation_model(mu_v_smoothed)
                     else:
+                        var_params = {'mu_v': self.mu_v, 'log_var_v': self.log_var_v, 'u_v': self.u_v}
                         transformation, displacement = self.transformation_model(self.mu_v)
 
                     im_moving_warped = self.registration_module(im_moving, transformation)
-
                     nabla_x, nabla_y, nabla_z = get_module_attr(self.reg_loss, 'diff_op')(transformation)
-                    det_J_transformation = calc_det_J(nabla_x, nabla_y, nabla_z)
-                    log_det_J_transformation = torch.log10(det_J_transformation)
+                    log_det_J_transformation = torch.log10(calc_det_J(nabla_x, nabla_y, nabla_z))
 
+                    # tensorboard
+                    log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
                     log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
 
-                    if self.sobolev_grad:
-                        log_var_v_smoothed = \
-                            SobolevGrad.apply(self.log_var_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                        u_v_smoothed = SobolevGrad.apply(self.u_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
-
-                        var_params = {'mu_v': mu_v_smoothed, 'log_var_v': log_var_v_smoothed, 'u_v': u_v_smoothed}
-                    else:
-                        var_params = {'mu_v': self.mu_v, 'log_var_v': self.log_var_v, 'u_v': self.u_v}
-
-                    log_q_v(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
-
-                    if self.sobolev_grad:
-                        save_images(self.data_loader.save_dirs, im_pair_idxs,
-                                    self.im_fixed, im_moving, im_moving_warped,
-                                    var_params, displacement, log_det_J_transformation)
-                    else:
-                        save_images(self.data_loader.save_dirs, im_pair_idxs,
-                                    self.im_fixed, im_moving, im_moving_warped,
-                                    var_params, displacement, log_det_J_transformation)
-
+                    # .nii.gz/.vtk
+                    save_fields(
+                        self.data_loader.save_dirs, im_pair_idxs, var_params, displacement, log_det_J_transformation)
                     save_grids(self.data_loader.save_dirs, im_pair_idxs, transformation)
+                    save_images(self.data_loader.save_dirs, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
+                    save_norms(self.data_loader.save_dirs, im_pair_idxs, var_params, displacement)
 
             # checkpoint
             if iter_no % self.save_period == 0 or iter_no == self.no_iters_vi:
@@ -216,7 +215,7 @@ class Trainer(BaseTrainer):
 
             loss = data_term + reg_term
             loss.backward()
-            self.optimizer_mala.step()
+            self.optimizer_mala.step()  # backprop
 
             """
             metrics and prints
@@ -237,11 +236,10 @@ class Trainer(BaseTrainer):
                     print_log(self.logger, log)
 
                     if self.sobolev_grad:
-                        log_sample_q_v(self.writer, im_pair_idxs,
-                                       im_moving_warped, v_curr_state_noise_smoothed, displacement)
+                        log_sample(self.writer, im_pair_idxs,
+                                   im_moving_warped, v_curr_state_noise_smoothed, displacement)
                     else:
-                        log_sample_q_v(self.writer, im_pair_idxs,
-                                       im_moving_warped, self.v_curr_state, displacement)
+                        log_sample(self.writer, im_pair_idxs, im_moving_warped, self.v_curr_state, displacement)
 
             if sample_no % 10000 == 0 or sample_no == self.no_samples:
                 self._save_checkpoint_mcmc(sample_no)
