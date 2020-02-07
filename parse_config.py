@@ -34,6 +34,7 @@ class ConfigParser:
         
         self._save_dir = save_dir / exper_name / run_id / 'models'
         self._log_dir = save_dir / exper_name / run_id / 'log'
+        self._samples_dir = save_dir / exper_name / run_id / 'samples'
 
         self._im_dir = save_dir / exper_name / run_id / 'images'
         self._fields_dir = save_dir / exper_name / run_id / 'fields'
@@ -45,6 +46,7 @@ class ConfigParser:
 
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -153,6 +155,10 @@ class ConfigParser:
         return self._log_dir
 
     @property
+    def samples_dir(self):
+        return self._samples_dir
+
+    @property
     def im_dir(self):
         return self._im_dir
 
@@ -170,7 +176,7 @@ class ConfigParser:
 
     @property
     def save_dirs(self):
-        return {'images': self.im_dir, 'fields': self.fields_dir, 'norms': self.norms_dir, 'grids': self.grids_dir}
+        return {'samples': self.samples_dir, 'images': self.im_dir, 'fields': self.fields_dir, 'norms': self.norms_dir, 'grids': self.grids_dir}
 
 
 # helper functions to update config dict with custom cli options

@@ -202,3 +202,25 @@ def save_grids(save_dirs_dict, im_pair_idxs, grids):
 
         grid_path = path.join(save_dirs_dict['grids'], 'grid_' + str(im_pair_idx) + '.vtk')
         save_grid_to_disk(grid, grid_path)
+
+
+"""
+samples
+"""
+
+
+def save_sample(save_dirs_dict, im_pair_idxs, sample_no, im_moving_warped_batch, v_batch):
+    im_pair_idxs = im_pair_idxs.tolist()
+    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
+        im_moving_warped_path = path.join(save_dirs_dict['samples'], 'sample_' + str(sample_no) + '_im_moving_warped_' + str(im_pair_idx) + '.nii.gz')
+        save_im_to_disk(im_moving_warped, im_moving_warped_path)
+
+        v = v_batch[loop_idx]
+        v_path = path.join(save_dirs_dict['samples'], 'sample_' + str(sample_no) + '_v_' + str(im_pair_idx) + '.vtk')
+        save_field_to_disk(v, v_path)
+
+
+

@@ -1,5 +1,5 @@
 from base import BaseTrainer
-from logger import log_fields, log_images, log_sample, print_log, save_fields, save_grids, save_images, save_norms
+from logger import log_fields, log_images, log_sample, print_log, save_fields, save_grids, save_images, save_norms, save_sample
 from utils import add_noise, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
     save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, MetricTracker, SobolevGrad
 
@@ -229,6 +229,7 @@ class Trainer(BaseTrainer):
             if sample_no == self.no_iters_burn_in:
                 self.logger.info('\nENDED BURNING IN\n')
 
+            # tensorboard
             if sample_no > self.no_iters_burn_in and sample_no % 10000 == 0:
                 with torch.no_grad():
                     log = {'sample_no': sample_no}
@@ -240,9 +241,19 @@ class Trainer(BaseTrainer):
                                    im_moving_warped, v_curr_state_noise_smoothed, displacement)
                     else:
                         log_sample(self.writer, im_pair_idxs, im_moving_warped, self.v_curr_state, displacement)
+            
+            """
+            outputs
+            """
 
             if sample_no % 10000 == 0 or sample_no == self.no_samples:
-                self._save_checkpoint_mcmc(sample_no)
+                with torch.no_grad():
+                    if self.sobolev_grad:
+                        save_sample(self.data_loader.save_dirs, im_pair_idxs, sample_no, im_moving_warped, v_curr_state_noise_smoothed)
+                    else:
+                        save_sample(self.data_loader.save_dirs, im_pair_idxs, sample_no, im_moving_warped, v_curr_state_noise)
+
+                    self._save_checkpoint_mcmc(sample_no)  # checkpoint
 
     def _train_epoch(self):
         for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, im_moving, mu_v, log_var_v, u_v) \
