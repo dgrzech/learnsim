@@ -1,6 +1,7 @@
 from base import BaseTrainer
-from logger import log_fields, log_images, log_sample, print_log, save_fields, save_grids, save_images, save_norms, save_sample
-from utils import add_noise, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
+from logger import log_fields, log_images, log_sample, print_log, \
+    save_fields, save_grids, save_images, save_norms, save_sample
+from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
     save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, MetricTracker, SobolevGrad
 
 import math
@@ -93,6 +94,13 @@ class Trainer(BaseTrainer):
 
             transformation1, displacement1 = self.transformation_model(v_sample1)
             transformation2, displacement2 = self.transformation_model(v_sample2)
+
+            # add noise to account for interpolation uncertainty
+            transformation1, displacement1 = add_noise_uniform(transformation1, self.log_var_v), \
+                                             add_noise_uniform(displacement1, self.log_var_v)
+
+            transformation2, displacement2 = add_noise_uniform(transformation2, self.log_var_v), \
+                                             add_noise_uniform(displacement2, self.log_var_v)
 
             im_moving_warped1 = self.registration_module(im_moving, transformation1)
             im_moving_warped2 = self.registration_module(im_moving, transformation2)
@@ -210,6 +218,9 @@ class Trainer(BaseTrainer):
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
                 reg_term = self.reg_loss(v_curr_state_noise).sum()
 
+            transformation, displacement = add_noise_uniform(transformation, self.log_var_v), \
+                                           add_noise_uniform(displacement, self.log_var_v)
+
             im_moving_warped = self.registration_module(im_moving, transformation)
             data_term = self.data_loss(self.im_fixed, im_moving_warped, self.mask_fixed).sum()
 
@@ -249,9 +260,11 @@ class Trainer(BaseTrainer):
             if sample_no % 10000 == 0 or sample_no == self.no_samples:
                 with torch.no_grad():
                     if self.sobolev_grad:
-                        save_sample(self.data_loader.save_dirs, im_pair_idxs, sample_no, im_moving_warped, v_curr_state_noise_smoothed)
+                        save_sample(self.data_loader.save_dirs, im_pair_idxs,
+                                    sample_no, im_moving_warped, v_curr_state_noise_smoothed)
                     else:
-                        save_sample(self.data_loader.save_dirs, im_pair_idxs, sample_no, im_moving_warped, v_curr_state_noise)
+                        save_sample(self.data_loader.save_dirs, im_pair_idxs,
+                                    sample_no, im_moving_warped, v_curr_state_noise)
 
                     self._save_checkpoint_mcmc(sample_no)  # checkpoint
 
