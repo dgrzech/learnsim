@@ -1,5 +1,5 @@
 from base import BaseTrainer
-from logger import log_fields, log_images, log_sample, print_log, \
+from logger import log_fields, log_hist_res, log_images, log_sample, print_log, \
     save_fields, save_grids, save_images, save_norms, save_sample
 from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
     save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, MetricTracker, SobolevGrad
@@ -14,9 +14,10 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, data_loss, reg_loss, entropy_loss, transformation_model, registration_module,
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss, transformation_model, registration_module,
                  metric_ftns_vi, metric_ftns_mcmc, config, data_loader):
-        super().__init__(data_loss, reg_loss, entropy_loss, transformation_model, registration_module, config)
+        super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
+                         transformation_model, registration_module, config)
 
         self.config = config
         self.data_loader = data_loader
@@ -76,13 +77,15 @@ class Trainer(BaseTrainer):
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
+
+            self.optimizer_mixture_model.zero_grad()
             self.optimizer_v.zero_grad()
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
                 mu_v_old = self.mu_v.detach().clone()  # neded to calculate the maximum update in terms of the L2 norm
                 log_var_v_old = self.log_var_v.detach().clone()
                 u_v_old = self.u_v.detach().clone()
-
+            
             data_term = 0.0
             reg_term = 0.0
             entropy_term = 0.0
@@ -105,8 +108,33 @@ class Trainer(BaseTrainer):
             im_moving_warped1 = self.registration_module(im_moving, transformation1)
             im_moving_warped2 = self.registration_module(im_moving, transformation2)
 
-            data_term += self.data_loss(self.im_fixed, im_moving_warped1, self.mask_fixed).sum() / 2.0
-            data_term += self.data_loss(self.im_fixed, im_moving_warped2, self.mask_fixed).sum() / 2.0
+            n_F, n_M1 = self.data_loss.map(self.im_fixed, im_moving_warped1)
+            n_F, n_M2 = self.data_loss.map(self.im_fixed, im_moving_warped2)
+
+            res1 = ((n_F - n_M1) * self.mask_fixed).view(1, -1, 1)
+            res2 = ((n_F - n_M2) * self.mask_fixed).view(1, -1, 1)
+
+            if iter_no == 1:
+                no_warm_up_steps = 50
+
+                for step in range(1, no_warm_up_steps + 1):
+                    loss_gmm = 0.0
+                    self.optimizer_mixture_model.zero_grad()
+
+                    loss_gmm += self.data_loss(res1) / 2.0
+                    loss_gmm += self.data_loss(res2) / 2.0
+
+                    loss_gmm -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
+                    loss_gmm -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
+
+                    loss_gmm.backward(retain_graph=True)
+                    self.optimizer_mixture_model.step()
+
+            data_term += self.data_loss(res1) / 2.0
+            data_term += self.data_loss(res2) / 2.0
+
+            data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
+            data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
             reg_term += self.reg_loss(v_sample1).sum() / 2.0
             reg_term += self.reg_loss(v_sample2).sum() / 2.0
@@ -119,7 +147,9 @@ class Trainer(BaseTrainer):
 
             loss_q_v = data_term + reg_term - entropy_term
             loss_q_v.backward()
-            self.optimizer_v.step()  # backprop
+
+            self.optimizer_mixture_model.step()  # backprop
+            self.optimizer_v.step()
 
             """
             metrics and prints
@@ -173,6 +203,9 @@ class Trainer(BaseTrainer):
                     # tensorboard
                     log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
                     log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
+
+                    if iter_no == 1:
+                        log_hist_res(self.writer, im_pair_idxs, res1, self.data_loss)
 
                     # .nii.gz/.vtk
                     save_fields(
@@ -283,7 +316,7 @@ class Trainer(BaseTrainer):
             if self.u_v is None:
                 self.u_v = u_v.to(self.device, non_blocking=True)
 
-            # print value of the data term before registration
+            # print value of the data term before registration and initialsie the GMM
             with torch.no_grad():
                 if self.sobolev_grad:
                     v_smoothed = SobolevGrad.apply(self.mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
@@ -293,10 +326,20 @@ class Trainer(BaseTrainer):
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
 
-                loss_unwarped = self.data_loss(self.im_fixed, im_moving, self.mask_fixed).sum()
-                loss_warped = self.data_loss(self.im_fixed, im_moving_warped, self.mask_fixed).sum()
+                n_F, n_M_unwarped = self.data_loss.map(self.im_fixed, im_moving)
+                n_F, n_M_warped = self.data_loss.map(self.im_fixed, im_moving_warped)
+                
+                # initialise the GMM
+                res_unwarped = ((n_F - n_M_unwarped) * self.mask_fixed).view(1, -1, 1)
+                res_warped = ((n_F - n_M_warped) * self.mask_fixed).view(1, -1, 1)
 
-                self.logger.info(f'\nPRE-REGISTRATION: ' +
+                self.data_loss.initialise_parameters(torch.std(res_unwarped))
+                self.logger.info('initialised the GMM\n')
+
+                loss_unwarped = self.data_loss(res_unwarped)
+                loss_warped = self.data_loss(res_warped)
+                
+                self.logger.info(f'PRE-REGISTRATION: ' +
                                  f'unwarped: {loss_unwarped:.5f}, warped w/ the current state: {loss_warped:.5f}\n')
 
             """

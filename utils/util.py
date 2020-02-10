@@ -5,6 +5,7 @@ from torch import nn
 from tvtk.api import tvtk, write_data
 
 import json
+import math
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -281,6 +282,42 @@ def transform_coordinates(field):
         field_out[:, idx] = field_out[:, idx] * 2.0 / float(dims[idx] - 1)
 
     return field_out
+
+
+def vd(residual):
+    """
+    virtual decimation
+
+    input x = residual (Gaussian-ish) field with stationary covariance, e.g. residual map (I-J) / sigma,
+    where sigma is the noise sigma if you use SSD/Gaussian model or else the EM voxel-wise estimate if you use a GMM
+
+    EM voxel-wise estimate of precision=var^{-1} is sum_k rho_k precision_k,
+    where rho_k is the component responsible for the voxel
+
+    The general idea is that each voxelwise observation now only counts for "VD < 1 of an observation";
+    imagine sampling a z~bernoulli(VD) at each voxel and you only add the voxel's loss if z==1.
+
+    In practice you do that in expectation. In the simplest case it looks like VD * data_loss,
+    and goes well in a VB framework, as if you added a q(z) = Bernoulli(VD) to a VB approximation
+    and took the expectation wrt q(z).
+    """
+
+    dims = [1, 2, 3, 4]  # exclude the batch dimension
+    var_res = torch.mean(residual ** 2, dim=dims)
+
+    cov_x = torch.mean(residual[:, :, :-1] * residual[:, :, 1:], dim=dims)
+    cov_y = torch.mean(residual[:, :, :, :-1] * residual[:, :, :, 1:], dim=dims)
+    cov_z = torch.mean(residual[:, :, :, :, :-1] * residual[:, :, :, :, 1:], dim=dims)
+
+    corr_x = cov_x / var_res
+    corr_y = cov_y / var_res
+    corr_z = cov_z / var_res
+
+    sq_vd_x = torch.clamp(-2.0 / math.pi * torch.log(corr_x), max=1.0)
+    sq_vd_y = torch.clamp(-2.0 / math.pi * torch.log(corr_y), max=1.0)
+    sq_vd_z = torch.clamp(-2.0 / math.pi * torch.log(corr_z), max=1.0)
+
+    return torch.sqrt(sq_vd_x * sq_vd_y * sq_vd_z).view(-1, 1, 1, 1, 1)
 
 
 class MetricTracker:

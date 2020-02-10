@@ -3,6 +3,7 @@ from datetime import datetime
 import importlib
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 
 from utils import compute_norm
@@ -103,6 +104,26 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
         axs[2, i].imshow(im_flip(im_moving_warped_slices[i]))
 
     return fig
+
+
+def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
+    batch_size = im_pair_idxs.numel()
+    im_pair_idxs = im_pair_idxs.tolist()
+
+    residuals_batch = residuals_batch.view(batch_size, -1).cpu().numpy()
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        residuals = residuals_batch[loop_idx]
+
+        fig, ax = plt.subplots()
+        sns.distplot(residuals, kde=False, norm_hist=True)
+
+        xmin, xmax = ax.get_xlim()
+        x = torch.linspace(xmin, xmax, steps=1000).unsqueeze(-1).to('cuda:0')
+        model_fit = torch.exp(gmm.log_pdf(x)).detach().squeeze().cpu().numpy()
+        sns.lineplot(x=x.detach().squeeze().cpu().numpy(), y=model_fit, color='green', ax=ax)
+
+        writer.add_figure('hist_residuals/' + str(im_pair_idx), fig)
 
 
 def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):

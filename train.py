@@ -35,6 +35,9 @@ def main(config):
 
     # losses
     data_loss = config.init_obj('data_loss', model_loss)
+    scale_prior = model_loss.ScaleLogNormalPrior()
+    proportion_prior = config.init_obj('proportion_prior', model_loss)
+
     reg_loss = config.init_obj('reg_loss', model_loss)
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
@@ -44,8 +47,9 @@ def main(config):
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term']
 
     # run the model
-    trainer = Trainer(data_loss, reg_loss, entropy_loss, transformation_model, registration_module,
-                      metrics_vi, metrics_mcmc, config=config, data_loader=data_loader)
+    trainer = Trainer(data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
+                      transformation_model, registration_module, metrics_vi, metrics_mcmc,
+                      config=config, data_loader=data_loader)
     trainer.train()
 
 

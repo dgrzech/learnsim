@@ -1,5 +1,8 @@
 from abc import abstractmethod
 from logger import TensorboardWriter
+from optimizers import Adam as AdamLR
+
+import model.loss as model_loss
 
 import torch
 
@@ -9,7 +12,8 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, reg_loss, entropy_loss, transformation_model, registration_module, config):
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
+                 transformation_model, registration_module, config):
         self.config = config
         self.checkpoint_dir = config.save_dir
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
@@ -21,6 +25,17 @@ class BaseTrainer:
         self.registration_module = registration_module.to(self.device)
 
         self.data_loss = data_loss.to(self.device)
+        self.scale_prior = scale_prior.to(self.device)
+        self.proportion_prior = proportion_prior.to(self.device)
+            
+        if isinstance(self.data_loss, model_loss.GaussianMixtureLoss):
+            with torch.no_grad():
+                self.data_loss.logits.data.fill_(0.)
+
+            self.optimizer_mixture_model = \
+                AdamLR([{'params': [self.data_loss.log_std]}, {'params': [self.data_loss.logits], 'lr': 1e-4}],
+                       lr=1e-2, lr_decay=.4)
+        
         self.reg_loss = reg_loss.to(self.device)
         self.entropy_loss = entropy_loss.to(self.device)
 
@@ -29,6 +44,9 @@ class BaseTrainer:
             self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
 
             self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
+            self.scale_prior = torch.nn.DataParallel(scale_prior, device_ids=device_ids)
+            self.proportion_prior = torch.nn.DataParallel(proportion_prior, device_ids=device_ids)
+
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
 
