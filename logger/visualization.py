@@ -110,6 +110,7 @@ def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
     batch_size = im_pair_idxs.numel()
     im_pair_idxs = im_pair_idxs.tolist()
 
+    device_temp = residuals_batch.device
     residuals_batch = residuals_batch.view(batch_size, -1).cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -119,9 +120,12 @@ def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
         sns.distplot(residuals, kde=False, norm_hist=True)
 
         xmin, xmax = ax.get_xlim()
-        x = torch.linspace(xmin, xmax, steps=1000).unsqueeze(-1).to('cuda:0')
-        model_fit = torch.exp(gmm.log_pdf(x)).detach().squeeze().cpu().numpy()
-        sns.lineplot(x=x.detach().squeeze().cpu().numpy(), y=model_fit, color='green', ax=ax)
+
+        x = torch.linspace(xmin, xmax, steps=1000).unsqueeze(0).unsqueeze(-1).to(device_temp)
+        model_fit = torch.exp(gmm.log_pdf(x))
+
+        sns.lineplot(x=x.detach().squeeze().cpu().numpy(),
+                     y=model_fit.detach().squeeze().cpu().numpy(), color='green', ax=ax)
 
         writer.add_figure('hist_residuals/' + str(im_pair_idx), fig)
 

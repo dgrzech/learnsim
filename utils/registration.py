@@ -9,4 +9,4 @@ class RegistrationModule(nn.Module):
 
     def forward(self, im_or_seg_moving, transformation, mode='bilinear'):
         grid = transformation.permute([0, 2, 3, 4, 1])
-        return F.grid_sample(im_or_seg_moving, grid, mode=mode, padding_mode='border')
+        return F.grid_sample(im_or_seg_moving, grid, mode=mode, padding_mode='border', align_corners=True)

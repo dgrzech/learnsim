@@ -2,7 +2,7 @@ from base import BaseTrainer
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, \
     save_fields, save_grids, save_images, save_norms, save_sample
 from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
-    save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, MetricTracker, SobolevGrad
+    save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, SobolevGrad
 
 import math
 import numpy as np
@@ -14,8 +14,8 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss, transformation_model, registration_module,
-                 metric_ftns_vi, metric_ftns_mcmc, config, data_loader):
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
+                 transformation_model, registration_module, metric_ftns_vi, metric_ftns_mcmc, config, data_loader):
         super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
                          transformation_model, registration_module, config)
 
@@ -61,6 +61,9 @@ class Trainer(BaseTrainer):
             self.S_y = S_y.to(self.device, non_blocking=True)
             self.S_z = S_z.to(self.device, non_blocking=True)
 
+        # virtual decimation
+        self.vd = config['vd']
+
         # resuming
         if config.resume is not None and self.VI:
             self._resume_checkpoint_vi(config.resume)
@@ -82,7 +85,7 @@ class Trainer(BaseTrainer):
             self.optimizer_v.zero_grad()
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
-                mu_v_old = self.mu_v.detach().clone()  # neded to calculate the maximum update in terms of the L2 norm
+                mu_v_old = self.mu_v.detach().clone()  # needed to calculate the maximum update in terms of the L2 norm
                 log_var_v_old = self.log_var_v.detach().clone()
                 u_v_old = self.u_v.detach().clone()
             
@@ -105,33 +108,20 @@ class Trainer(BaseTrainer):
             transformation2, displacement2 = add_noise_uniform(transformation2, self.log_var_v), \
                                              add_noise_uniform(displacement2, self.log_var_v)
 
-            im_moving_warped1 = self.registration_module(im_moving, transformation1)
-            im_moving_warped2 = self.registration_module(im_moving, transformation2)
+            im_moving_warped1, im_moving_warped2 = self.registration_module(im_moving, transformation1), \
+                                                   self.registration_module(im_moving, transformation2)
 
             n_F, n_M1 = self.data_loss.map(self.im_fixed, im_moving_warped1)
             n_F, n_M2 = self.data_loss.map(self.im_fixed, im_moving_warped2)
+            res1, res2 = n_F - n_M1, n_F - n_M2
 
-            res1 = ((n_F - n_M1) * self.mask_fixed).view(1, -1, 1)
-            res2 = ((n_F - n_M2) * self.mask_fixed).view(1, -1, 1)
+            if self.vd:
+                alpha1, alpha2 = vd(res1, self.mask_fixed), vd(res2, self.mask_fixed)  # virtual decimation
+            else:
+                alpha1, alpha2 = 1.0, 1.0
 
-            if iter_no == 1:
-                no_warm_up_steps = 50
-
-                for step in range(1, no_warm_up_steps + 1):
-                    loss_gmm = 0.0
-                    self.optimizer_mixture_model.zero_grad()
-
-                    loss_gmm += self.data_loss(res1) / 2.0
-                    loss_gmm += self.data_loss(res2) / 2.0
-
-                    loss_gmm -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
-                    loss_gmm -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
-
-                    loss_gmm.backward(retain_graph=True)
-                    self.optimizer_mixture_model.step()
-
-            data_term += self.data_loss(res1) / 2.0
-            data_term += self.data_loss(res2) / 2.0
+            data_term += self.data_loss(res1, self.mask_fixed) / 2.0 * alpha1
+            data_term += self.data_loss(res2, self.mask_fixed) / 2.0 * alpha2
 
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
@@ -148,7 +138,8 @@ class Trainer(BaseTrainer):
             loss_q_v = data_term + reg_term - entropy_term
             loss_q_v.backward()
 
-            self.optimizer_mixture_model.step()  # backprop
+            # backprop
+            self.optimizer_mixture_model.step()
             self.optimizer_v.step()
 
             """
@@ -203,9 +194,7 @@ class Trainer(BaseTrainer):
                     # tensorboard
                     log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
                     log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
-
-                    if iter_no == 1:
-                        log_hist_res(self.writer, im_pair_idxs, res1, self.data_loss)
+                    log_hist_res(self.writer, im_pair_idxs, res1, self.data_loss)
 
                     # .nii.gz/.vtk
                     save_fields(
@@ -240,22 +229,35 @@ class Trainer(BaseTrainer):
             stochastic gradient Langevin dynamics
             """
 
+            data_term = 0.0
+            reg_term = 0.0
+
             v_curr_state_noise = add_noise(self.v_curr_state, self.sigma_scaled, self.u_v_scaled)
 
             if self.sobolev_grad:
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
-                reg_term = self.reg_loss(v_curr_state_noise_smoothed).sum()
+                reg_term += self.reg_loss(v_curr_state_noise_smoothed).sum()
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
-                reg_term = self.reg_loss(v_curr_state_noise).sum()
+                reg_term += self.reg_loss(v_curr_state_noise).sum()
 
             transformation, displacement = add_noise_uniform(transformation, self.log_var_v), \
                                            add_noise_uniform(displacement, self.log_var_v)
 
             im_moving_warped = self.registration_module(im_moving, transformation)
-            data_term = self.data_loss(self.im_fixed, im_moving_warped, self.mask_fixed).sum()
+            n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
+            res = n_F - n_M
+
+            if self.vd:
+                alpha = vd(res, self.mask_fixed)  # virtual decimation
+            else:
+                alpha = 1.0
+
+            data_term += self.data_loss(res, self.mask_fixed) * alpha
+            data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
+            data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
             loss = data_term + reg_term
             loss.backward()
@@ -304,8 +306,10 @@ class Trainer(BaseTrainer):
     def _train_epoch(self):
         for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, im_moving, mu_v, log_var_v, u_v) \
                 in enumerate(self.data_loader):
-            self.im_fixed = im_fixed.to(self.device, non_blocking=True)
-            self.mask_fixed = mask_fixed.to(self.device, non_blocking=True)
+            if self.im_fixed is None:
+                self.im_fixed = im_fixed.to(self.device, non_blocking=True)
+            if self.mask_fixed is None:
+                self.mask_fixed = mask_fixed.to(self.device, non_blocking=True)
 
             im_moving = im_moving.to(self.device, non_blocking=True)
 
@@ -316,31 +320,43 @@ class Trainer(BaseTrainer):
             if self.u_v is None:
                 self.u_v = u_v.to(self.device, non_blocking=True)
 
-            # print value of the data term before registration and initialsie the GMM
-            with torch.no_grad():
-                if self.sobolev_grad:
-                    v_smoothed = SobolevGrad.apply(self.mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                    transformation, displacement = self.transformation_model(v_smoothed)
-                else:
-                    transformation, displacement = self.transformation_model(self.mu_v)
+            """
+            initialisation of the Gaussian mixture loss
+            """
 
-                im_moving_warped = self.registration_module(im_moving, transformation)
+            n_F, n_M_unwarped = self.data_loss.map(self.im_fixed, im_moving)
+            res_unwarped = n_F - n_M_unwarped
 
-                n_F, n_M_unwarped = self.data_loss.map(self.im_fixed, im_moving)
-                n_F, n_M_warped = self.data_loss.map(self.im_fixed, im_moving_warped)
-                
-                # initialise the GMM
-                res_unwarped = ((n_F - n_M_unwarped) * self.mask_fixed).view(1, -1, 1)
-                res_warped = ((n_F - n_M_warped) * self.mask_fixed).view(1, -1, 1)
+            if self.vd:
+                alpha = vd(res_unwarped, self.mask_fixed)  # virtual decimation
+            else:
+                alpha = 1.0
 
-                self.data_loss.initialise_parameters(torch.std(res_unwarped))
-                self.logger.info('initialised the GMM\n')
+            self.data_loss.initialise_parameters(torch.std(res_unwarped))
+            no_warm_up_steps = 50
 
-                loss_unwarped = self.data_loss(res_unwarped)
-                loss_warped = self.data_loss(res_warped)
-                
-                self.logger.info(f'PRE-REGISTRATION: ' +
-                                 f'unwarped: {loss_unwarped:.5f}, warped w/ the current state: {loss_warped:.5f}\n')
+            for step in range(1, no_warm_up_steps + 1):
+                self.optimizer_mixture_model.zero_grad()
+
+                loss_gmm = 0.0
+                loss_gmm += self.data_loss(res_unwarped, self.mask_fixed) * alpha
+                loss_gmm -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
+                loss_gmm -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
+
+                loss_gmm.backward()
+                self.optimizer_mixture_model.step()
+
+            self.logger.info('\nwarmed up the Gaussian mixture loss\n')
+
+            # print value of the data term before registration
+            loss_unwarped = self.data_loss(res_unwarped, self.mask_fixed) * alpha
+            self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
+
+            # log a histogram of the residual to tensorboard
+            step = 0
+            self.writer.set_step(step)
+
+            log_hist_res(self.writer, im_pair_idxs, res_unwarped, self.data_loss)
 
             """
             VI

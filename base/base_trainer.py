@@ -2,8 +2,6 @@ from abc import abstractmethod
 from logger import TensorboardWriter
 from optimizers import Adam as AdamLR
 
-import model.loss as model_loss
-
 import torch
 
 
@@ -27,15 +25,7 @@ class BaseTrainer:
         self.data_loss = data_loss.to(self.device)
         self.scale_prior = scale_prior.to(self.device)
         self.proportion_prior = proportion_prior.to(self.device)
-            
-        if isinstance(self.data_loss, model_loss.GaussianMixtureLoss):
-            with torch.no_grad():
-                self.data_loss.logits.data.fill_(0.)
 
-            self.optimizer_mixture_model = \
-                AdamLR([{'params': [self.data_loss.log_std]}, {'params': [self.data_loss.logits], 'lr': 1e-4}],
-                       lr=1e-2, lr_decay=.4)
-        
         self.reg_loss = reg_loss.to(self.device)
         self.entropy_loss = entropy_loss.to(self.device)
 
@@ -49,6 +39,9 @@ class BaseTrainer:
 
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
+
+        self.optimizer_mixture_model = AdamLR([{'params': [self.data_loss.log_std, self.data_loss.logits]}],
+                                               lr=5e-4, lr_decay=.4)
 
         # training logic
         cfg_trainer = config['trainer']

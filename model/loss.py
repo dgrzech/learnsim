@@ -1,11 +1,10 @@
 from abc import abstractmethod, ABC
 from torch import nn, Tensor
 from torch.distributions.normal import Normal
-from torch.distributions.categorical import Categorical
 from torch.nn import Parameter
 from torch.nn.functional import log_softmax
 
-from utils import vd, GradientOperator
+from utils import GradientOperator
 
 import math
 import torch
@@ -30,8 +29,7 @@ class DataLoss(nn.Module, ABC):
         pass
 
     def reduce(self, z, mask):
-        alpha = vd(z)  # virtual decimation
-        return 0.5 * torch.sum(torch.pow(z, 2) * alpha * mask)
+        return 0.5 * torch.sum(torch.pow(z, 2) * mask)
 
 
 class LCC(DataLoss):
@@ -113,11 +111,12 @@ class GaussianMixtureLoss(nn.Module):
         
     def initialise_parameters(self, sigma):
         nn.init.zeros_(self.mean)  # here means are zero
-        
+        nn.init.zeros_(self.logits)
+
         with torch.no_grad():
-            self.log_std[0] = torch.log(sigma / 10.0)
+            self.log_std[0] = torch.log(sigma / 8.0)
             self.log_std[1] = torch.log(sigma)
-            self.log_std[2] = torch.log(sigma * 10.0)
+            self.log_std[2] = torch.log(sigma * 8.0)
 
     def log_proportions(self):
         return log_softmax(self.logits, dim=0, _stacklevel=5)
@@ -133,28 +132,34 @@ class GaussianMixtureLoss(nn.Module):
         im_moving_padded = F.pad(im_moving, self.padding, mode='replicate')
 
         u_F = self.kernel(im_fixed_padded) / self.sz
-        var_F = self.kernel(torch.pow(F.pad(im_fixed - u_F, self.padding, mode='replicate'), 2))
+        var_F = self.kernel(torch.pow(F.pad(im_fixed - u_F, self.padding, mode='replicate'), 2)) / self.sz
         sigma_F = torch.sqrt(var_F)
 
         u_M = self.kernel(im_moving_padded) / self.sz
-        var_M = self.kernel(torch.pow(F.pad(im_moving - u_M, self.padding, mode='replicate'), 2))
+        var_M = self.kernel(torch.pow(F.pad(im_moving - u_M, self.padding, mode='replicate'), 2)) / self.sz
         sigma_M = torch.sqrt(var_M)
 
         return (im_fixed - u_F) / (sigma_F + 1e-10), (im_moving - u_M) / (sigma_M + 1e-10)
 
-    def forward(self, input):
-        return -torch.sum(self.log_pdf(input))
+    def forward(self, input, mask=None):
+        return -torch.sum(self.log_pdf(input, mask))
     
-    def log_pdf(self, x):
+    def log_pdf(self, x, mask=None):
         # could equally apply the retraction trick to the mean (Riemannian metric for the tangent space of mean is
         # (v|w)_{mu,Sigma} = v^t Sigma^{-1} w), but it is less important with adaptive optimizers 
         # and I also like the behaviour of the standard gradient intuitively
+        
+        if mask is None:
+            mask = torch.ones_like(x)
 
-        E = ((x - self.mean) * torch.exp(-self.log_std)) ** 2 / 2.0
+        x_flattened = x.view(1, -1, 1)
+        mask_flattened = mask.view(1, -1, 1)
+
+        E = ((x_flattened - self.mean) * torch.exp(-self.log_std)) ** 2 / 2.0
         log_proportions = self.log_proportions()
         log_Z = self.log_std + self._log_sqrt_2pi
         
-        return torch.logsumexp((log_proportions - log_Z) - E, dim=-1)
+        return torch.logsumexp((log_proportions - log_Z) - E, dim=-1, keepdim=True) * mask_flattened
     
 
 class DirichletPrior(nn.Module):

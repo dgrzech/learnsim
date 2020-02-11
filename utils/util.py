@@ -284,7 +284,7 @@ def transform_coordinates(field):
     return field_out
 
 
-def vd(residual):
+def vd(residual, mask):
     """
     virtual decimation
 
@@ -301,13 +301,15 @@ def vd(residual):
     and goes well in a VB framework, as if you added a q(z) = Bernoulli(VD) to a VB approximation
     and took the expectation wrt q(z).
     """
+    
+    res_masked = residual * mask
 
     dims = [1, 2, 3, 4]  # exclude the batch dimension
-    var_res = torch.mean(residual ** 2, dim=dims)
+    var_res = torch.mean(res_masked ** 2, dim=dims)
 
-    cov_x = torch.mean(residual[:, :, :-1] * residual[:, :, 1:], dim=dims)
-    cov_y = torch.mean(residual[:, :, :, :-1] * residual[:, :, :, 1:], dim=dims)
-    cov_z = torch.mean(residual[:, :, :, :, :-1] * residual[:, :, :, :, 1:], dim=dims)
+    cov_x = torch.mean(res_masked[:, :, :-1] * res_masked[:, :, 1:], dim=dims)
+    cov_y = torch.mean(res_masked[:, :, :, :-1] * res_masked[:, :, :, 1:], dim=dims)
+    cov_z = torch.mean(res_masked[:, :, :, :, :-1] * res_masked[:, :, :, :, 1:], dim=dims)
 
     corr_x = cov_x / var_res
     corr_y = cov_y / var_res
