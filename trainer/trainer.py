@@ -1,8 +1,9 @@
 from base import BaseTrainer
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, \
     save_fields, save_grids, save_images, save_norms, save_sample
-from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
-    save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, SobolevGrad
+from utils import add_noise, add_noise_uniform, calc_det_J, compute_mean_masked, get_module_attr, inf_loop, \
+    max_field_update, sample_q_v, save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, \
+    vd, MetricTracker, SobolevGrad
 
 import math
 import numpy as np
@@ -152,6 +153,14 @@ class Trainer(BaseTrainer):
             self.train_metrics_vi.update('VI/reg_term', reg_term.item())
             self.train_metrics_vi.update('VI/entropy_term', entropy_term.item())
             self.train_metrics_vi.update('VI/total_loss', loss_q_v.item())
+
+            self.train_metrics_vi.update('GM/log_std1', self.data_loss.log_std[0])
+            self.train_metrics_vi.update('GM/log_std2', self.data_loss.log_std[1])
+            self.train_metrics_vi.update('GM/log_std3', self.data_loss.log_std[2])
+
+            self.train_metrics_vi.update('GM/logits1', self.data_loss.logits[0])
+            self.train_metrics_vi.update('GM/logits2', self.data_loss.logits[1])
+            self.train_metrics_vi.update('GM/logits3', self.data_loss.logits[2])
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
                 with torch.no_grad():
@@ -320,43 +329,34 @@ class Trainer(BaseTrainer):
             if self.u_v is None:
                 self.u_v = u_v.to(self.device, non_blocking=True)
 
-            """
-            initialisation of the Gaussian mixture loss
-            """
+            v_sample = sample_q_v(self.mu_v, self.log_var_v, self.u_v)
+            if self.sobolev_grad:
+                v_sample = SobolevGrad.apply(v_sample, self.S_x, self.S_y, self.S_z, self.padding_sz)
 
-            n_F, n_M_unwarped = self.data_loss.map(self.im_fixed, im_moving)
-            res_unwarped = n_F - n_M_unwarped
+            transformation, displacement = self.transformation_model(v_sample)
+            transformation = add_noise_uniform(transformation, self.log_var_v)
+
+            im_moving_warped = self.registration_module(im_moving, transformation)
+            n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
+            res = n_F - n_M
+
+            res_mean = compute_mean_masked(res, self.mask_fixed)
+            res_var = compute_mean_masked(torch.pow(res - res_mean, 2), self.mask_fixed)
+            res_std = torch.sqrt(res_var)
 
             if self.vd:
-                alpha = vd(res_unwarped, self.mask_fixed)  # virtual decimation
+                alpha = vd(res, self.mask_fixed)  # virtual decimation
             else:
                 alpha = 1.0
 
-            self.data_loss.initialise_parameters(torch.std(res_unwarped))
-            no_warm_up_steps = 50
+            self.data_loss.initialise_parameters(res_std)
 
-            for step in range(1, no_warm_up_steps + 1):
-                self.optimizer_mixture_model.zero_grad()
-
-                loss_gmm = 0.0
-                loss_gmm += self.data_loss(res_unwarped, self.mask_fixed) * alpha
-                loss_gmm -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
-                loss_gmm -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
-
-                loss_gmm.backward()
-                self.optimizer_mixture_model.step()
-
-            self.logger.info('\nwarmed up the Gaussian mixture loss\n')
+            self.writer.set_step(0)
+            log_hist_res(self.writer, im_pair_idxs, res, self.data_loss)
 
             # print value of the data term before registration
-            loss_unwarped = self.data_loss(res_unwarped, self.mask_fixed) * alpha
+            loss_unwarped = self.data_loss(res, self.mask_fixed) * alpha
             self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
-
-            # log a histogram of the residual to tensorboard
-            step = 0
-            self.writer.set_step(step)
-
-            log_hist_res(self.writer, im_pair_idxs, res_unwarped, self.data_loss)
 
             """
             VI

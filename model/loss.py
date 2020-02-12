@@ -114,9 +114,9 @@ class GaussianMixtureLoss(nn.Module):
         nn.init.zeros_(self.logits)
 
         with torch.no_grad():
-            self.log_std[0] = torch.log(sigma / 8.0)
-            self.log_std[1] = torch.log(sigma)
-            self.log_std[2] = torch.log(sigma * 8.0)
+            self.log_std[0] = torch.log(sigma / 10.0)
+            self.log_std[1] = torch.log(sigma / 5.0)
+            self.log_std[2] = torch.log(sigma)
 
     def log_proportions(self):
         return log_softmax(self.logits, dim=0, _stacklevel=5)
@@ -158,7 +158,7 @@ class GaussianMixtureLoss(nn.Module):
         E = ((x_flattened - self.mean) * torch.exp(-self.log_std)) ** 2 / 2.0
         log_proportions = self.log_proportions()
         log_Z = self.log_std + self._log_sqrt_2pi
-        
+
         return torch.logsumexp((log_proportions - log_Z) - E, dim=-1, keepdim=True) * mask_flattened
     
 

@@ -41,6 +41,9 @@ class TensorboardWriter:
         self.step = 0
         self.mode = ''
 
+        self.hist_xlim = None
+        self.hist_ylim = None
+
         self.tb_writer_ftns = {
             'add_scalar', 'add_scalars', 'add_image', 'add_images', 'add_audio', 'add_figure',
             'add_text', 'add_histogram', 'add_pr_curve', 'add_embedding'
@@ -119,13 +122,26 @@ def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
         fig, ax = plt.subplots()
         sns.distplot(residuals, kde=False, norm_hist=True)
 
-        xmin, xmax = ax.get_xlim()
+        if writer.hist_xlim is None or writer.hist_ylim is None:
+            xmin, xmax = ax.get_xlim()
+            ymin, ymax = ax.get_ylim()
+
+            xmax -= 4.0
+            xmin = -1.0 * xmax
+
+            writer.hist_xlim = (xmin, xmax)
+            writer.hist_ylim = (ymin, ymax + 1.5)
+        else:
+            xmin, xmax = writer.hist_xlim[0], writer.hist_xlim[1]
 
         x = torch.linspace(xmin, xmax, steps=1000).unsqueeze(0).unsqueeze(-1).to(device_temp)
         model_fit = torch.exp(gmm.log_pdf(x))
 
         sns.lineplot(x=x.detach().squeeze().cpu().numpy(),
                      y=model_fit.detach().squeeze().cpu().numpy(), color='green', ax=ax)
+
+        plt.xlim(writer.hist_xlim[0], writer.hist_xlim[1])
+        plt.ylim(writer.hist_ylim[0], writer.hist_ylim[1])
 
         writer.add_figure('hist_residuals/' + str(im_pair_idx), fig)
 

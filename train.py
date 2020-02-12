@@ -43,7 +43,8 @@ def main(config):
 
     # metrics
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
-                  'max_updates/mu_v', 'max_updates/log_var_v', 'max_updates/u_v']
+                  'max_updates/mu_v', 'max_updates/log_var_v', 'max_updates/u_v',
+                  'GM/log_std1', 'GM/log_std2', 'GM/log_std3', 'GM/logits1', 'GM/logits2', 'GM/logits3']
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term']
 
     # run the model
