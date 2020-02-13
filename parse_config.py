@@ -143,10 +143,6 @@ class ConfigParser:
         return self._config
 
     @property
-    def checkpoint_dir(self):
-        return self._checkpoint_dir
-
-    @property
     def save_dir(self):
         return self._save_dir
 
@@ -176,7 +172,8 @@ class ConfigParser:
 
     @property
     def save_dirs(self):
-        return {'samples': self.samples_dir, 'images': self.im_dir, 'fields': self.fields_dir, 'norms': self.norms_dir, 'grids': self.grids_dir}
+        return {'samples': self.samples_dir,
+                'images': self.im_dir, 'fields': self.fields_dir, 'norms': self.norms_dir, 'grids': self.grids_dir}
 
 
 # helper functions to update config dict with custom cli options

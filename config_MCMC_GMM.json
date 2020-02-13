@@ -5,8 +5,13 @@
     "data_loss": {
         "type": "GaussianMixtureLoss",
         "args": {
-	        "num_components": 5
+	        "num_components": 5,
+            "s": 3
 	    }
+    },
+    "scale_prior": {
+        "type": "ScaleLogNormalPrior",
+        "args": {}
     },
     "proportion_prior": {
 	    "type": "DirichletPrior",
@@ -69,7 +74,7 @@
 	    "lambda": 0.5
     },
 
-    "vd": false,
+    "vd": true,
 
     "trainer": {
         "no_iters_vi": 16384,

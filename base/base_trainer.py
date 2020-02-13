@@ -1,5 +1,6 @@
-from abc import abstractmethod
 from logger import TensorboardWriter
+
+from abc import abstractmethod
 
 import torch
 
@@ -38,8 +39,6 @@ class BaseTrainer:
 
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
-
-        self.optimizer_mixture_model = None
 
         # training logic
         cfg_trainer = config['trainer']

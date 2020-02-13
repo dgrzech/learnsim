@@ -71,7 +71,7 @@ class BiobankDataset(Dataset):
             mask_fixed = torch.from_numpy(
                 transform.resize(
                     np.transpose(sitk.GetArrayFromImage(mask_fixed), (2, 1, 0)),
-                    (self.dim_x, self.dim_y, self.dim_z), order=0))
+                    (self.dim_x, self.dim_y, self.dim_z), order=0).astype(np.bool))
         else:
             mask_fixed = torch.ones_like(im_fixed)
 

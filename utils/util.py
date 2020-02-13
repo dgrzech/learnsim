@@ -299,25 +299,29 @@ def vd(residual, mask):
     and goes well in a VB framework, as if you added a q(z) = Bernoulli(VD) to a VB approximation
     and took the expectation wrt q(z).
     """
-    
-    res_masked = residual * mask
 
-    dims = [1, 2, 3, 4]  # exclude the batch dimension
-    var_res = torch.mean(res_masked ** 2, dim=dims)
+    with torch.no_grad():
+        # variance
+        residual_masked = residual[mask]
+        var_res = torch.mean(residual_masked ** 2)
 
-    cov_x = torch.mean(res_masked[:, :, :-1] * res_masked[:, :, 1:], dim=dims)
-    cov_y = torch.mean(res_masked[:, :, :, :-1] * res_masked[:, :, :, 1:], dim=dims)
-    cov_z = torch.mean(res_masked[:, :, :, :, :-1] * res_masked[:, :, :, :, 1:], dim=dims)
+        # covariance..
+        no_unmasked_voxels = torch.sum(mask)
+        res = residual * mask
 
-    corr_x = cov_x / var_res
-    corr_y = cov_y / var_res
-    corr_z = cov_z / var_res
+        cov_x = torch.sum(res[:, :, :-1] * res[:, :, 1:]) / no_unmasked_voxels
+        cov_y = torch.sum(res[:, :, :, :-1] * res[:, :, :, 1:]) / no_unmasked_voxels
+        cov_z = torch.sum(res[:, :, :, :, :-1] * res[:, :, :, :, 1:]) / no_unmasked_voxels
 
-    sq_vd_x = torch.clamp(-2.0 / math.pi * torch.log(corr_x), max=1.0)
-    sq_vd_y = torch.clamp(-2.0 / math.pi * torch.log(corr_y), max=1.0)
-    sq_vd_z = torch.clamp(-2.0 / math.pi * torch.log(corr_z), max=1.0)
+        corr_x = cov_x / var_res
+        corr_y = cov_y / var_res
+        corr_z = cov_z / var_res
 
-    return torch.sqrt(sq_vd_x * sq_vd_y * sq_vd_z).view(-1, 1, 1, 1, 1)
+        sq_vd_x = torch.clamp(-2.0 / math.pi * torch.log(corr_x), max=1.0)
+        sq_vd_y = torch.clamp(-2.0 / math.pi * torch.log(corr_y), max=1.0)
+        sq_vd_z = torch.clamp(-2.0 / math.pi * torch.log(corr_z), max=1.0)
+
+        return torch.sqrt(sq_vd_x * sq_vd_y * sq_vd_z)
 
 
 class MetricTracker:
