@@ -1,18 +1,25 @@
 {
-    "name": "mcmc_lcc_sobolev",
+    "name": "mcmc_gmm_sobolev",
     "n_gpu": 1,
 
     "data_loss": {
-        "type": "LCC",
+        "type": "GaussianMixtureLoss",
         "args": {
-            "s": 3
-        }
+	        "num_components": 5
+	    }
+    },
+    "proportion_prior": {
+	    "type": "DirichletPrior",
+	    "args": {
+	        "num_classes": 5,
+	        "alpha": 0.5
+	    }
     },
     "reg_loss": {
         "type": "RegLossL2",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 0.5
+            "w_reg": 1.0
         }
     },
     "entropy_loss": {
@@ -32,8 +39,7 @@
     "optimizer_v": {
         "type": "Adam",
         "args": {
-            "lr": 5e-4,
-            "amsgrad": true
+            "lr": 5e-4
         }
     },
     "optimizer_mala": {
@@ -48,9 +54,9 @@
         "type": "LearnSimDataLoader",
         "args":{
             "data_dir": "/vol/bitbucket/dig15/learnsim_biobank_train/biobank_1/",
-            "dim_x": 128,
-	        "dim_y": 128,
-	        "dim_z": 128,
+            "dim_x": 96,
+	        "dim_y": 96,
+	        "dim_z": 96,
             "batch_size": 1,
             "num_workers": 1,
             "shuffle": false
@@ -63,16 +69,18 @@
 	    "lambda": 0.5
     },
 
+    "vd": false,
+
     "trainer": {
         "no_iters_vi": 16384,
         "no_iters_burn_in": 100000,
 	    "no_samples": 500000,
 
-        "log_period": 512,
+        "log_period": 64,
         "tensorboard": true,
         "verbosity": 2,
 
         "save_dir": "saved/",
-        "save_period": 512
+        "save_period": 256
     }
 }
