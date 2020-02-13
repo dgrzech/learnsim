@@ -1,7 +1,6 @@
 from abc import abstractmethod, ABC
-from torch import nn, Tensor
+from torch import nn
 from torch.distributions.normal import Normal
-from torch.nn import Parameter
 from torch.nn.functional import log_softmax
 
 from utils import GradientOperator
@@ -59,11 +58,11 @@ class LCC(DataLoss):
         im_moving_padded = F.pad(im_moving, self.padding, mode='replicate')
 
         u_F = self.kernel(im_fixed_padded) / self.sz
-        var_F = self.kernel(torch.pow(F.pad(im_fixed - u_F, self.padding, mode='replicate'), 2))
+        var_F = self.kernel(torch.pow(F.pad(im_fixed - u_F, self.padding, mode='replicate'), 2)) / self.sz
         sigma_F = torch.sqrt(var_F)
 
         u_M = self.kernel(im_moving_padded) / self.sz
-        var_M = self.kernel(torch.pow(F.pad(im_moving - u_M, self.padding, mode='replicate'), 2))
+        var_M = self.kernel(torch.pow(F.pad(im_moving - u_M, self.padding, mode='replicate'), 2)) / self.sz
         sigma_M = torch.sqrt(var_M)
 
         n_F = (im_fixed - u_F) / (sigma_F + 1e-10)
@@ -91,14 +90,13 @@ class SSD(DataLoss):
 class GaussianMixtureLoss(nn.Module):
     def __init__(self, num_components):
         super(GaussianMixtureLoss, self).__init__() 
-        
-        self.mean = Parameter(torch.Tensor(num_components), requires_grad=False)  
-        self.log_std = Parameter(torch.Tensor(num_components))
-        self.logits = Parameter(torch.zeros(num_components))
 
-        self.register_buffer('_log_sqrt_2pi', torch.log(Tensor([math.pi * 2])) / 2)
-    
-        s = 3  # TODO: refactor
+        self.log_std = nn.Parameter(torch.Tensor(num_components))
+        self.logits = nn.Parameter(torch.zeros(num_components))
+        self.register_buffer('_log_sqrt_2pi', torch.log(torch.Tensor([math.pi * 2.0])) / 2.0)
+        
+        # TODO: refactor
+        s = 3
         self.s = s
         self.padding = (s, s, s, s, s, s)
 
@@ -106,16 +104,15 @@ class GaussianMixtureLoss(nn.Module):
         self.sz = float(self.kernel_size ** 3)
 
         self.kernel = nn.Conv3d(1, 1, kernel_size=self.kernel_size, stride=1, bias=False)
-        nn.init.ones_(self.kernel.weight)
         self.kernel.weight.requires_grad_(False)
+        nn.init.ones_(self.kernel.weight)
         
     def initialise_parameters(self, sigma):
-        nn.init.zeros_(self.mean)  # here means are zero
         nn.init.zeros_(self.logits)
 
         with torch.no_grad():
             self.log_std[0] = torch.log(sigma / 10.0)
-            self.log_std[1] = torch.log(sigma / 5.0)
+            self.log_std[1] = torch.log(sigma / 2.0)
             self.log_std[2] = torch.log(sigma)
 
     def log_proportions(self):
@@ -127,6 +124,9 @@ class GaussianMixtureLoss(nn.Module):
     def precision(self):
         return torch.exp(-2 * self.log_std)
 
+    def forward(self, input, mask=None):
+        return -torch.sum(self.log_pdf(input, mask))
+    
     def map(self, im_fixed, im_moving):
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
         im_moving_padded = F.pad(im_moving, self.padding, mode='replicate')
@@ -141,9 +141,6 @@ class GaussianMixtureLoss(nn.Module):
 
         return (im_fixed - u_F) / (sigma_F + 1e-10), (im_moving - u_M) / (sigma_M + 1e-10)
 
-    def forward(self, input, mask=None):
-        return -torch.sum(self.log_pdf(input, mask))
-    
     def log_pdf(self, x, mask=None):
         # could equally apply the retraction trick to the mean (Riemannian metric for the tangent space of mean is
         # (v|w)_{mu,Sigma} = v^t Sigma^{-1} w), but it is less important with adaptive optimizers 
@@ -155,7 +152,7 @@ class GaussianMixtureLoss(nn.Module):
         x_flattened = x.view(1, -1, 1)
         mask_flattened = mask.view(1, -1, 1)
 
-        E = ((x_flattened - self.mean) * torch.exp(-self.log_std)) ** 2 / 2.0
+        E = (x_flattened * torch.exp(-self.log_std)) ** 2 / 2.0
         log_proportions = self.log_proportions()
         log_Z = self.log_std + self._log_sqrt_2pi
 
@@ -184,12 +181,12 @@ class DirichletPrior(nn.Module):
             is_float = False
 
         if is_float:
-            self.concentration = Parameter(torch.full(size=[num_classes], fill_value=alpha), requires_grad=False)
+            self.concentration = nn.Parameter(torch.full(size=[num_classes], fill_value=alpha), requires_grad=False)
         else:
             if len(alpha) != num_classes:
                 raise ValueError("Invalid tensor size. Expected {}".format(num_classes) +
                                  ", got: {}".format(len(alpha)))
-            self.concentration = Parameter(alpha.clone().squeeze().detach(), requires_grad=False)
+            self.concentration = nn.Parameter(alpha.clone().squeeze().detach(), requires_grad=False)
         
     def forward(self, log_proportions):
         return (log_proportions * (self.concentration - 1.0)).sum(-1) + \
@@ -217,7 +214,7 @@ class ScaleLogNormalPrior(nn.Module):
             loc_is_float = False
 
         if loc_is_float:
-            loc = Tensor([loc])            
+            loc = torch.Tensor([loc])
         else:
             if len(loc) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(loc)))
@@ -231,7 +228,7 @@ class ScaleLogNormalPrior(nn.Module):
             scale_is_float = False
 
         if scale_is_float:
-            scale = Tensor([scale])            
+            scale = torch.Tensor([scale])
         else:
             if len(scale) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(scale)))
@@ -260,7 +257,7 @@ class ScaleGammaPrior(nn.Module):
             shape_is_float = False
 
         if shape_is_float:
-            self.shape = Tensor([shape])            
+            self.shape = nn.Parameter(torch.Tensor([shape]), requires_grad=False)
         else:
             if len(shape) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(shape)))
@@ -274,7 +271,7 @@ class ScaleGammaPrior(nn.Module):
             rate_is_float = False
 
         if rate_is_float:
-            self.rate = Tensor([rate])            
+            self.rate = nn.Parameter(torch.Tensor([rate]), requires_grad=False)
         else:
             if len(rate) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(rate)))

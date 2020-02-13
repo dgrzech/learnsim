@@ -126,7 +126,6 @@ def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
             xmin, xmax = ax.get_xlim()
             ymin, ymax = ax.get_ylim()
 
-            xmax -= 4.0
             xmin = -1.0 * xmax
 
             writer.hist_xlim = (xmin, xmax)

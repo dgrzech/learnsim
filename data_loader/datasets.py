@@ -2,8 +2,6 @@ from os import listdir, path
 from skimage import io, transform
 from torch.utils.data import Dataset
 
-from utils import rescale_im, standardise_im
-
 import numpy as np
 import SimpleITK as sitk
 import torch
@@ -77,9 +75,6 @@ class BiobankDataset(Dataset):
         else:
             mask_fixed = torch.ones_like(im_fixed)
 
-        im_fixed = standardise_im(im_fixed)  # standardise image
-        im_fixed = rescale_im(im_fixed)  # rescale to range (-1, 1)
-
         self.im_fixed = im_fixed.unsqueeze(0)
         self.mask_fixed = mask_fixed.unsqueeze(0)
 
@@ -91,29 +86,14 @@ class BiobankDataset(Dataset):
             idx = idx.tolist()
 
         im_mask_pair = self.im_mask_pairs[idx]
-
         im_moving_path = im_mask_pair[1][0]
-        mask_moving_path = im_mask_pair[1][1]
 
         im_moving = sitk.ReadImage(im_moving_path, sitk.sitkFloat32)
         im_moving = torch.from_numpy(
             transform.resize(
-                np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)),
-                (self.dim_x, self.dim_y, self.dim_z)))
+                np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z)))
 
-        if mask_moving_path is not '':
-            mask_moving = sitk.ReadImage(mask_moving_path, sitk.sitkFloat32)
-            mask_moving = torch.from_numpy(
-                transform.resize(
-                    np.transpose(sitk.GetArrayFromImage(mask_moving), (2, 1, 0)),
-                    (self.dim_x, self.dim_y, self.dim_z), order=0))
-        else:
-            mask_moving = torch.ones_like(im_moving)
-
-        im_moving = standardise_im(im_moving)  # standardise image
-        im_moving = rescale_im(im_moving)  # rescale to range (-1, 1)
         im_moving.unsqueeze_(0)
-
         assert self.im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
         mu_v = init_mu_v(self.dims_v)

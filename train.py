@@ -36,6 +36,7 @@ def main(config):
     # losses
     data_loss = config.init_obj('data_loss', model_loss)
     scale_prior = model_loss.ScaleLogNormalPrior()
+    # scale_prior = model_loss.ScaleGammaPrior()
     proportion_prior = config.init_obj('proportion_prior', model_loss)
 
     reg_loss = config.init_obj('reg_loss', model_loss)
