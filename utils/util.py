@@ -51,10 +51,6 @@ def calc_det_J(nabla_x, nabla_y, nabla_z):
     return det_J
 
 
-def compute_mean_masked(field, mask):
-    return torch.mean(field) * field.numel() / torch.sum(mask)
-
-
 def compute_norm(v):
     return torch.norm(v, p=2, dim=0, keepdim=True)
 

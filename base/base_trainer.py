@@ -1,8 +1,6 @@
 from abc import abstractmethod
 from logger import TensorboardWriter
 
-from torch.optim import Adam, SGD
-
 import torch
 
 
@@ -41,7 +39,7 @@ class BaseTrainer:
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
 
-        self.optimizer_mixture_model = Adam([self.data_loss.log_std, self.data_loss.logits], lr=1e-2, betas=(0.0, 0.9))
+        self.optimizer_mixture_model = None
 
         # training logic
         cfg_trainer = config['trainer']

@@ -1,7 +1,11 @@
+from torch.utils.data import DataLoader
+
 from base import BaseTrainer
+from data_loader import ResidualDataset
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, \
     save_fields, save_grids, save_images, save_norms, save_sample
-from utils import add_noise, add_noise_uniform, calc_det_J, compute_mean_masked, get_module_attr, inf_loop, \
+from optimizers import Adam as AdamLR
+from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, \
     max_field_update, sample_q_v, save_optimiser_to_disk, separable_conv_3d, sobolev_kernel_1d, transform_coordinates, \
     vd, MetricTracker, SobolevGrad
 
@@ -71,6 +75,64 @@ class Trainer(BaseTrainer):
         elif config.resume is not None and self.MCMC:
             self._resume_checkpoint_mcmc(config.resume)
 
+    def _loss_warm_up(self, res):
+        dataset = ResidualDataset(res.detach().view(-1))
+        loader = DataLoader(dataset, batch_size=10000)
+
+        N = len(dataset)
+        no_batches = 0
+
+        for batch_idx, data in enumerate(loader):
+            no_batches += 1
+        
+        avg_batch_size = N / no_batches
+        
+        if self.optimizer_mixture_model is None:
+            self.optimizer_mixture_model = AdamLR([{'params': [self.data_loss.log_std], 'lr': 0.0, 'lr_decay': 0.0},
+                                                  {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}], 
+                                                   lr=1e-1, lr_decay=.4 / float(no_batches), betas=(0.9, 0.95))
+
+        std_group = self.optimizer_mixture_model.param_groups[0]
+        logits_group = self.optimizer_mixture_model.param_groups[1]
+
+        no_warm_up_steps_sigma = 1
+        no_warm_up_steps = 10
+        reinit_every = 3
+
+        for step in range(1, no_warm_up_steps + 1):
+            if step != 0 and (step % reinit_every) == 0:
+                reinit = True
+            else:
+                reinit = False
+
+            if step == no_warm_up_steps_sigma + 1:
+                logits_group['lr'] = 1e-2
+                logits_group['lr_decay'] = self.optimizer_mixture_model.defaults['lr_decay']
+                reinit = True
+
+            for batch_idx, data in enumerate(loader):
+                n = len(data)
+
+                stored_lr = []
+                for group in self.optimizer_mixture_model.param_groups:
+                    stored_lr.append(group['lr'])
+                    group['lr'] = n * group['lr'] / avg_batch_size
+                                                                    
+                data_term = self.data_loss(data) * N / n
+                data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
+                data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
+
+                self.optimizer_mixture_model.zero_grad()
+                data_term.backward()
+                self.optimizer_mixture_model.step(reinit=reinit)  # backprop
+
+                if reinit:
+                    reinit = False
+
+                # restore lr
+                for group in self.optimizer_mixture_model.param_groups:
+                    group['lr'] = stored_lr.pop(0)
+
     def _step_VI(self, im_pair_idxs, im_moving):
         if self.optimizer_v is None:
             self.mu_v.requires_grad_(True)
@@ -81,8 +143,6 @@ class Trainer(BaseTrainer):
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
-
-            self.optimizer_mixture_model.zero_grad()
             self.optimizer_v.zero_grad()
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
@@ -90,7 +150,6 @@ class Trainer(BaseTrainer):
                 log_var_v_old = self.log_var_v.detach().clone()
                 u_v_old = self.u_v.detach().clone()
             
-            data_term = 0.0
             reg_term = 0.0
             entropy_term = 0.0
 
@@ -114,15 +173,21 @@ class Trainer(BaseTrainer):
 
             n_F, n_M1 = self.data_loss.map(self.im_fixed, im_moving_warped1)
             n_F, n_M2 = self.data_loss.map(self.im_fixed, im_moving_warped2)
-            res1, res2 = n_F - n_M1, n_F - n_M2
+            res1, res2 = (n_F - n_M1) * self.mask_fixed, (n_F - n_M2) * self.mask_fixed
+
+            res1_masked = res1[self.mask_fixed !=0.0]
+            res2_masked = res2[self.mask_fixed !=0.0]
 
             if self.vd:
                 alpha1, alpha2 = vd(res1, self.mask_fixed), vd(res2, self.mask_fixed)  # virtual decimation
             else:
                 alpha1, alpha2 = 1.0, 1.0
+            
+            self._loss_warm_up(res1_masked)  # Gaussian mixture warm-up
 
-            data_term += self.data_loss(res1, self.mask_fixed) / 2.0 * alpha1
-            data_term += self.data_loss(res2, self.mask_fixed) / 2.0 * alpha2
+            # q_v
+            data_term = self.data_loss(res1_masked) / 2.0 * alpha1
+            data_term += self.data_loss(res2_masked) / 2.0 * alpha2
 
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
@@ -138,10 +203,7 @@ class Trainer(BaseTrainer):
 
             loss_q_v = data_term + reg_term - entropy_term
             loss_q_v.backward()
-
-            # backprop
-            self.optimizer_mixture_model.step()
-            self.optimizer_v.step()
+            self.optimizer_v.step()  # backprop
 
             """
             metrics and prints
@@ -154,13 +216,12 @@ class Trainer(BaseTrainer):
             self.train_metrics_vi.update('VI/entropy_term', entropy_term.item())
             self.train_metrics_vi.update('VI/total_loss', loss_q_v.item())
 
-            self.train_metrics_vi.update('GM/log_std1', self.data_loss.log_std[0])
-            self.train_metrics_vi.update('GM/log_std2', self.data_loss.log_std[1])
-            self.train_metrics_vi.update('GM/log_std3', self.data_loss.log_std[2])
+            sigmas = torch.exp(self.data_loss.log_scales())
+            proportions = torch.exp(self.data_loss.log_proportions())
 
-            self.train_metrics_vi.update('GM/logits1', self.data_loss.logits[0])
-            self.train_metrics_vi.update('GM/logits2', self.data_loss.logits[1])
-            self.train_metrics_vi.update('GM/logits3', self.data_loss.logits[2])
+            for idx in range(self.data_loss.num_components):
+                self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
+                self.train_metrics_vi.update('GM/proportion_' + str(idx), proportions[idx])
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
                 with torch.no_grad():
@@ -203,7 +264,7 @@ class Trainer(BaseTrainer):
                     # tensorboard
                     log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
                     log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
-                    log_hist_res(self.writer, im_pair_idxs, res1, self.data_loss)
+                    log_hist_res(self.writer, im_pair_idxs, res1_masked, self.data_loss)
 
                     # .nii.gz/.vtk
                     save_fields(
@@ -257,14 +318,16 @@ class Trainer(BaseTrainer):
 
             im_moving_warped = self.registration_module(im_moving, transformation)
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
+
             res = n_F - n_M
+            res_masked = res[self.mask_fixed != 0.0]
 
             if self.vd:
                 alpha = vd(res, self.mask_fixed)  # virtual decimation
             else:
                 alpha = 1.0
 
-            data_term += self.data_loss(res, self.mask_fixed) * alpha
+            data_term += self.data_loss(res_masked) * alpha
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
@@ -328,35 +391,39 @@ class Trainer(BaseTrainer):
                 self.log_var_v = log_var_v.to(self.device, non_blocking=True)
             if self.u_v is None:
                 self.u_v = u_v.to(self.device, non_blocking=True)
+            
+            with torch.no_grad():
+                v_sample = sample_q_v(self.mu_v, self.log_var_v, self.u_v)
+                if self.sobolev_grad:
+                    v_sample = SobolevGrad.apply(v_sample, self.S_x, self.S_y, self.S_z, self.padding_sz)
 
-            v_sample = sample_q_v(self.mu_v, self.log_var_v, self.u_v)
-            if self.sobolev_grad:
-                v_sample = SobolevGrad.apply(v_sample, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                transformation, displacement = self.transformation_model(v_sample)
+                transformation = add_noise_uniform(transformation, self.log_var_v)
 
-            transformation, displacement = self.transformation_model(v_sample)
-            transformation = add_noise_uniform(transformation, self.log_var_v)
+                im_moving_warped = self.registration_module(im_moving, transformation)
+                n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
 
-            im_moving_warped = self.registration_module(im_moving, transformation)
-            n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
-            res = n_F - n_M
+                res = n_F - n_M
+                res_masked = res[self.mask_fixed != 0.0]
 
-            res_mean = compute_mean_masked(res, self.mask_fixed)
-            res_var = compute_mean_masked(torch.pow(res - res_mean, 2), self.mask_fixed)
-            res_std = torch.sqrt(res_var)
+                res_mean = torch.mean(res_masked)
+                res_var = torch.mean(torch.pow(res_masked - res_mean, 2))
+                res_std = torch.sqrt(res_var)
 
-            if self.vd:
-                alpha = vd(res, self.mask_fixed)  # virtual decimation
-            else:
-                alpha = 1.0
+                self.data_loss.initialise_parameters(res_std)
 
-            self.data_loss.initialise_parameters(res_std)
+                # print value of the data term before registration
+                if self.vd:
+                    alpha = vd(res, self.mask_fixed)  # virtual decimation
+                else:
+                    alpha = 1.0
 
-            self.writer.set_step(0)
-            log_hist_res(self.writer, im_pair_idxs, res, self.data_loss)
+                loss_unwarped = self.data_loss(res_masked) * alpha
+                self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
+                
+                self.writer.set_step(0)
+                log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)
 
-            # print value of the data term before registration
-            loss_unwarped = self.data_loss(res, self.mask_fixed) * alpha
-            self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
 
             """
             VI

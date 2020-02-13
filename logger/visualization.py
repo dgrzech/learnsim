@@ -133,7 +133,7 @@ def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
         else:
             xmin, xmax = writer.hist_xlim[0], writer.hist_xlim[1]
 
-        x = torch.linspace(xmin, xmax, steps=1000).unsqueeze(0).unsqueeze(-1).to(device_temp)
+        x = torch.linspace(xmin, xmax, steps=10000).unsqueeze(0).unsqueeze(-1).to(device_temp)
         model_fit = torch.exp(gmm.log_pdf(x))
 
         sns.lineplot(x=x.detach().squeeze().cpu().numpy(),

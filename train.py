@@ -36,16 +36,18 @@ def main(config):
     # losses
     data_loss = config.init_obj('data_loss', model_loss)
     scale_prior = model_loss.ScaleLogNormalPrior()
-    # scale_prior = model_loss.ScaleGammaPrior()
     proportion_prior = config.init_obj('proportion_prior', model_loss)
 
     reg_loss = config.init_obj('reg_loss', model_loss)
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
     # metrics
+    num_components = config['data_loss']['args']['num_components']
+    sigmas = ['GM/sigma_' + str(idx) for idx in range(num_components)]
+    proportions = ['GM/proportion_' + str(idx) for idx in range(num_components)]
+
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
-                  'max_updates/mu_v', 'max_updates/log_var_v', 'max_updates/u_v',
-                  'GM/log_std1', 'GM/log_std2', 'GM/log_std3', 'GM/logits1', 'GM/logits2', 'GM/logits3']
+                  'max_updates/mu_v', 'max_updates/log_var_v', 'max_updates/u_v'] + sigmas + proportions
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term']
 
     # run the model

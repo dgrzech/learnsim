@@ -89,7 +89,9 @@ class SSD(DataLoss):
 # © Loic Le Folgoc, l.le-folgoc@imperial.ac.uk
 class GaussianMixtureLoss(nn.Module):
     def __init__(self, num_components):
-        super(GaussianMixtureLoss, self).__init__() 
+        super(GaussianMixtureLoss, self).__init__()
+
+        self.num_components = num_components
 
         self.log_std = nn.Parameter(torch.Tensor(num_components))
         self.logits = nn.Parameter(torch.zeros(num_components))
@@ -110,13 +112,13 @@ class GaussianMixtureLoss(nn.Module):
     def initialise_parameters(self, sigma):
         nn.init.zeros_(self.logits)
 
-        with torch.no_grad():
-            self.log_std[0] = torch.log(sigma / 10.0)
-            self.log_std[1] = torch.log(sigma / 2.0)
-            self.log_std[2] = torch.log(sigma)
+        sigma_min = sigma / 100.0
+        sigma_max = sigma * 5.0
+        log_std_init = torch.linspace(math.log(sigma_min), math.log(sigma_max), steps=self.num_components)
+        self.log_std.data.copy_(log_std_init.data)
 
     def log_proportions(self):
-        return log_softmax(self.logits, dim=0, _stacklevel=5)
+        return log_softmax(self.logits + 1e-2, dim=0, _stacklevel=5)
     
     def log_scales(self):
         return self.log_std
@@ -124,8 +126,8 @@ class GaussianMixtureLoss(nn.Module):
     def precision(self):
         return torch.exp(-2 * self.log_std)
 
-    def forward(self, input, mask=None):
-        return -torch.sum(self.log_pdf(input, mask))
+    def forward(self, input):
+        return -torch.sum(self.log_pdf(input))
     
     def map(self, im_fixed, im_moving):
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
@@ -133,30 +135,26 @@ class GaussianMixtureLoss(nn.Module):
 
         u_F = self.kernel(im_fixed_padded) / self.sz
         var_F = self.kernel(torch.pow(F.pad(im_fixed - u_F, self.padding, mode='replicate'), 2)) / self.sz
-        sigma_F = torch.sqrt(var_F)
+        sigma_F = torch.sqrt(var_F + 1e-10)
 
         u_M = self.kernel(im_moving_padded) / self.sz
         var_M = self.kernel(torch.pow(F.pad(im_moving - u_M, self.padding, mode='replicate'), 2)) / self.sz
-        sigma_M = torch.sqrt(var_M)
+        sigma_M = torch.sqrt(var_M + 1e-10)
 
-        return (im_fixed - u_F) / (sigma_F + 1e-10), (im_moving - u_M) / (sigma_M + 1e-10)
+        return (im_fixed - u_F) / sigma_F, (im_moving - u_M) / sigma_M
 
-    def log_pdf(self, x, mask=None):
+    def log_pdf(self, x):
         # could equally apply the retraction trick to the mean (Riemannian metric for the tangent space of mean is
         # (v|w)_{mu,Sigma} = v^t Sigma^{-1} w), but it is less important with adaptive optimizers 
         # and I also like the behaviour of the standard gradient intuitively
         
-        if mask is None:
-            mask = torch.ones_like(x)
-
         x_flattened = x.view(1, -1, 1)
-        mask_flattened = mask.view(1, -1, 1)
 
         E = (x_flattened * torch.exp(-self.log_std)) ** 2 / 2.0
         log_proportions = self.log_proportions()
         log_Z = self.log_std + self._log_sqrt_2pi
 
-        return torch.logsumexp((log_proportions - log_Z) - E, dim=-1, keepdim=True) * mask_flattened
+        return torch.logsumexp((log_proportions - log_Z) - E, dim=-1, keepdim=True)
     
 
 class DirichletPrior(nn.Module):
@@ -191,54 +189,53 @@ class DirichletPrior(nn.Module):
     def forward(self, log_proportions):
         return (log_proportions * (self.concentration - 1.0)).sum(-1) + \
                torch.lgamma(self.concentration.sum(-1)) - torch.lgamma(self.concentration).sum(-1)
-    
-    
+
+
 class ScaleLogNormalPrior(nn.Module):
     """
     Lots of wrapping for not much -_-
     """
 
     def __init__(self, loc=None, scale=None):
-        super(ScaleLogNormalPrior, self).__init__() 
-        
+        super(ScaleLogNormalPrior, self).__init__()
+
         if loc is None:
             loc = 0.
         if scale is None:
             scale = math.log(10)
-            
-        loc_is_float = True
 
+        loc_is_float = True
         try:
             val = float(loc)
         except:
             loc_is_float = False
-
         if loc_is_float:
             loc = torch.Tensor([loc])
         else:
             if len(loc) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(loc)))
-            loc = loc.clone().detach()
-            
-        scale_is_float = True
+            loc = loc.clone()
 
+        scale_is_float = True
         try:
             val = float(scale)
         except:
             scale_is_float = False
-
         if scale_is_float:
             scale = torch.Tensor([scale])
         else:
             if len(scale) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(scale)))
-            scale = scale.clone().detach()
-            
-        self.distribution = Normal(loc.squeeze(), scale.squeeze())
-    
+            scale = scale.clone()
+
+        self.loc = nn.Parameter(loc.detach(), requires_grad=False)
+        self.log_scale = nn.Parameter(torch.log(scale).detach(), requires_grad=False)
+        self.register_buffer('_log_sqrt_2pi', (torch.log(torch.Tensor([math.pi * 2.0])) / 2.0).detach())
+
     def forward(self, log_scales):
-        return self.distribution.log_prob(log_scales)
-            
+        E = ((log_scales - self.loc) * torch.exp(-self.log_scale)) ** 2 / 2.0
+        return -E - self.log_scale - self._log_sqrt_2pi
+
 
 class ScaleGammaPrior(nn.Module):
     """
