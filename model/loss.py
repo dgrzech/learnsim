@@ -15,6 +15,10 @@ data loss
 
 
 class DataLoss(nn.Module, ABC):
+    """
+    base class for all data losses
+    """
+
     def __init__(self):
         super(DataLoss, self).__init__()
 
@@ -95,6 +99,10 @@ class SSD(DataLoss):
 
 # © Loic Le Folgoc, l.le-folgoc@imperial.ac.uk
 class GaussianMixtureLoss(DataLoss):
+    """
+    Gaussian mixture loss
+    """
+
     def __init__(self, num_components, s):
         super(GaussianMixtureLoss, self).__init__()
 
@@ -296,6 +304,10 @@ regularisation loss
 
 
 class RegLoss(nn.Module, ABC):
+    """
+    base class for all regularisation losses
+    """
+
     def __init__(self, w_reg=1.0):
         super(RegLoss, self).__init__()
         self.w_reg = float(w_reg)
@@ -369,6 +381,10 @@ entropy
 
 
 class Entropy(nn.Module, ABC):
+    """
+    base class for the entropy of a probability distribution
+    """
+
     def __init__(self):
         super(Entropy, self).__init__()
 

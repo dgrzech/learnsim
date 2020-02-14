@@ -6,7 +6,7 @@ import numpy as np
 import seaborn as sns
 import torch
 
-from utils import compute_norm
+from utils import calc_norm
 
 
 def im_flip(array):
@@ -87,6 +87,10 @@ images
 
 
 def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
+    """
+    plot of input and output images to log in tensorboard
+    """
+
     fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['axial', 'coronal', 'sagittal']
@@ -110,6 +114,10 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
 
 
 def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
+    """
+    plot of the resiudal histogram to log in tensorboard
+    """
+
     batch_size = im_pair_idxs.numel()
     im_pair_idxs = im_pair_idxs.tolist()
 
@@ -178,6 +186,10 @@ vector fields
 
 
 def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices):
+    """
+    plot of the norms of output vector fields to log in tensorboard
+    """
+
     fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
 
     cols = ['axial', 'coronal', 'sagittal']
@@ -216,21 +228,21 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
     mid_z = int(mu_v_batch.shape[2] / 2)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        temp = compute_norm(mu_v_batch[loop_idx])
+        temp = calc_norm(mu_v_batch[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
         mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
 
-        temp = compute_norm(displacement_batch[loop_idx])
+        temp = calc_norm(displacement_batch[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
         displacement_norm_slices = [displacement_norm[:, :, mid_x],
                                     displacement_norm[:, mid_y, :],
                                     displacement_norm[mid_z, :, :]]
 
-        temp = compute_norm(sigma_v_batch[loop_idx])
+        temp = calc_norm(sigma_v_batch[loop_idx])
         sigma_v_norm = temp[0].cpu().numpy()
         sigma_v_norm_slices = [sigma_v_norm[:, :, mid_x], sigma_v_norm[:, mid_y, :], sigma_v_norm[mid_z, :, :]]
 
-        temp = compute_norm(u_v_batch[loop_idx])
+        temp = calc_norm(u_v_batch[loop_idx])
         u_v_norm = temp[0].cpu().numpy()
         u_v_norm_slices = [u_v_norm[:, :, mid_x], u_v_norm[:, mid_y, :], u_v_norm[mid_z, :, :]]
 
@@ -248,6 +260,10 @@ samples
 
 
 def sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_slices):
+    """
+    plot of output images and vector fields related to a sample from MCMC to log in tensorboard
+    """
+
     fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['axial', 'coronal', 'sagittal']
@@ -284,11 +300,11 @@ def log_sample(writer, im_pair_idxs, im_moving_warped_batch, v_batch, displaceme
                                    im_moving_warped[:, mid_y, :],
                                    im_moving_warped[mid_z, :, :]]
 
-        temp = compute_norm(v_batch[loop_idx])
+        temp = calc_norm(v_batch[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
         mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
 
-        temp = compute_norm(displacement_batch[loop_idx])
+        temp = calc_norm(displacement_batch[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
         displacement_norm_slices = [displacement_norm[:, :, mid_x],
                                     displacement_norm[:, mid_y, :],

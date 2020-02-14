@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 class DifferentialOperator(nn.Module, ABC):
     """
-    abstract class for defining a differential operator on a vector field
+    base class for defining a differential operator on a vector field
     """
 
     def __init__(self):

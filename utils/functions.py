@@ -6,6 +6,10 @@ import torch
 
 
 def laplacian_1d(N):
+    """
+    calculate the Laplacian matrix of size N
+    """
+
     diag = np.ones(N)
     return sp.spdiags([diag, -2.0 * diag, diag], [-1, 0, 1], N, N)
 
@@ -18,6 +22,14 @@ def laplacian_3d(N):
 
 
 def sobolev_kernel_1d(_s, _lambda):
+    """
+    approximate the Sobolev kernel
+
+    :param _s: kernel size to use
+    :param _lambda: smoothing parameter
+    :return:
+    """
+
     # we do the eigendecomposition anyway for the sqrt, so might as well compute the smoothing kernel while at it
     L = np.asarray(laplacian_1d(_s).todense())
     w, v = np.linalg.eigh(L)
@@ -49,6 +61,10 @@ def sobolev_kernel_3d(_s, _lambda):
 
 
 class SobolevGrad(torch.autograd.Function):
+    """
+    autograd function for Sobolev gradients
+    """
+
     @staticmethod
     def forward(ctx, input, S_x, S_y, S_z, padding):
         input_smoothed = separable_conv_3d(input, S_x, S_y, S_z, padding)

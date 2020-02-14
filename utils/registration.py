@@ -4,6 +4,10 @@ import torch.nn.functional as F
 
 
 class RegistrationModule(nn.Module):
+    """
+    module for warping images and masks
+    """
+
     def __init__(self):
         super(RegistrationModule, self).__init__()
 

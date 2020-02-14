@@ -1,7 +1,7 @@
 from os import path
 
 from pathlib import Path
-from utils import compute_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk
+from utils import calc_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk
 
 import logging
 import logging.config
@@ -30,6 +30,10 @@ def setup_logging(save_dir, log_config='logger/logger_config.json', default_leve
 
 
 def print_log(logger, log):
+    """
+    print logged scalars
+    """
+
     for key, value in log.items():
         if isinstance(value, int):
             logger.info(f'    {key:25s}: {value}')
@@ -64,6 +68,10 @@ def save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped):
 
 
 def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
+    """
+    save input and output images to .nii.gz
+    """
+
     im_pair_idxs = im_pair_idxs.tolist()
 
     im_fixed_batch = im_fixed_batch.cpu().numpy()
@@ -108,6 +116,10 @@ def save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm):
 
 
 def save_norms(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batch):
+    """
+    save norms of output vector fields to .nii.gz
+    """
+
     im_pair_idxs = im_pair_idxs.tolist()
 
     mu_v_batch = var_params_batch['mu_v']
@@ -116,19 +128,19 @@ def save_norms(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batc
     u_v_batch = var_params_batch['u_v']
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        temp = compute_norm(mu_v_batch[loop_idx])
+        temp = calc_norm(mu_v_batch[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
         save_mu_v_norm(save_dirs_dict, im_pair_idx, mu_v_norm)
 
-        temp = compute_norm(sigma_v_batch[loop_idx])
+        temp = calc_norm(sigma_v_batch[loop_idx])
         sigma_v_norm = temp[0].cpu().numpy()
         save_sigma_v_norm(save_dirs_dict, im_pair_idx, sigma_v_norm)
 
-        temp = compute_norm(u_v_batch[loop_idx])
+        temp = calc_norm(u_v_batch[loop_idx])
         u_v_norm = temp[0].cpu().numpy()
         save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm)
 
-        temp = compute_norm(displacement_batch[loop_idx])
+        temp = calc_norm(displacement_batch[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
         save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm)
 
@@ -164,6 +176,10 @@ def save_u_v_field(save_dirs_dict, im_pair_idx, u_v):
 
 
 def save_fields(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
+    """
+    save output vector fields to .vtk
+    """
+
     im_pair_idxs = im_pair_idxs.tolist()
 
     mu_v_batch = var_params_batch['mu_v']
@@ -195,6 +211,10 @@ transformation grids
 
 
 def save_grids(save_dirs_dict, im_pair_idxs, grids):
+    """
+    save output structured grids to .vtk
+    """
+
     im_pair_idxs = im_pair_idxs.tolist()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -210,6 +230,10 @@ samples
 
 
 def save_sample(save_dirs_dict, im_pair_idxs, sample_no, im_moving_warped_batch, v_batch):
+    """
+    save output images and vector fields related to a sample from MCMC
+    """
+
     im_pair_idxs = im_pair_idxs.tolist()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 

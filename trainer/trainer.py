@@ -416,7 +416,7 @@ class Trainer(BaseTrainer):
 
     def _save_checkpoint_vi(self, iter_no):
         """
-        save a checkpoint
+        save a checkpoint (variational inference)
         """
 
         state = {
@@ -435,6 +435,10 @@ class Trainer(BaseTrainer):
         self.logger.info("checkpoint saved\n")
 
     def _save_checkpoint_mcmc(self, sample_no):
+        """
+        save a checkpoint (Markov chain Monte Carlo)
+        """
+
         state = {
             'config': self.config,
             'sample_no': sample_no,
@@ -454,9 +458,7 @@ class Trainer(BaseTrainer):
 
     def _resume_checkpoint_vi(self, resume_path):
         """
-        resume from saved checkpoints
-
-        :param resume_path: checkpoint path to be resumed
+        resume from saved checkpoints (VI)
         """
 
         resume_path = str(resume_path)
@@ -476,9 +478,7 @@ class Trainer(BaseTrainer):
 
     def _resume_checkpoint_mcmc(self, resume_path):
         """
-        resume from saved checkpoints
-
-        :param resume_path: checkpoint path to be resumed
+        resume from saved checkpoints (MCMC)
         """
 
         resume_path = str(resume_path)

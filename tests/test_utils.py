@@ -1,4 +1,4 @@
-from utils import compute_norm, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d,\
+from utils import calc_norm, pixel_to_normalised_3d, pixel_to_normalised_2d, plot_2d, plot_3d,\
     sobolev_kernel_1d, separable_conv_3d, SVF_2D, SVF_3D
 
 import math
@@ -26,7 +26,7 @@ class UtilsTestMethods(unittest.TestCase):
     def test_norm(self):
         v = torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
 
-        v_norm = compute_norm(v)
+        v_norm = calc_norm(v)
         val_true = math.sqrt(3) * torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
 
         assert torch.all(torch.eq(v_norm, val_true))

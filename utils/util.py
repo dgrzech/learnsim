@@ -41,6 +41,16 @@ def inf_loop(data_loader):
 
 
 def calc_det_J(nabla_x, nabla_y, nabla_z):
+    """
+    calculate the Jacobian determinant of a vector field
+
+    :param nabla_x: field gradients in the x direction
+    :param nabla_y: field gradients in the y direction
+    :param nabla_z: field gradients in the z direction
+
+    :return: Jacobian determinant
+    """
+
     det_J = nabla_x[:, 0] * nabla_y[:, 1] * nabla_z[:, 2] + \
             nabla_y[:, 0] * nabla_z[:, 1] * nabla_x[:, 2] + \
             nabla_z[:, 0] * nabla_x[:, 1] * nabla_y[:, 2] - \
@@ -51,7 +61,10 @@ def calc_det_J(nabla_x, nabla_y, nabla_z):
     return det_J
 
 
-def compute_norm(v):
+def calc_norm(v):
+    """
+    calculate the voxel-wise norm of vectors in a 3D field
+    """
     return torch.norm(v, p=2, dim=0, keepdim=True)
 
 
@@ -65,6 +78,9 @@ def get_module_attr(module, name):
 def init_identity_grid_2d(nx, ny):
     """
     initialise a 2D identity grid
+
+    :param nx: number of voxels in the x direction
+    :param ny: number of voxels in the y direction
     """
 
     x = torch.linspace(-1, 1, steps=nx)
@@ -82,6 +98,10 @@ def init_identity_grid_2d(nx, ny):
 def init_identity_grid_3d(nx, ny, nz):
     """
     initialise a 3D identity grid
+
+    :param nx: number of voxels in the x direction
+    :param ny: number of voxels in the y direction
+    :param nz: number of voxels in the z direction
     """
 
     x = torch.linspace(-1, 1, steps=nx)
@@ -101,7 +121,7 @@ def init_identity_grid_3d(nx, ny, nz):
 
 def max_field_update(field_old, field_new):
     """
-    calculate the largest update to a vector field in terms of the L2 norm
+    calculate the largest voxel-wise update to a vector field in terms of the L2 norm
 
     :param field_old: vector field before the update
     :param field_new: vector field after the update
@@ -109,8 +129,8 @@ def max_field_update(field_old, field_new):
     :return: voxel index and value of the largest update
     """
 
-    norm_old = compute_norm(field_old)
-    norm_new = compute_norm(field_new)
+    norm_old = calc_norm(field_old)
+    norm_new = calc_norm(field_new)
 
     max_update = torch.max(torch.abs(norm_new - norm_old))
     max_update_idx = torch.argmax(torch.abs(norm_new - norm_old))
@@ -130,7 +150,7 @@ def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
 
 def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     """
-    transform the coordinates of a pixel to range (-1, 1)
+    transform the coordinates of a voxel to range (-1, 1)
     """
 
     x = -1.0 + 2.0 * px_idx_x / (dim_x - 1.0)
@@ -142,7 +162,7 @@ def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
 
 def rescale_im(im, range_min=-1.0, range_max=1.0):
     """
-    rescale the intensity of image pixels to a given range
+    rescale the intensity of image pixels/voxels to a given range
     """
 
     im_min, im_max = torch.min(im), torch.max(im)
@@ -150,6 +170,13 @@ def rescale_im(im, range_min=-1.0, range_max=1.0):
 
 
 def save_field_to_disk(field, file_path):
+    """
+    save a vector field to a .vtk file
+
+    :param field: field to save
+    :param file_path: path to use
+    """
+
     field = field.cpu().numpy()
 
     field_x = field[0]
@@ -174,6 +201,13 @@ def save_field_to_disk(field, file_path):
 
 
 def save_grid_to_disk(grid, file_path):
+    """
+    save a VTK structured grid to a .vtk file
+
+    :param grid: grid to save
+    :param file_path: path to use
+    """
+
     grid = grid.cpu().numpy()
     
     x = grid[0, :, :, :]
@@ -194,16 +228,39 @@ def save_grid_to_disk(grid, file_path):
 
 
 def save_im_to_disk(im, file_path):
+    """
+    save an image stored in a numpy array to a .nii.gz file
+
+    :param im: 3D image
+    :param file_path: path to use
+    """
+
     im = nib.Nifti1Image(im, np.eye(4))
     im.to_filename(file_path)
 
 
 def save_optimiser_to_disk(optimiser, file_path):
+    """
+    save an optimiser state to a .pth file
+
+    :param optimiser: optimiser
+    :param file_path: path to use
+    """
+
     state_dict = optimiser.state_dict()
     torch.save(state_dict, file_path)
 
 
 def separable_conv_3d(field, *args):
+    """
+    implements separable convolution over a three-dimensional vector field either as three 1D convolutions
+    with a 1D kernel, or as three 3D convolutions with three 3D kernels of sizes kx1x1, 1xkx1, and 1x1xk
+
+    :param field: input vector field
+    :param args: input kernel(s) and the size of padding to use
+    :return: input vector field convolved with the kernel
+    """
+
     field_out = field.clone()
 
     if len(args) == 2:
@@ -257,7 +314,7 @@ def separable_conv_3d(field, *args):
 
 def standardise_im(im):
     """
-    standardise an image to zero mean and unit variance
+    standardise image to zero mean and unit variance
     """
 
     im_mean, im_std = torch.mean(im), torch.std(im)
@@ -287,13 +344,13 @@ def vd(residual, mask):
     virtual decimation
 
     input x = residual (Gaussian-ish) field with stationary covariance, e.g. residual map (I-J) / sigma,
-    where sigma is the noise sigma if you use SSD/Gaussian model or else the EM voxel-wise estimate if you use a GMM
+    where sigma is the noise sigma if you use SSD/Gaussian model or else the EM voxel-wise estimate if you use a GMM.
 
-    EM voxel-wise estimate of precision=var^{-1} is sum_k rho_k precision_k,
-    where rho_k is the component responsible for the voxel
+    EM voxel-wise estimate of precision = var^(-1) is sum_k rho_k precision_k,
+    where rho_k is the component responsible for the voxel.
 
-    The general idea is that each voxelwise observation now only counts for "VD < 1 of an observation";
-    imagine sampling a z~bernoulli(VD) at each voxel and you only add the voxel's loss if z==1.
+    The general idea is that each voxel-wise observation now only counts for "VD < 1 of an observation";
+    imagine sampling a z ~ bernoulli(VD) at each voxel and you only add the voxel's loss if z == 1.
 
     In practice you do that in expectation. In the simplest case it looks like VD * data_loss,
     and goes well in a VB framework, as if you added a q(z) = Bernoulli(VD) to a VB approximation

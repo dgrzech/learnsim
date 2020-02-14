@@ -16,6 +16,10 @@ def add_noise_uniform(field, alpha=0.25):
 
 
 def sample_q_v(mu_v, log_var_v, u_v, no_samples=1):
+    """
+    sample from the posterior distribution using the reparameterisation trick
+    """
+
     sigma = transform_coordinates(torch.exp(0.5 * log_var_v))
     u = transform_coordinates(u_v)
 
