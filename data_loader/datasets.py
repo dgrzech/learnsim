@@ -101,17 +101,3 @@ class BiobankDataset(Dataset):
         u_v = init_u_v(self.dims_v)
 
         return idx, self.im_fixed, self.mask_fixed, im_moving, mu_v, log_var_v, u_v
-
-
-class ResidualDataset(Dataset):
-    def __init__(self, residual_data):
-        if residual_data.dim() == 1:
-            self.residual_data = residual_data.unsqueeze(-1)
-        else:
-            self.residual_data = residual_data
-
-    def __getitem__(self, index):
-        return self.residual_data[index]
-
-    def __len__(self):
-        return len(self.residual_data)

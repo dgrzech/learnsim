@@ -1,7 +1,4 @@
-from torch.utils.data import DataLoader
-
 from base import BaseTrainer
-from data_loader import ResidualDataset
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, \
     save_fields, save_grids, save_images, save_norms, save_sample
 from optimizers import Adam
@@ -75,24 +72,15 @@ class Trainer(BaseTrainer):
             self._resume_checkpoint_mcmc(config.resume)
 
     def _loss_warm_up(self, res, alpha=1.0):
-        dataset = ResidualDataset(res.detach().view(-1))
-        loader = DataLoader(dataset, batch_size=10000)
-
-        N = len(dataset)
-        no_batches = 0
-
-        for _ in enumerate(loader):
-            no_batches += 1
-        
-        avg_batch_size = N / no_batches
+        res_flattened = res.view(-1)
 
         if self.optimizer_mixture_model is None:  # initialise the optimiser
-            self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 0.0, 'lr_decay': 0.0},
+            self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
                                                  {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
-                                                lr=1e-1, lr_decay=0.4 / float(no_batches), betas=(0.9, 0.95))
-
-        no_warm_up_steps_sigma = 1
-        no_warm_up_steps = 10
+                                                lr=1e-2, betas=(0.9, 0.95))
+        
+        no_warm_up_steps_sigma = 10
+        no_warm_up_steps = 50
         reinit_every = 3
 
         for step in range(1, no_warm_up_steps + 1):
@@ -103,33 +91,17 @@ class Trainer(BaseTrainer):
 
             if step == no_warm_up_steps_sigma + 1:
                 logits_group = self.optimizer_mixture_model.param_groups[1]
+                logits_group['lr'] = self.optimizer_mixture_model.defaults['lr']
 
-                logits_group['lr'] = 1e-2  # logits group
-                logits_group['lr_decay'] = self.optimizer_mixture_model.defaults['lr_decay']
                 reinit = True
 
-            for batch_idx, data in enumerate(loader):
-                n = len(data)
+            data_term = self.data_loss(res_flattened.detach()) * alpha
+            data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
+            data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-                stored_lr = []
-                for group in self.optimizer_mixture_model.param_groups:
-                    stored_lr.append(group['lr'])
-                    group['lr'] = n * group['lr'] / avg_batch_size
-
-                data_term = self.data_loss(data) * alpha * N / n
-                data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
-                data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
-
-                self.optimizer_mixture_model.zero_grad()
-                data_term.backward()
-                self.optimizer_mixture_model.step(reinit=reinit)  # backprop
-
-                if reinit:
-                    reinit = False
-
-                # restore lr
-                for group in self.optimizer_mixture_model.param_groups:
-                    group['lr'] = stored_lr.pop(0)
+            self.optimizer_mixture_model.zero_grad()
+            data_term.backward()
+            self.optimizer_mixture_model.step(reinit=reinit)  # backprop
 
     def _step_VI(self, im_pair_idxs, im_moving):
         if self.optimizer_v is None:
@@ -157,11 +129,8 @@ class Trainer(BaseTrainer):
             transformation2, displacement2 = self.transformation_model(v_sample2)
 
             # add noise to account for interpolation uncertainty
-            transformation1, displacement1 = add_noise_uniform(transformation1, self.log_var_v), \
-                                             add_noise_uniform(displacement1, self.log_var_v)
-
-            transformation2, displacement2 = add_noise_uniform(transformation2, self.log_var_v), \
-                                             add_noise_uniform(displacement2, self.log_var_v)
+            transformation1, displacement1 = add_noise_uniform(transformation1), add_noise_uniform(displacement1)
+            transformation2, displacement2 = add_noise_uniform(transformation2), add_noise_uniform(displacement2)
 
             im_moving_warped1, im_moving_warped2 = self.registration_module(im_moving, transformation1), \
                                                    self.registration_module(im_moving, transformation2)
@@ -306,8 +275,7 @@ class Trainer(BaseTrainer):
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
                 reg_term = self.reg_loss(v_curr_state_noise).sum()
 
-            transformation, displacement = add_noise_uniform(transformation, self.log_var_v), \
-                                           add_noise_uniform(displacement, self.log_var_v)
+            transformation, displacement = add_noise_uniform(transformation), add_noise_uniform(displacement)
 
             im_moving_warped = self.registration_module(im_moving, transformation)
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
@@ -391,7 +359,7 @@ class Trainer(BaseTrainer):
                     v_sample = SobolevGrad.apply(v_sample, self.S_x, self.S_y, self.S_z, self.padding_sz)
 
                 transformation, displacement = self.transformation_model(v_sample)
-                transformation = add_noise_uniform(transformation, self.log_var_v)
+                transformation = add_noise_uniform(transformation)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)

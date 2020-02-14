@@ -10,9 +10,9 @@ def add_noise(v, sigma_scaled, u_v_scaled):
     return v + eps * sigma_scaled + x * u_v_scaled
 
 
-def add_noise_uniform(field, log_var, alpha=0.25):
-    sigma = transform_coordinates(torch.exp(0.5 * log_var))
-    return field + alpha * sigma
+def add_noise_uniform(field, alpha=0.25):
+    epsilon = alpha * transform_coordinates(torch.ones(field.size(), device=field.device))
+    return field + epsilon
 
 
 def sample_q_v(mu_v, log_var_v, u_v, no_samples=1):
