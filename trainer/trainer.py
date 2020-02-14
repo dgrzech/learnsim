@@ -142,11 +142,12 @@ class Trainer(BaseTrainer):
             res1_masked = res1[self.mask_fixed]
             res2_masked = res2[self.mask_fixed]
 
-            if self.vd:
-                alpha1, alpha2 = \
-                    vd(res1.detach(), self.mask_fixed), vd(res2.detach(), self.mask_fixed)  # virtual decimation
+            if self.vd:  # virtual decimation
+                alpha1, alpha2 = vd(res1.detach(), self.mask_fixed), vd(res2.detach(), self.mask_fixed)
+                alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
             else:
                 alpha1, alpha2 = 1.0, 1.0
+                alpha_mean = 1.0
             
             self._loss_warm_up(res1_masked, alpha1)  # Gaussian mixture warm-up
 
@@ -180,6 +181,8 @@ class Trainer(BaseTrainer):
             self.train_metrics_vi.update('VI/reg_term', reg_term.item())
             self.train_metrics_vi.update('VI/entropy_term', entropy_term.item())
             self.train_metrics_vi.update('VI/total_loss', loss_q_v.item())
+
+            self.train_metrics_vi.update('VD/alpha', alpha_mean)
 
             sigmas = torch.exp(self.data_loss.log_scales())
             proportions = torch.exp(self.data_loss.log_proportions())
@@ -285,8 +288,10 @@ class Trainer(BaseTrainer):
 
             if self.vd:
                 alpha = vd(res.detach(), self.mask_fixed)  # virtual decimation
+                alpha_mean = alpha.item()
             else:
                 alpha = 1.0
+                alpha_mean = alpha
 
             data_term = self.data_loss(res_masked) * alpha
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
@@ -304,6 +309,7 @@ class Trainer(BaseTrainer):
 
             self.train_metrics_mcmc.update('MCMC/data_term', data_term.item())
             self.train_metrics_mcmc.update('MCMC/reg_term', reg_term.item())
+            self.train_metrics_mcmc.update('VD/alpha', alpha_mean)
 
             if sample_no == self.no_iters_burn_in:
                 self.logger.info('\nENDED BURNING IN\n')
