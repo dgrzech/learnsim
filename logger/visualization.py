@@ -113,7 +113,7 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
     return fig
 
 
-def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
+def log_hist_res(writer, im_pair_idxs, residuals_batch, data_loss):
     """
     plot of the resiudal histogram to log in tensorboard
     """
@@ -142,7 +142,7 @@ def log_hist_res(writer, im_pair_idxs, residuals_batch, gmm):
             xmin, xmax = writer.hist_xlim[0], writer.hist_xlim[1]
 
         x = torch.linspace(xmin, xmax, steps=10000).unsqueeze(0).unsqueeze(-1).to(device_temp)
-        model_fit = torch.exp(gmm.log_pdf(x))
+        model_fit = torch.exp(data_loss.log_pdf(x))
 
         sns.lineplot(x=x.detach().squeeze().cpu().numpy(),
                      y=model_fit.detach().squeeze().cpu().numpy(), color='green', ax=ax)
@@ -286,7 +286,9 @@ def sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_sli
     return fig
 
 
-def log_sample(writer, im_pair_idxs, im_moving_warped_batch, v_batch, displacement_batch):
+def log_sample(writer, im_pair_idxs, data_loss, im_moving_warped_batch, res_batch, v_batch, displacement_batch):
+    log_hist_res(writer, im_pair_idxs, res_batch, data_loss)
+
     im_pair_idxs = im_pair_idxs.tolist()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 

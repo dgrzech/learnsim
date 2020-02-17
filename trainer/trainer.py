@@ -104,11 +104,11 @@ class Trainer(BaseTrainer):
             self.optimizer_mixture_model.step(reinit=reinit)  # backprop
 
     def _step_VI(self, im_pair_idxs, im_moving):
-        if self.optimizer_v is None:
-            self.mu_v.requires_grad_(True)
-            self.log_var_v.requires_grad_(True)
-            self.u_v.requires_grad_(True)
+        self.mu_v.requires_grad_(True)
+        self.log_var_v.requires_grad_(True)
+        self.u_v.requires_grad_(True)
 
+        if self.optimizer_v is None:
             self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
@@ -247,18 +247,14 @@ class Trainer(BaseTrainer):
             if iter_no % self.save_period == 0 or iter_no == self.no_iters_vi:
                 self._save_checkpoint_vi(iter_no)
 
+    def _step_MCMC(self, im_pair_idxs, im_moving):
         self.mu_v.requires_grad_(False)
         self.log_var_v.requires_grad_(False)
         self.u_v.requires_grad_(False)
 
-    def _step_MCMC(self, im_pair_idxs, im_moving):
-        if self.optimizer_mixture_model is None:
-            self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
-                                                 {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
-                                                lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
+        self.v_curr_state.requires_grad_(True)
 
         if self.optimizer_mala is None:
-            self.v_curr_state.requires_grad_(True)
             self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
 
         self.logger.info('\nBURNING IN THE MARKOV CHAIN\n')
@@ -333,10 +329,11 @@ class Trainer(BaseTrainer):
                     print_log(self.logger, log)
 
                     if self.sobolev_grad:
-                        log_sample(self.writer, im_pair_idxs,
-                                   im_moving_warped, v_curr_state_noise_smoothed, displacement)
+                        log_sample(self.writer, im_pair_idxs, self.data_loss,
+                                   im_moving_warped, res_masked, v_curr_state_noise_smoothed, displacement)
                     else:
-                        log_sample(self.writer, im_pair_idxs, im_moving_warped, self.v_curr_state, displacement)
+                        log_sample(self.writer, im_pair_idxs, self.data_loss,
+                                   im_moving_warped, res_masked, self.v_curr_state, displacement)
             
             """
             outputs
@@ -414,11 +411,12 @@ class Trainer(BaseTrainer):
             """
 
             if self.MCMC:
-                tau = self.config['optimizer_mala']['args']['lr']
-                sqrt_tau_twice = np.sqrt(2.0 * tau)
+                with torch.no_grad():
+                    tau = self.config['optimizer_mala']['args']['lr']
+                    sqrt_tau_twice = np.sqrt(2.0 * tau)
 
-                self.sigma_scaled = sqrt_tau_twice * transform_coordinates(torch.exp(0.5 * self.log_var_v))
-                self.u_v_scaled = sqrt_tau_twice * transform_coordinates(self.u_v)
+                    self.sigma_scaled = sqrt_tau_twice * transform_coordinates(torch.exp(0.5 * self.log_var_v))
+                    self.u_v_scaled = sqrt_tau_twice * transform_coordinates(self.u_v)
 
                 if self.v_curr_state is None:
                     self.v_curr_state = self.mu_v.clone()
@@ -432,7 +430,8 @@ class Trainer(BaseTrainer):
 
         state = {
             'config': self.config,
-            'iter': iter_no,
+            'iter_no': iter_no,
+            'sample_no': self.start_sample,
 
             'mu_v': self.mu_v,
             'log_var_v': self.log_var_v,
@@ -455,6 +454,7 @@ class Trainer(BaseTrainer):
 
         state = {
             'config': self.config,
+            'iter_no': self.no_iters_vi,
             'sample_no': sample_no,
 
             'mu_v': self.mu_v,
@@ -482,7 +482,8 @@ class Trainer(BaseTrainer):
         self.logger.info("\nloading checkpoint: {}..".format(resume_path))
         checkpoint = torch.load(resume_path)
 
-        self.start_iter = checkpoint['iter'] + 1
+        self.start_iter = checkpoint['iter_no'] + 1
+        self.start_sample = checkpoint['sample_no'] + 1
 
         # VI
         self.mu_v = checkpoint['mu_v']
@@ -511,16 +512,13 @@ class Trainer(BaseTrainer):
         self.logger.info("\nloading checkpoint: {}..".format(resume_path))
         checkpoint = torch.load(resume_path)
 
-        self.start_sample = checkpoint['sample_no'] + 1 if 'sample_no' in checkpoint else 1
+        self.start_iter = checkpoint['iter_no'] + 1
+        self.start_sample = checkpoint['sample_no'] + 1
 
         # VI
         self.mu_v = checkpoint['mu_v']
         self.log_var_v = checkpoint['log_var_v']
         self.u_v = checkpoint['u_v']
-
-        self.mu_v.requires_grad_(False)
-        self.log_var_v.requires_grad_(False)
-        self.u_v.requires_grad_(False)
 
         # GMM
         self.data_loss.load_state_dict(checkpoint['data_loss'])
@@ -532,7 +530,6 @@ class Trainer(BaseTrainer):
 
         # MCMC
         self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint else torch.ones_like(self.mu_v)
-        self.v_curr_state.requires_grad_(True)
 
         if 'optimizer_mala' in checkpoint:
             self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
