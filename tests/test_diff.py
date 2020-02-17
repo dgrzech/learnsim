@@ -221,7 +221,7 @@ class DiffTestMethods(unittest.TestCase):
         """
 
         det_J = calc_det_J(nabla_x, nabla_y, nabla_z) + 1e-5
-        log_det_J = torch.log10(det_J)
+        log_det_J = torch.log(det_J)
 
         """
         test that values of the log determinant of the Jacobian are correct
@@ -262,8 +262,8 @@ class DiffTestMethods(unittest.TestCase):
         nabla_x, nabla_y, nabla_z = self.diff_op(transformation)
         det_J = calc_det_J(nabla_x, nabla_y, nabla_z)
 
-        log_det_J = torch.log10(det_J)
-        log_det_J_true = torch.log10(8.0 * torch.ones_like(log_det_J))
+        log_det_J = torch.log(det_J)
+        log_det_J_true = torch.log(8.0 * torch.ones_like(log_det_J))
 
         for idx_z in range(log_det_J.shape[1]):
             for idx_y in range(log_det_J.shape[2]):

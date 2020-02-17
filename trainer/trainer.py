@@ -229,7 +229,7 @@ class Trainer(BaseTrainer):
 
                     im_moving_warped = self.registration_module(im_moving, transformation)
                     nabla_x, nabla_y, nabla_z = get_module_attr(self.reg_loss, 'diff_op')(transformation)
-                    log_det_J_transformation = torch.log10(calc_det_J(nabla_x, nabla_y, nabla_z))
+                    log_det_J_transformation = torch.log(calc_det_J(nabla_x, nabla_y, nabla_z))
 
                     # tensorboard
                     log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
@@ -397,6 +397,8 @@ class Trainer(BaseTrainer):
                 self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
                 
                 self.writer.set_step(0)
+                
+                self.train_metrics_vi.update('VI/data_term', loss_unwarped.item())
                 log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)
 
             """
