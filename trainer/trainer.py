@@ -77,7 +77,7 @@ class Trainer(BaseTrainer):
         if self.optimizer_mixture_model is None:  # initialise the optimiser
             self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
                                                  {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
-                                                lr=1e-2, betas=(0.9, 0.95))
+                                                lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
         
         no_warm_up_steps_sigma = 10
         no_warm_up_steps = 50
@@ -143,7 +143,9 @@ class Trainer(BaseTrainer):
             res2_masked = res2[self.mask_fixed]
 
             if self.vd:  # virtual decimation
-                alpha1, alpha2 = vd(res1.detach(), self.mask_fixed), vd(res2.detach(), self.mask_fixed)
+                with torch.no_grad():
+                    alpha1, alpha2 = vd(res1, self.mask_fixed), vd(res2, self.mask_fixed)
+
                 alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
             else:
                 alpha1, alpha2 = 1.0, 1.0
@@ -250,6 +252,11 @@ class Trainer(BaseTrainer):
         self.u_v.requires_grad_(False)
 
     def _step_MCMC(self, im_pair_idxs, im_moving):
+        if self.optimizer_mixture_model is None:
+            self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
+                                                 {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
+                                                lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
+
         if self.optimizer_mala is None:
             self.v_curr_state.requires_grad_(True)
             self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
@@ -286,8 +293,10 @@ class Trainer(BaseTrainer):
             res = n_F - n_M
             res_masked = res[self.mask_fixed]
 
-            if self.vd:
-                alpha = vd(res.detach(), self.mask_fixed)  # virtual decimation
+            if self.vd:  # virtual decimation
+                with torch.no_grad():
+                    alpha = vd(res, self.mask_fixed)
+
                 alpha_mean = alpha.item()
             else:
                 alpha = 1.0
@@ -299,7 +308,9 @@ class Trainer(BaseTrainer):
 
             loss = data_term + reg_term
             loss.backward()
-            self.optimizer_mala.step()  # backprop
+
+            self.optimizer_mixture_model.step()  # backprop
+            self.optimizer_mala.step()
 
             """
             metrics and prints
@@ -426,7 +437,10 @@ class Trainer(BaseTrainer):
             'mu_v': self.mu_v,
             'log_var_v': self.log_var_v,
             'u_v': self.u_v,
-            'optimizer_v': self.optimizer_v.state_dict()
+            'optimizer_v': self.optimizer_v.state_dict(),
+
+            'data_loss': self.data_loss.state_dict(),
+            'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
         }
 
         filename = str(self.checkpoint_dir / f'checkpoint_vi_{iter_no}.pth')
@@ -446,6 +460,9 @@ class Trainer(BaseTrainer):
             'mu_v': self.mu_v,
             'log_var_v': self.log_var_v,
             'u_v': self.u_v,
+
+            'data_loss': self.data_loss.state_dict(),
+            'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
 
             'v_curr_state': self.v_curr_state,
             'optimizer_mala': self.optimizer_mala.state_dict()
@@ -467,12 +484,21 @@ class Trainer(BaseTrainer):
 
         self.start_iter = checkpoint['iter'] + 1
 
+        # VI
         self.mu_v = checkpoint['mu_v']
         self.log_var_v = checkpoint['log_var_v']
         self.u_v = checkpoint['u_v']
 
         self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
         self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
+
+        # GMM
+        self.data_loss.load_state_dict(checkpoint['data_loss'])
+
+        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
+                                             {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
+                                            lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
+        self.optimizer_mixture_model.load_state_dict(checkpoint['optimizer_mixture_model'])
 
         self.logger.info("checkpoint loaded, resuming training..")
 
@@ -485,15 +511,31 @@ class Trainer(BaseTrainer):
         self.logger.info("\nloading checkpoint: {}..".format(resume_path))
         checkpoint = torch.load(resume_path)
 
-        self.start_sample = checkpoint['sample_no'] + 1
+        self.start_sample = checkpoint['sample_no'] + 1 if 'sample_no' in checkpoint else 1
 
+        # VI
         self.mu_v = checkpoint['mu_v']
         self.log_var_v = checkpoint['log_var_v']
         self.u_v = checkpoint['u_v']
 
-        self.v_curr_state = checkpoint['v_curr_state']
+        self.mu_v.requires_grad_(False)
+        self.log_var_v.requires_grad_(False)
+        self.u_v.requires_grad_(False)
 
-        self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
-        self.optimizer_mala.load_state_dict(checkpoint['optimizer_mala'])
+        # GMM
+        self.data_loss.load_state_dict(checkpoint['data_loss'])
+
+        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
+                                             {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
+                                            lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
+        self.optimizer_mixture_model.load_state_dict(checkpoint['optimizer_mixture_model'])
+
+        # MCMC
+        self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint else torch.ones_like(self.mu_v)
+        self.v_curr_state.requires_grad_(True)
+
+        if 'optimizer_mala' in checkpoint:
+            self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
+            self.optimizer_mala.load_state_dict(checkpoint['optimizer_mala'])
 
         self.logger.info("checkpoint loaded, resuming training..")
