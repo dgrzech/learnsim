@@ -62,16 +62,26 @@ class BiobankDataset(Dataset):
         mask_fixed_path = self.im_mask_pairs[0][0][1]
 
         im_fixed = sitk.ReadImage(im_fixed_path, sitk.sitkFloat32)
-        im_fixed = torch.from_numpy(
-            transform.resize(
-                np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z)))
+        im_fixed_arr = np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0))
+
+        shortest_dim = min(im_fixed_arr.shape)
+        self.crop_x = (im_fixed_arr.shape[0] - shortest_dim) // 2
+        self.crop_y = (im_fixed_arr.shape[1] - shortest_dim) // 2
+
+        # crop
+        im_fixed_arr_cropped = im_fixed_arr[self.crop_x:-self.crop_x, self.crop_y:-self.crop_y]
+        # resize
+        im_fixed = torch.from_numpy(transform.resize(im_fixed_arr_cropped, (self.dim_x, self.dim_y, self.dim_z)))
 
         if mask_fixed_path is not '':
             mask_fixed = sitk.ReadImage(mask_fixed_path, sitk.sitkFloat32)
+            mask_fixed_arr = np.transpose(sitk.GetArrayFromImage(mask_fixed), (2, 1, 0))
+
+            # crop
+            mask_fixed_arr_cropped = mask_fixed_arr[self.crop_x:-self.crop_x, self.crop_y:-self.crop_y]
+            # resize
             mask_fixed = torch.from_numpy(
-                transform.resize(
-                    np.transpose(sitk.GetArrayFromImage(mask_fixed), (2, 1, 0)),
-                    (self.dim_x, self.dim_y, self.dim_z), order=0).astype(np.bool))
+                transform.resize(mask_fixed_arr_cropped, (self.dim_x, self.dim_y, self.dim_z), order=0).astype(np.bool))
         else:
             mask_fixed = torch.ones_like(im_fixed)
 
@@ -89,9 +99,10 @@ class BiobankDataset(Dataset):
         im_moving_path = im_mask_pair[1][0]
 
         im_moving = sitk.ReadImage(im_moving_path, sitk.sitkFloat32)
-        im_moving = torch.from_numpy(
-            transform.resize(
-                np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (self.dim_x, self.dim_y, self.dim_z)))
+        im_moving_arr = np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0))
+
+        im_moving_arr_cropped = im_moving_arr[self.crop_x:-self.crop_x, self.crop_y:-self.crop_y]
+        im_moving = torch.from_numpy(transform.resize(im_moving_arr_cropped, (self.dim_x, self.dim_y, self.dim_z)))
 
         im_moving.unsqueeze_(0)
         assert self.im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
