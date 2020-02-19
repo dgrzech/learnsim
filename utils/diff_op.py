@@ -38,7 +38,7 @@ class GradientOperator(DifferentialOperator):
 
             self.pixel_spacing = (2.0 / float(dim_x - 1), 2.0 / float(dim_y - 1), 2.0 / float(dim_z - 1))
 
-        # forward differences--hard to say why but it's the only scheme that works..
+        # forward differences
         dv_dx = F.pad(v[:, :, :, :, 1:] - v[:, :, :, :, :-1], self.px, mode='replicate') / self.pixel_spacing[0]
         dv_dy = F.pad(v[:, :, :, 1:] - v[:, :, :, :-1], self.py, mode='replicate') / self.pixel_spacing[1]
         dv_dz = F.pad(v[:, :, 1:] - v[:, :, :-1], self.pz, mode='replicate') / self.pixel_spacing[2]

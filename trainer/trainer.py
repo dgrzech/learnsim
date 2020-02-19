@@ -2,8 +2,8 @@ from base import BaseTrainer
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, \
     save_fields, save_grids, save_images, save_norms, save_sample
 from optimizers import Adam
-from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, sample_q_v, \
-    sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, SobolevGrad
+from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, \
+    rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, SobolevGrad
 
 import math
 import numpy as np
@@ -137,20 +137,23 @@ class Trainer(BaseTrainer):
 
             n_F, n_M1 = self.data_loss.map(self.im_fixed, im_moving_warped1)
             n_F, n_M2 = self.data_loss.map(self.im_fixed, im_moving_warped2)
-            res1, res2 = (n_F - n_M1) * self.mask_fixed, (n_F - n_M2) * self.mask_fixed
 
-            res1_masked = res1[self.mask_fixed]
-            res2_masked = res2[self.mask_fixed]
+            res1, res2 = n_F - n_M1, n_F - n_M2
 
             if self.vd:  # virtual decimation
+                # rescale the residuals by the estimated voxel-wise standard deviation
+                res1_rescaled = rescale_residuals(res1.detach(), self.mask_fixed, self.data_loss)
+                res2_rescaled = rescale_residuals(res2.detach(), self.mask_fixed, self.data_loss)
+
                 with torch.no_grad():
-                    alpha1, alpha2 = vd(res1, self.mask_fixed), vd(res2, self.mask_fixed)
+                    alpha1, alpha2 = vd(res1_rescaled, self.mask_fixed), vd(res2_rescaled, self.mask_fixed)
 
                 alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
             else:
                 alpha1, alpha2 = 1.0, 1.0
                 alpha_mean = 1.0
-            
+
+            res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
             self._loss_warm_up(res1_masked, alpha1)  # Gaussian mixture warm-up
 
             # q_v
@@ -160,11 +163,11 @@ class Trainer(BaseTrainer):
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            reg_term = self.reg_loss(v_sample1).sum() / 2.0
-            reg_term += self.reg_loss(v_sample2).sum() / 2.0
+            reg_term = self.reg_loss(v_sample1, alpha1).sum() / 2.0
+            reg_term += self.reg_loss(v_sample2, alpha2).sum() / 2.0
 
             entropy_term = self.entropy_loss(v_sample=v_sample1,
-                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
+                                             mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
             entropy_term += self.entropy_loss(v_sample=v_sample2,
                                               mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
             entropy_term += self.entropy_loss(log_var_v=self.log_var_v, u_v=self.u_v).sum()
@@ -276,31 +279,36 @@ class Trainer(BaseTrainer):
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
-                reg_term = self.reg_loss(v_curr_state_noise_smoothed).sum()
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
-                reg_term = self.reg_loss(v_curr_state_noise).sum()
 
             transformation, displacement = add_noise_uniform(transformation), add_noise_uniform(displacement)
 
             im_moving_warped = self.registration_module(im_moving, transformation)
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
-
             res = n_F - n_M
-            res_masked = res[self.mask_fixed]
 
             if self.vd:  # virtual decimation
+                res_rescaled = rescale_residuals(res.detach(), self.mask_fixed, self.data_loss)
+
                 with torch.no_grad():
-                    alpha = vd(res, self.mask_fixed)
+                    alpha = vd(res_rescaled, self.mask_fixed)
 
                 alpha_mean = alpha.item()
             else:
                 alpha = 1.0
                 alpha_mean = alpha
 
+            res_masked = res[self.mask_fixed]
+
             data_term = self.data_loss(res_masked) * alpha
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
+
+            if self.sobolev_grad:
+                reg_term = self.reg_loss(v_curr_state_noise_smoothed, alpha).sum()
+            else:
+                reg_term = self.reg_loss(v_curr_state_noise, alpha).sum()
 
             loss = data_term + reg_term
             loss.backward()
@@ -387,12 +395,16 @@ class Trainer(BaseTrainer):
 
                 self.data_loss.init_parameters(res_std)
 
-                # print value of the data term before registration
-                if self.vd:
-                    alpha = vd(res, self.mask_fixed)  # virtual decimation
-                else:
-                    alpha = 1.0
+            # print value of the data term before registration
+            alpha = 1.0
 
+            if self.vd:  # virtual decimation
+                res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)
+                alpha = vd(res_rescaled, self.mask_fixed)  # virtual decimation
+
+            self._loss_warm_up(res_masked, alpha)  # Gaussian mixture warm-up
+
+            with torch.no_grad():
                 loss_unwarped = self.data_loss(res_masked) * alpha
                 self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
                 

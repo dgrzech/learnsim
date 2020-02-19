@@ -144,7 +144,14 @@ class GaussianMixtureLoss(DataLoss):
         log_proportions = self.log_proportions()
         log_Z = self.log_std + self._log_sqrt_2pi
 
-        return torch.logsumexp((log_proportions - log_Z) - E, dim=-1, keepdim=True)
+        return torch.logsumexp((log_proportions - log_Z) - E, dim=-1)
+
+    def log_pdf_vd(self, z_scaled):
+        E = (z_scaled ** 2) / 2.0
+        log_proportions = self.log_proportions()
+        log_Z = self.log_std + self._log_sqrt_2pi
+
+        return torch.logsumexp((log_proportions - log_Z) - E, dim=-1)
 
     def log_proportions(self):
         return log_softmax(self.logits + 1e-2, dim=0, _stacklevel=5)
@@ -313,7 +320,7 @@ class RegLoss(nn.Module, ABC):
         self.w_reg = float(w_reg)
 
     @abstractmethod
-    def forward(self, v):
+    def forward(self, v, alpha):
         pass
 
 
@@ -326,7 +333,7 @@ class RegLossL2(RegLoss):
         else:
             raise Exception('Unknown differential operator')
 
-    def forward(self, v):
+    def forward(self, v, alpha):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) +
                              torch.sum(torch.pow(nabla_vy, 2)) +

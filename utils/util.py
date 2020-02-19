@@ -169,6 +169,24 @@ def rescale_im(im, range_min=-1.0, range_max=1.0):
     return (range_max - range_min) * (im - im_min) / (im_max - im_min) + range_min
 
 
+def rescale_residuals(res, mask, data_loss):
+    """
+    rescale residuals by the estimated voxel-wise standard deviation
+    """
+
+    res_masked = torch.where(mask, res, torch.zeros_like(res))
+    res_masked_flattened = res_masked.view(1, -1, 1)
+
+    scaled_res = res_masked_flattened * torch.exp(-data_loss.log_std)
+    scaled_res.requires_grad_(True)
+    scaled_res.retain_grad()
+
+    loss_vd = -1.0 * torch.sum(data_loss.log_pdf_vd(scaled_res))
+    loss_vd.backward()
+
+    return torch.sum(scaled_res * scaled_res.grad, dim=-1).view(res.shape)
+
+
 def save_field_to_disk(field, file_path):
     """
     save a vector field to a .vtk file
@@ -364,11 +382,11 @@ def vd(residual, mask):
 
         # covariance..
         no_unmasked_voxels = torch.sum(mask)
-        res = residual * mask
+        residual_masked = torch.where(mask, residual, torch.zeros_like(residual))
 
-        cov_x = torch.sum(res[:, :, :-1] * res[:, :, 1:]) / no_unmasked_voxels
-        cov_y = torch.sum(res[:, :, :, :-1] * res[:, :, :, 1:]) / no_unmasked_voxels
-        cov_z = torch.sum(res[:, :, :, :, :-1] * res[:, :, :, :, 1:]) / no_unmasked_voxels
+        cov_x = torch.sum(residual_masked[:, :, :-1] * residual_masked[:, :, 1:]) / no_unmasked_voxels
+        cov_y = torch.sum(residual_masked[:, :, :, :-1] * residual_masked[:, :, :, 1:]) / no_unmasked_voxels
+        cov_z = torch.sum(residual_masked[:, :, :, :, :-1] * residual_masked[:, :, :, :, 1:]) / no_unmasked_voxels
 
         corr_x = cov_x / var_res
         corr_y = cov_y / var_res
