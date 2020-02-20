@@ -110,7 +110,8 @@ class Trainer(BaseTrainer):
         self.u_v.requires_grad_(True)
 
         if self.optimizer_v is None:
-            self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
+            self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
+                                                    [self.mu_v, self.log_var_v, self.u_v, self.reg_loss._log_lambda])
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()

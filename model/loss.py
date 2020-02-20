@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
 
-from utils import gaussian_kernel_3d, GradientOperator
+from utils import gaussian_kernel_3d, GaussianGrad, GradientOperator
 
 import math
 import torch
@@ -341,7 +341,7 @@ class RegLossL2(RegLoss):
 
 
 class RegLossL2_Learnable(RegLoss):
-    def __init__(self, diff_op, w_reg_init=1.0):
+    def __init__(self, diff_op, sigma_init, w_reg_init=1.0):
         super(RegLossL2_Learnable, self).__init__()
 
         if diff_op == 'GradientOperator':
@@ -349,25 +349,24 @@ class RegLossL2_Learnable(RegLoss):
         else:
             raise Exception('Unknown differential operator')
 
-        gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(96, sigma=48.0))
-        self._gaussian_kernel_hat = \
-            nn.Parameter(torch.rfft(gaussian_kernel, 3, normalized=True, onesided=False).float().detach())
+        gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(96, sigma=sigma_init)).float()
+        self._gaussian_kernel_hat = nn.Parameter(torch.rfft(gaussian_kernel, 3, onesided=False))
         self._gaussian_kernel_hat.requires_grad_(False)
 
         # voxel-specific regularisation weight
-        self._lambda = nn.Parameter(w_reg_init * torch.ones((96, 96, 96)))
+        self._log_lambda = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
 
     def log_scales(self):
-        return torch.log(self._lambda)
+        return self._log_lambda
 
     def forward(self, v):
-        lambda_hat = torch.rfft(self._lambda.squeeze(), 3, normalized=True, onesided=False)
-        w_reg = torch.irfft(self._gaussian_kernel_hat * lambda_hat, 3, normalized=True, onesided=False)
+        _log_lambda_smoothed = GaussianGrad.apply(self._log_lambda, self._gaussian_kernel_hat)
+        w_reg = torch.exp(_log_lambda_smoothed)
 
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
 
-        return w_reg * torch.sum(reg_term)
+        return torch.sum(w_reg * reg_term) + _log_lambda_smoothed.sum()
 
 
 class RegLossL2_Student(RegLoss):

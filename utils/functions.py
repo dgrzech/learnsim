@@ -71,6 +71,17 @@ def gaussian_kernel_3d(_s, sigma=1.0):
     return g / g.sum()
 
 
+class GaussianGrad(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, _log_lambda, _gaussian_kernel_hat):
+        _log_lambda_hat = torch.rfft(_log_lambda, 3, normalized=True, onesided=False)
+        return torch.irfft(_gaussian_kernel_hat * _log_lambda_hat, 3, normalized=True, onesided=False)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output, None
+
+
 class SobolevGrad(torch.autograd.Function):
     """
     autograd function for Sobolev gradients
@@ -78,8 +89,7 @@ class SobolevGrad(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input, S_x, S_y, S_z, padding):
-        input_smoothed = separable_conv_3d(input, S_x, S_y, S_z, padding)
-        return input_smoothed
+        return separable_conv_3d(input, S_x, S_y, S_z, padding)
 
     @staticmethod
     def backward(ctx, grad_output):
