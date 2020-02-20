@@ -329,7 +329,7 @@ class Trainer(BaseTrainer):
                 self.logger.info('\nENDED BURNING IN\n')
 
             # tensorboard
-            if sample_no > self.no_iters_burn_in and sample_no % 10000 == 0:
+            if sample_no > self.no_iters_burn_in and sample_no % self.log_period == 0:
                 with torch.no_grad():
                     log = {'sample_no': sample_no}
                     log.update(self.train_metrics_mcmc.result())
@@ -346,7 +346,7 @@ class Trainer(BaseTrainer):
             outputs
             """
 
-            if sample_no % 10000 == 0 or sample_no == self.no_samples:
+            if sample_no % self.save_period == 0 or sample_no == self.no_samples:
                 with torch.no_grad():
                     if self.sobolev_grad:
                         save_sample(self.data_loader.save_dirs, im_pair_idxs,

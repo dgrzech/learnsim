@@ -1,10 +1,10 @@
 from os import listdir, path
-from skimage import io, transform
 from torch.utils.data import Dataset
 
 import numpy as np
 import SimpleITK as sitk
 import torch
+import torch.nn.functional as F
 
 
 def init_mu_v(dims):
@@ -64,29 +64,37 @@ class BiobankDataset(Dataset):
         im_fixed = sitk.ReadImage(im_fixed_path, sitk.sitkFloat32)
         im_fixed_arr = np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0))
 
-        shortest_dim = min(im_fixed_arr.shape)
-        self.crop_x = (im_fixed_arr.shape[0] - shortest_dim) // 2
-        self.crop_y = (im_fixed_arr.shape[1] - shortest_dim) // 2
+        longest_dim = max(im_fixed_arr.shape)
+        self.pad_x = (longest_dim - im_fixed_arr.shape[0]) // 2
+        self.pad_z = (longest_dim - im_fixed_arr.shape[2]) // 2
 
-        # crop
-        im_fixed_arr_cropped = im_fixed_arr[self.crop_x:-self.crop_x, self.crop_y:-self.crop_y]
+        # pad
+        im_fixed_arr_padded = np.pad(im_fixed_arr,
+                                     ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
         # resize
-        im_fixed = torch.from_numpy(transform.resize(im_fixed_arr_cropped, (self.dim_x, self.dim_y, self.dim_z)))
+        im_fixed = torch.from_numpy(im_fixed_arr_padded)
+        im_fixed.unsqueeze_(0).unsqueeze_(0)
+
+        im_fixed = F.interpolate(im_fixed,
+                                 size=(self.dim_x, self.dim_y, self.dim_z), mode='trilinear', align_corners=True)
 
         if mask_fixed_path is not '':
             mask_fixed = sitk.ReadImage(mask_fixed_path, sitk.sitkFloat32)
             mask_fixed_arr = np.transpose(sitk.GetArrayFromImage(mask_fixed), (2, 1, 0))
 
-            # crop
-            mask_fixed_arr_cropped = mask_fixed_arr[self.crop_x:-self.crop_x, self.crop_y:-self.crop_y]
+            # pad
+            mask_fixed_arr_padded = np.pad(mask_fixed_arr,
+                                           ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
             # resize
-            mask_fixed = torch.from_numpy(
-                transform.resize(mask_fixed_arr_cropped, (self.dim_x, self.dim_y, self.dim_z), order=0).astype(np.bool))
-        else:
-            mask_fixed = torch.ones_like(im_fixed)
+            mask_fixed = torch.from_numpy(mask_fixed_arr_padded)
+            mask_fixed.unsqueeze_(0).unsqueeze_(0)
 
-        self.im_fixed = im_fixed.unsqueeze(0)
-        self.mask_fixed = mask_fixed.unsqueeze(0)
+            mask_fixed = F.interpolate(mask_fixed, size=(self.dim_x, self.dim_y, self.dim_z), mode='nearest').bool()
+        else:
+            mask_fixed = torch.ones_like(im_fixed).bool()
+
+        self.im_fixed = im_fixed.squeeze(0)
+        self.mask_fixed = mask_fixed.squeeze(0)
 
     def __len__(self):
         return len(self.im_mask_pairs)
@@ -101,10 +109,17 @@ class BiobankDataset(Dataset):
         im_moving = sitk.ReadImage(im_moving_path, sitk.sitkFloat32)
         im_moving_arr = np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0))
 
-        im_moving_arr_cropped = im_moving_arr[self.crop_x:-self.crop_x, self.crop_y:-self.crop_y]
-        im_moving = torch.from_numpy(transform.resize(im_moving_arr_cropped, (self.dim_x, self.dim_y, self.dim_z)))
+        # pad
+        im_moving_arr_padded = np.pad(im_moving_arr,
+                                     ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+        # resize
+        im_moving = torch.from_numpy(im_moving_arr_padded)
+        im_moving.unsqueeze_(0).unsqueeze_(0)
 
-        im_moving.unsqueeze_(0)
+        im_moving = F.interpolate(im_moving,
+                                  size=(self.dim_x, self.dim_y, self.dim_z), mode='trilinear', align_corners=True)
+
+        im_moving.squeeze_(0)
         assert self.im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
         mu_v = init_mu_v(self.dims_v)

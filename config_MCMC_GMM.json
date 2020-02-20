@@ -5,7 +5,7 @@
     "data_loss": {
         "type": "GaussianMixtureLoss",
         "args": {
-	        "num_components": 5,
+	        "num_components": 4,
             "s": 3
 	    }
     },
@@ -16,7 +16,7 @@
     "proportion_prior": {
 	    "type": "DirichletPrior",
 	    "args": {
-	        "num_classes": 5,
+	        "num_classes": 4,
 	        "alpha": 0.5
 	    }
     },
@@ -82,8 +82,8 @@
         "reinit_every": 5,
 
         "no_iters_vi": 16384,
-        "no_iters_burn_in": 100000,
-	    "no_samples": 500000,
+        "no_iters_burn_in": 20000,
+	    "no_samples": 50000,
 
         "log_period": 64,
         "tensorboard": true,
