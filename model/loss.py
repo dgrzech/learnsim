@@ -320,7 +320,7 @@ class RegLoss(nn.Module, ABC):
         self.w_reg = float(w_reg)
 
     @abstractmethod
-    def forward(self, v, alpha):
+    def forward(self, v):
         pass
 
 
@@ -333,7 +333,7 @@ class RegLossL2(RegLoss):
         else:
             raise Exception('Unknown differential operator')
 
-    def forward(self, v, alpha):
+    def forward(self, v):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) +
                              torch.sum(torch.pow(nabla_vy, 2)) +
@@ -376,16 +376,16 @@ class RegLossL2_Student(RegLoss):
 
         self.N = None  # no. of voxels
 
-    def forward(self, v, alpha=1.0):
+    def forward(self, v):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
 
         if self.N is None:
             self.N = v.numel() / 3.0
 
-        return torch.log(self.b0_twice + alpha *
+        return torch.log(self.b0_twice +
                          (torch.sum(torch.pow(nabla_vx, 2))
                           + torch.sum(torch.pow(nabla_vy, 2))
-                          + torch.sum(torch.pow(nabla_vz, 2)))) * (self.a0 + alpha * self.N * 0.5)
+                          + torch.sum(torch.pow(nabla_vz, 2)))) * (self.a0 + self.N * 0.5)
 
 
 """

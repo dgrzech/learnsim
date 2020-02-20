@@ -113,7 +113,6 @@ class Trainer(BaseTrainer):
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
-            self.optimizer_v.zero_grad()
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
                 mu_v_old = self.mu_v.detach().clone()  # needed to calculate the maximum update in terms of the L2 norm
@@ -140,6 +139,9 @@ class Trainer(BaseTrainer):
 
             res1, res2 = n_F - n_M1, n_F - n_M2
 
+            alpha1, alpha2 = 1.0, 1.0
+            alpha_mean = 1.0
+
             if self.vd:  # virtual decimation
                 # rescale the residuals by the estimated voxel-wise standard deviation
                 res1_rescaled = rescale_residuals(res1.detach(), self.mask_fixed, self.data_loss)
@@ -147,11 +149,7 @@ class Trainer(BaseTrainer):
 
                 with torch.no_grad():
                     alpha1, alpha2 = vd(res1_rescaled, self.mask_fixed), vd(res2_rescaled, self.mask_fixed)
-
-                alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
-            else:
-                alpha1, alpha2 = 1.0, 1.0
-                alpha_mean = 1.0
+                    alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
 
             res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
             self._loss_warm_up(res1_masked, alpha1)  # Gaussian mixture warm-up
@@ -159,12 +157,11 @@ class Trainer(BaseTrainer):
             # q_v
             data_term = self.data_loss(res1_masked) / 2.0 * alpha1
             data_term += self.data_loss(res2_masked) / 2.0 * alpha2
-
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            reg_term = self.reg_loss(v_sample1, alpha1).sum() / 2.0
-            reg_term += self.reg_loss(v_sample2, alpha2).sum() / 2.0
+            reg_term = self.reg_loss(v_sample1).sum() / 2.0
+            reg_term += self.reg_loss(v_sample2).sum() / 2.0
 
             entropy_term = self.entropy_loss(v_sample=v_sample1,
                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
@@ -173,8 +170,10 @@ class Trainer(BaseTrainer):
             entropy_term += self.entropy_loss(log_var_v=self.log_var_v, u_v=self.u_v).sum()
 
             loss_q_v = data_term + reg_term - entropy_term
-            loss_q_v.backward()
-            self.optimizer_v.step()  # backprop
+
+            self.optimizer_v.zero_grad()
+            loss_q_v.backward()  # backprop
+            self.optimizer_v.step()
 
             """
             metrics and prints
@@ -189,8 +188,9 @@ class Trainer(BaseTrainer):
 
             self.train_metrics_vi.update('VD/alpha', alpha_mean)
 
-            sigmas = torch.exp(self.data_loss.log_scales())
-            proportions = torch.exp(self.data_loss.log_proportions())
+            with torch.no_grad():
+                sigmas = torch.exp(self.data_loss.log_scales())
+                proportions = torch.exp(self.data_loss.log_proportions())
 
             for idx in range(self.data_loss.num_components):
                 self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
@@ -264,7 +264,6 @@ class Trainer(BaseTrainer):
 
         for sample_no in range(self.start_sample, self.no_samples + 1):
             self.train_metrics_mcmc.reset()
-            self.optimizer_mala.zero_grad()
 
             if sample_no < self.no_iters_burn_in and sample_no % 2000 == 0:
                 self.logger.info('burn-in sample no. ' + str(sample_no) + '/' + str(self.no_iters_burn_in))
@@ -279,8 +278,10 @@ class Trainer(BaseTrainer):
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
+                reg_term = self.reg_loss(v_curr_state_noise_smoothed).sum()
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
+                reg_term = self.reg_loss(v_curr_state_noise).sum()
 
             transformation, displacement = add_noise_uniform(transformation), add_noise_uniform(displacement)
 
@@ -288,32 +289,27 @@ class Trainer(BaseTrainer):
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
             res = n_F - n_M
 
+            alpha = 1.0
+            alpha_mean = alpha
+
             if self.vd:  # virtual decimation
                 res_rescaled = rescale_residuals(res.detach(), self.mask_fixed, self.data_loss)
 
                 with torch.no_grad():
                     alpha = vd(res_rescaled, self.mask_fixed)
-
-                alpha_mean = alpha.item()
-            else:
-                alpha = 1.0
-                alpha_mean = alpha
+                    alpha_mean = alpha.item()
 
             res_masked = res[self.mask_fixed]
+            self._loss_warm_up(res_masked, alpha)  # Gaussian mixture warm-up
 
             data_term = self.data_loss(res_masked) * alpha
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            if self.sobolev_grad:
-                reg_term = self.reg_loss(v_curr_state_noise_smoothed, alpha).sum()
-            else:
-                reg_term = self.reg_loss(v_curr_state_noise, alpha).sum()
-
             loss = data_term + reg_term
-            loss.backward()
 
-            self.optimizer_mixture_model.step()  # backprop
+            self.optimizer_mala.zero_grad()
+            loss.backward()  # backprop
             self.optimizer_mala.step()
 
             """
@@ -407,8 +403,9 @@ class Trainer(BaseTrainer):
             with torch.no_grad():
                 loss_unwarped = self.data_loss(res_masked) * alpha
                 self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
-                
-                self.writer.set_step(0)
+
+                iter_no = 0
+                self.writer.set_step(iter_no)
                 
                 self.train_metrics_vi.update('VI/data_term', loss_unwarped.item())
                 log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)
@@ -432,8 +429,8 @@ class Trainer(BaseTrainer):
                     self.sigma_scaled = sqrt_tau_twice * transform_coordinates(torch.exp(0.5 * self.log_var_v))
                     self.u_v_scaled = sqrt_tau_twice * transform_coordinates(self.u_v)
 
-                if self.v_curr_state is None:
-                    self.v_curr_state = self.mu_v.clone()
+                    if self.v_curr_state is None:
+                        self.v_curr_state = self.mu_v.clone()
 
                 self._step_MCMC(im_pair_idxs, im_moving)
 
@@ -543,7 +540,8 @@ class Trainer(BaseTrainer):
         self.optimizer_mixture_model.load_state_dict(checkpoint['optimizer_mixture_model'])
 
         # MCMC
-        self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint else torch.ones_like(self.mu_v)
+        with torch.no_grad():
+            self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint else self.mu_v.clone()
 
         if 'optimizer_mala' in checkpoint:
             self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
