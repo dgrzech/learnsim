@@ -77,6 +77,10 @@
     "vd": true,
 
     "trainer": {
+        "no_warm_up_steps_sigma": 10,
+        "no_warm_up_steps": 20,
+        "reinit_every": 5,
+
         "no_iters_vi": 16384,
         "no_iters_burn_in": 100000,
 	    "no_samples": 500000,

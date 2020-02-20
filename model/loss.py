@@ -383,9 +383,9 @@ class RegLossL2_Student(RegLoss):
             self.N = v.numel() / 3.0
 
         return torch.log(self.b0_twice +
-                         (torch.sum(torch.pow(nabla_vx, 2))
-                          + torch.sum(torch.pow(nabla_vy, 2))
-                          + torch.sum(torch.pow(nabla_vz, 2)))) * (self.a0 + self.N * 0.5)
+                         torch.sum(torch.pow(nabla_vx, 2)) +
+                         torch.sum(torch.pow(nabla_vy, 2)) +
+                         torch.sum(torch.pow(nabla_vz, 2))) * (self.a0 + self.N * 0.5)
 
 
 """

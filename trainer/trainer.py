@@ -24,6 +24,13 @@ class Trainer(BaseTrainer):
         self.data_loader = data_loader
         self.im_fixed, self.seg_fixed, self.mask_fixed = None, None, None
 
+        # GMM
+        self.no_warm_up_steps_sigma = \
+            config['trainer']['no_warm_up_steps_sigma']  # no. of updates to sigma before updating logits
+        self.no_warm_up_steps = config['trainer']['no_warm_up_steps']  # total no. of updates to sigma or logits
+        self.reinit_every = \
+            config['trainer']['reinit_every']  # no. of iterations between resets of optimiser parameters
+
         # variational inference
         self.start_iter = 1
         self.mu_v, self.log_var_v, self.u_v = None, None, None
@@ -78,18 +85,14 @@ class Trainer(BaseTrainer):
             self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
                                                  {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
                                                 lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
-        
-        no_warm_up_steps_sigma = 10
-        no_warm_up_steps = 50
-        reinit_every = 3
 
-        for step in range(1, no_warm_up_steps + 1):
-            if step != 0 and (step % reinit_every) == 0:
+        for step in range(1, self.no_warm_up_steps + 1):
+            if step != 0 and (step % self.reinit_every) == 0:
                 reinit = True
             else:
                 reinit = False
 
-            if step == no_warm_up_steps_sigma + 1:
+            if step == self.no_warm_up_steps_sigma + 1:
                 logits_group = self.optimizer_mixture_model.param_groups[1]
                 logits_group['lr'] = self.optimizer_mixture_model.defaults['lr']
 
