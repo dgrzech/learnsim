@@ -60,6 +60,17 @@ def sobolev_kernel_3d(_s, _lambda):
     return S.reshape((_s, _s, _s))  # 3D Sobolev filter
 
 
+def gaussian_kernel_3d(_s, sigma=1.0):
+    """
+    approximate the Gaussian kernel
+    """
+
+    x, y, z = np.mgrid[-_s // 2 + 1:_s // 2 + 1, -_s // 2 + 1:_s // 2 + 1,  -_s // 2 + 1:_s // 2 + 1]
+    g = np.exp(-1.0 * (x ** 2 + y ** 2 + z ** 2) / (2.0 * sigma ** 2))
+
+    return g / g.sum()
+
+
 class SobolevGrad(torch.autograd.Function):
     """
     autograd function for Sobolev gradients

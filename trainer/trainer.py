@@ -15,9 +15,9 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_scale_loss_prior, entropy_loss,
                  transformation_model, registration_module, metric_ftns_vi, metric_ftns_mcmc, config, data_loader):
-        super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
+        super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, reg_scale_loss_prior, entropy_loss,
                          transformation_model, registration_module, config)
 
         self.config = config
@@ -79,8 +79,6 @@ class Trainer(BaseTrainer):
             self._resume_checkpoint_mcmc(config.resume)
 
     def _loss_warm_up(self, res, alpha=1.0):
-        res_flattened = res.view(-1)
-
         if self.optimizer_mixture_model is None:  # initialise the optimiser
             self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
                                                  {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
@@ -98,7 +96,7 @@ class Trainer(BaseTrainer):
 
                 reinit = True
 
-            data_term = self.data_loss(res_flattened.detach()) * alpha
+            data_term = self.data_loss(res.detach()) * alpha
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
@@ -165,6 +163,7 @@ class Trainer(BaseTrainer):
 
             reg_term = self.reg_loss(v_sample1).sum() / 2.0
             reg_term += self.reg_loss(v_sample2).sum() / 2.0
+            reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
 
             entropy_term = self.entropy_loss(v_sample=v_sample1,
                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
@@ -282,9 +281,11 @@ class Trainer(BaseTrainer):
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
                 reg_term = self.reg_loss(v_curr_state_noise_smoothed).sum()
+                reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
                 reg_term = self.reg_loss(v_curr_state_noise).sum()
+                reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
 
             transformation, displacement = add_noise_uniform(transformation), add_noise_uniform(displacement)
 
@@ -394,8 +395,8 @@ class Trainer(BaseTrainer):
 
                 self.data_loss.init_parameters(res_std)
 
-            # print value of the data term before registration
-            alpha = 1.0
+                # print value of the data term before registration
+                alpha = 1.0
 
             if self.vd:  # virtual decimation
                 res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)

@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
 
-from utils import GradientOperator
+from utils import gaussian_kernel_3d, GradientOperator
 
 import math
 import torch
@@ -315,9 +315,8 @@ class RegLoss(nn.Module, ABC):
     base class for all regularisation losses
     """
 
-    def __init__(self, w_reg=1.0):
+    def __init__(self):
         super(RegLoss, self).__init__()
-        self.w_reg = float(w_reg)
 
     @abstractmethod
     def forward(self, v):
@@ -326,7 +325,8 @@ class RegLoss(nn.Module, ABC):
 
 class RegLossL2(RegLoss):
     def __init__(self, diff_op, w_reg):
-        super(RegLossL2, self).__init__(w_reg)
+        super(RegLossL2, self).__init__()
+        self.w_reg = w_reg
 
         if diff_op == 'GradientOperator':
             self.diff_op = GradientOperator()
@@ -338,6 +338,36 @@ class RegLossL2(RegLoss):
         return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) +
                              torch.sum(torch.pow(nabla_vy, 2)) +
                              torch.sum(torch.pow(nabla_vz, 2)))
+
+
+class RegLossL2_Learnable(RegLoss):
+    def __init__(self, diff_op, w_reg_init=1.0):
+        super(RegLossL2_Learnable, self).__init__()
+
+        if diff_op == 'GradientOperator':
+            self.diff_op = GradientOperator()
+        else:
+            raise Exception('Unknown differential operator')
+
+        gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(96, sigma=48.0))
+        self._gaussian_kernel_hat = \
+            nn.Parameter(torch.rfft(gaussian_kernel, 3, normalized=True, onesided=False).float().detach())
+        self._gaussian_kernel_hat.requires_grad_(False)
+
+        # voxel-specific regularisation weight
+        self._lambda = nn.Parameter(w_reg_init * torch.ones((96, 96, 96)))
+
+    def log_scales(self):
+        return torch.log(self._lambda)
+
+    def forward(self, v):
+        lambda_hat = torch.rfft(self._lambda.squeeze(), 3, normalized=True, onesided=False)
+        w_reg = torch.irfft(self._gaussian_kernel_hat * lambda_hat, 3, normalized=True, onesided=False)
+
+        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
+        reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
+
+        return w_reg * torch.sum(reg_term)
 
 
 class RegLossL2_Student(RegLoss):

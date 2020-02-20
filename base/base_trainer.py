@@ -10,7 +10,7 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, entropy_loss,
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_scale_prior, entropy_loss,
                  transformation_model, registration_module, config):
         self.config = config
         self.checkpoint_dir = config.save_dir
@@ -27,6 +27,8 @@ class BaseTrainer:
         self.proportion_prior = proportion_prior.to(self.device)
 
         self.reg_loss = reg_loss.to(self.device)
+        self.reg_loss_scale_prior = reg_loss_scale_prior.to(self.device)
+
         self.entropy_loss = entropy_loss.to(self.device)
 
         if len(device_ids) > 1:
@@ -38,6 +40,8 @@ class BaseTrainer:
             self.proportion_prior = torch.nn.DataParallel(proportion_prior, device_ids=device_ids)
 
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
+            self.reg_loss_scale_prior = torch.nn.DataParallel(reg_loss_scale_prior, device_ids=device_ids)
+
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
 
         # training logic
