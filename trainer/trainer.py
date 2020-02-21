@@ -111,7 +111,7 @@ class Trainer(BaseTrainer):
 
         if self.optimizer_v is None:
             self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
-                                                    [self.mu_v, self.log_var_v, self.u_v, self.reg_loss._log_lambda])
+                                                    [self.mu_v, self.log_var_v, self.u_v, self.reg_loss.log_lambda])
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
@@ -189,25 +189,28 @@ class Trainer(BaseTrainer):
             self.train_metrics_vi.update('VI/entropy_term', entropy_term.item())
             self.train_metrics_vi.update('VI/total_loss', loss_q_v.item())
 
-            self.train_metrics_vi.update('VD/alpha', alpha_mean)
-
-            with torch.no_grad():
-                sigmas = torch.exp(self.data_loss.log_scales())
-                proportions = torch.exp(self.data_loss.log_proportions())
-
-            for idx in range(self.data_loss.num_components):
-                self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
-                self.train_metrics_vi.update('GM/proportion_' + str(idx), proportions[idx])
+            self.train_metrics_vi.update('other/alpha', alpha_mean)
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
                 with torch.no_grad():
+                    # FIXME: should probably do this over the masked region
+                    mu_w_reg = torch.mean(torch.exp(self.reg_loss.log_scales()))
+                    sigmas = torch.exp(self.data_loss.log_scales())
+                    proportions = torch.exp(self.data_loss.log_proportions())
+
                     max_update_mu_v, max_update_mu_v_idx = max_field_update(mu_v_old, self.mu_v)
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-                self.train_metrics_vi.update('max_updates/mu_v', max_update_mu_v.item())
-                self.train_metrics_vi.update('max_updates/log_var_v', max_update_log_var_v.item())
-                self.train_metrics_vi.update('max_updates/u_v', max_update_u_v.item())
+                self.train_metrics_vi.update('other/mean_w_reg', mu_w_reg.item())
+
+                for idx in range(self.data_loss.num_components):
+                    self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
+                    self.train_metrics_vi.update('GM/proportion_' + str(idx), proportions[idx])
+
+                self.train_metrics_vi.update('other/max_updates/mu_v', max_update_mu_v.item())
+                self.train_metrics_vi.update('other/max_updates/log_var_v', max_update_log_var_v.item())
+                self.train_metrics_vi.update('other/max_updates/u_v', max_update_u_v.item())
 
                 log = {'iter_no': iter_no}
                 log.update(self.train_metrics_vi.result())
@@ -238,7 +241,8 @@ class Trainer(BaseTrainer):
                     log_det_J_transformation = torch.log(calc_det_J(nabla_x, nabla_y, nabla_z))
 
                     # tensorboard
-                    log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
+                    log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation,
+                               self.reg_loss.log_scales())
                     log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
                     log_hist_res(self.writer, im_pair_idxs, res1_masked, self.data_loss)
 
@@ -455,6 +459,7 @@ class Trainer(BaseTrainer):
             'optimizer_v': self.optimizer_v.state_dict(),
 
             'data_loss': self.data_loss.state_dict(),
+            'reg_loss': self.reg_loss.state_dict(),
             'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
         }
 
@@ -478,6 +483,7 @@ class Trainer(BaseTrainer):
             'u_v': self.u_v,
 
             'data_loss': self.data_loss.state_dict(),
+            'reg_loss': self.reg_loss.state_dict(),
             'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
 
             'v_curr_state': self.v_curr_state,
@@ -501,12 +507,16 @@ class Trainer(BaseTrainer):
         self.start_iter = checkpoint['iter_no'] + 1
         self.start_sample = checkpoint['sample_no'] + 1
 
+        # reg. loss
+        self.reg_loss.load_state_dict(checkpoint['reg_loss'])
+
         # VI
         self.mu_v = checkpoint['mu_v']
         self.log_var_v = checkpoint['log_var_v']
         self.u_v = checkpoint['u_v']
 
-        self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
+        self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
+                                                [self.mu_v, self.log_var_v, self.u_v, self.reg_loss.log_lambda])
         self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
 
         # GMM
@@ -530,6 +540,9 @@ class Trainer(BaseTrainer):
 
         self.start_iter = checkpoint['iter_no'] + 1
         self.start_sample = checkpoint['sample_no'] + 1
+
+        # regularisation loss
+        self.reg_loss.load_state_dict(checkpoint['reg_loss'])
 
         # VI
         self.mu_v = checkpoint['mu_v']

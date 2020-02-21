@@ -49,7 +49,8 @@ def main(config):
     proportions = ['GM/proportion_' + str(idx) for idx in range(num_components)]
 
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
-                  'max_updates/mu_v', 'max_updates/log_var_v', 'max_updates/u_v', 'VD/alpha'] + sigmas + proportions
+                  'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
+                  'other/alpha', 'other/mean_w_reg'] + sigmas + proportions
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'VD/alpha']
 
     # run the model

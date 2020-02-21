@@ -36,9 +36,9 @@ def print_log(logger, log):
 
     for key, value in log.items():
         if isinstance(value, int):
-            logger.info(f'    {key:25s}: {value}')
+            logger.info(f'    {key:30s}: {value}')
         else:
-            logger.info(f'    {key:25s}: {value:.5f}')
+            logger.info(f'    {key:30s}: {value:.5f}')
 
     print()
 

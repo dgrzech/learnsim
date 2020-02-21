@@ -335,9 +335,7 @@ class RegLossL2(RegLoss):
 
     def forward(self, v):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2)) +
-                             torch.sum(torch.pow(nabla_vy, 2)) +
-                             torch.sum(torch.pow(nabla_vz, 2)))
+        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)))
 
 
 class RegLossL2_Learnable(RegLoss):
@@ -350,23 +348,23 @@ class RegLossL2_Learnable(RegLoss):
             raise Exception('Unknown differential operator')
 
         gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(96, sigma=sigma_init)).float()
-        self._gaussian_kernel_hat = nn.Parameter(torch.rfft(gaussian_kernel, 3, onesided=False))
-        self._gaussian_kernel_hat.requires_grad_(False)
+        self.__gaussian_kernel_hat = nn.Parameter(torch.rfft(gaussian_kernel, 3, onesided=False))
+        self.__gaussian_kernel_hat.requires_grad_(False)
 
         # voxel-specific regularisation weight
-        self._log_lambda = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
+        self.log_lambda = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
 
     def log_scales(self):
-        return self._log_lambda
+        return self.log_lambda
 
     def forward(self, v):
-        _log_lambda_smoothed = GaussianGrad.apply(self._log_lambda, self._gaussian_kernel_hat)
-        w_reg = torch.exp(_log_lambda_smoothed)
+        log_lambda_smoothed = GaussianGrad.apply(self.log_lambda, self.__gaussian_kernel_hat)
+        w_reg = torch.exp(log_lambda_smoothed)
 
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
 
-        return torch.sum(w_reg * reg_term) + _log_lambda_smoothed.sum()
+        return torch.sum(w_reg * reg_term) + log_lambda_smoothed.sum() / 2.0
 
 
 class RegLossL2_Student(RegLoss):
