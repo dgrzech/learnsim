@@ -24,13 +24,6 @@ class Trainer(BaseTrainer):
         self.data_loader = data_loader
         self.im_fixed, self.seg_fixed, self.mask_fixed = None, None, None
 
-        # GMM
-        self.no_warm_up_steps_sigma = \
-            config['trainer']['no_warm_up_steps_sigma']  # no. of updates to sigma before updating logits
-        self.no_warm_up_steps = config['trainer']['no_warm_up_steps']  # total no. of updates to sigma or logits
-        self.reinit_every = \
-            config['trainer']['reinit_every']  # no. of iterations between resets of optimiser parameters
-
         # variational inference
         self.start_iter = 1
         self.mu_v, self.log_var_v, self.u_v = None, None, None
@@ -78,31 +71,19 @@ class Trainer(BaseTrainer):
         elif config.resume is not None and self.MCMC:
             self._resume_checkpoint_mcmc(config.resume)
 
-    def _loss_warm_up(self, res, alpha=1.0):
+    def _step_GMM(self, res, alpha=1.0):
         if self.optimizer_mixture_model is None:  # initialise the optimiser
-            self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
-                                                 {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
+            self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
+                                                 {'params': [self.data_loss.logits], 'lr': 1e-2}],
                                                 lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
 
-        for step in range(1, self.no_warm_up_steps + 1):
-            if step != 0 and (step % self.reinit_every) == 0:
-                reinit = True
-            else:
-                reinit = False
+        data_term = self.data_loss(res.detach()) * alpha
+        data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
+        data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            if step == self.no_warm_up_steps_sigma + 1:
-                logits_group = self.optimizer_mixture_model.param_groups[1]
-                logits_group['lr'] = self.optimizer_mixture_model.defaults['lr']
-
-                reinit = True
-
-            data_term = self.data_loss(res.detach()) * alpha
-            data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
-            data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
-
-            self.optimizer_mixture_model.zero_grad()
-            data_term.backward()
-            self.optimizer_mixture_model.step(reinit=reinit)  # backprop
+        self.optimizer_mixture_model.zero_grad()
+        data_term.backward()
+        self.optimizer_mixture_model.step()  # backprop
 
     def _step_VI(self, im_pair_idxs, im_moving):
         self.mu_v.requires_grad_(True)
@@ -154,7 +135,9 @@ class Trainer(BaseTrainer):
                     alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
 
             res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
-            self._loss_warm_up(res1_masked, alpha1)  # Gaussian mixture warm-up
+
+            # Gaussian mixture
+            self._step_GMM(res1_masked, alpha1)
 
             # q_v
             data_term = self.data_loss(res1_masked) / 2.0 * alpha1
@@ -309,8 +292,11 @@ class Trainer(BaseTrainer):
                     alpha_mean = alpha.item()
 
             res_masked = res[self.mask_fixed]
-            self._loss_warm_up(res_masked, alpha)  # Gaussian mixture warm-up
 
+            # Gaussian mixture
+            self._step_GMM(res_masked, alpha)
+
+            # MCMC
             data_term = self.data_loss(res_masked) * alpha
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
@@ -399,16 +385,16 @@ class Trainer(BaseTrainer):
                 res_std = torch.sqrt(res_var)
 
                 self.data_loss.init_parameters(res_std)
-
-                # print value of the data term before registration
                 alpha = 1.0
 
             if self.vd:  # virtual decimation
                 res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)
                 alpha = vd(res_rescaled, self.mask_fixed)  # virtual decimation
 
-            self._loss_warm_up(res_masked, alpha)  # Gaussian mixture warm-up
+            # Gaussian mixture
+            self._step_GMM(res_masked, alpha)
 
+            # print value of the data term before registration
             with torch.no_grad():
                 loss_unwarped = self.data_loss(res_masked) * alpha
                 self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
@@ -522,8 +508,8 @@ class Trainer(BaseTrainer):
         # GMM
         self.data_loss.load_state_dict(checkpoint['data_loss'])
 
-        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
-                                             {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
+        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
+                                             {'params': [self.data_loss.logits], 'lr': 1e-2}],
                                             lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
         self.optimizer_mixture_model.load_state_dict(checkpoint['optimizer_mixture_model'])
 
@@ -552,8 +538,8 @@ class Trainer(BaseTrainer):
         # GMM
         self.data_loss.load_state_dict(checkpoint['data_loss'])
 
-        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1, 'lr_decay': 0.0},
-                                             {'params': [self.data_loss.logits], 'lr': 0.0, 'lr_decay': 0.0}],
+        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
+                                             {'params': [self.data_loss.logits], 'lr': 1e-2}],
                                             lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
         self.optimizer_mixture_model.load_state_dict(checkpoint['optimizer_mixture_model'])
 
