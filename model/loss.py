@@ -352,20 +352,19 @@ class RegLossL2_Learnable(RegLoss):
         self.__gaussian_kernel_hat.requires_grad_(False)
 
         # voxel-specific regularisation weight
-        self.log_lambda = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
+        self.log_w_reg = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
 
     def log_scales(self):
-        return self.log_lambda
+        return self.log_w_reg
 
     def forward(self, v):
-        log_lambda_smoothed = GaussianGrad.apply(self.log_lambda, self.__gaussian_kernel_hat)
-        w_reg = torch.exp(log_lambda_smoothed)
+        log_w_reg_smoothed = GaussianGrad.apply(self.log_w_reg, self.__gaussian_kernel_hat)
+        w_reg = torch.exp(log_w_reg_smoothed)
 
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
 
-        return torch.sum(w_reg * reg_term) + log_lambda_smoothed.sum() / 2.0
-
+        return -0.5 * 3.0 * log_w_reg_smoothed.sum() + torch.sum(w_reg * reg_term) 
 
 class RegLossL2_Student(RegLoss):
     def __init__(self, diff_op, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
