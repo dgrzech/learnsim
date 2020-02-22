@@ -183,15 +183,19 @@ vector fields
 
 
 def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices,
-                w_reg_slices):
+                w_reg_slices=None):
     """
     plot of the norms of output vector fields to log in tensorboard
     """
 
-    fig, axs = plt.subplots(nrows=6, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
+    if w_reg_slices is not None:
+        fig, axs = plt.subplots(nrows=6, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
+        rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J', 'w_reg']
+    else:
+        fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
+        rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J']
 
     cols = ['axial', 'coronal', 'sagittal']
-    rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J', 'w_reg']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -208,12 +212,14 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
         axs[2, i].imshow(im_flip(sigma_v_norm_slices[i]))
         axs[3, i].imshow(im_flip(u_v_norm_slices[i]))
         axs[4, i].imshow(im_flip(log_det_J_slices[i]))
-        axs[5, i].imshow(im_flip(w_reg_slices[i]))
+
+        if w_reg_slices is not None:
+           axs[5, i].imshow(im_flip(w_reg_slices[i]))
 
     return fig
 
 
-def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch, log_w_reg):
+def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch, log_w_reg=None):
     im_pair_idxs = im_pair_idxs.tolist()
 
     mu_v_batch = var_params_batch['mu_v']
@@ -222,7 +228,9 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
     u_v_batch = var_params_batch['u_v']
 
     log_det_J_batch = log_det_J_batch.cpu().numpy()
-    w_reg = torch.exp(log_w_reg).cpu().numpy()
+
+    if log_w_reg is not None:
+        w_reg = torch.exp(log_w_reg).cpu().numpy()
 
     mid_x = int(mu_v_batch.shape[4] / 2)
     mid_y = int(mu_v_batch.shape[3] / 2)
@@ -249,12 +257,16 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
 
         log_det_J = log_det_J_batch[loop_idx]
         log_det_J_slices = [log_det_J[:, :, mid_x], log_det_J[:, mid_y, :], log_det_J[mid_z, :, :]]
-
-        w_reg_slices = [w_reg[:, :, mid_x], w_reg[:, mid_y], w_reg[mid_z]]
-
-        writer.add_figure('q_v/' + str(im_pair_idx),
-                          fields_grid(mu_v_norm_slices, displacement_norm_slices,
-                                      sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices, w_reg_slices))
+        
+        if log_w_reg is not None:
+            w_reg_slices = [w_reg[:, :, mid_x], w_reg[:, mid_y], w_reg[mid_z]]
+            writer.add_figure('q_v/' + str(im_pair_idx),
+                              fields_grid(mu_v_norm_slices, displacement_norm_slices,
+                                          sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices, w_reg_slices))
+        else:
+            writer.add_figure('q_v/' + str(im_pair_idx),
+                              fields_grid(mu_v_norm_slices, displacement_norm_slices,
+                                          sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
 
 
 """

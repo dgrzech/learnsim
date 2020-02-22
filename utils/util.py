@@ -399,6 +399,58 @@ def vd(residual, mask):
         return torch.sqrt(sq_vd_x * sq_vd_y * sq_vd_z)
 
 
+def vd_reg(nabla_vx, nabla_vy, nabla_vz):
+    with torch.no_grad():
+        # variance
+        var_nabla_vx = torch.mean(nabla_vx ** 2)
+        var_nabla_vy = torch.mean(nabla_vy ** 2)
+        var_nabla_vz = torch.mean(nabla_vz ** 2)
+
+        # covariance..
+        cov_nabla_vx_x = torch.mean(nabla_vx[:, :, :-1] * nabla_vx[:, :, 1:])
+        cov_nabla_vx_y = torch.mean(nabla_vx[:, :, :, :-1] * nabla_vx[:, :, :, 1:])
+        cov_nabla_vx_z = torch.mean(nabla_vx[:, :, :, :, :-1] * nabla_vx[:, :, :, :, 1:])
+        
+        cov_nabla_vy_x = torch.mean(nabla_vy[:, :, :-1] * nabla_vy[:, :, 1:])
+        cov_nabla_vy_y = torch.mean(nabla_vy[:, :, :, :-1] * nabla_vy[:, :, :, 1:])
+        cov_nabla_vy_z = torch.mean(nabla_vy[:, :, :, :, :-1] * nabla_vy[:, :, :, :, 1:])
+        
+        cov_nabla_vz_x = torch.mean(nabla_vz[:, :, :-1] * nabla_vz[:, :, 1:])
+        cov_nabla_vz_y = torch.mean(nabla_vz[:, :, :, :-1] * nabla_vz[:, :, :, 1:])
+        cov_nabla_vz_z = torch.mean(nabla_vz[:, :, :, :, :-1] * nabla_vz[:, :, :, :, 1:])
+
+        corr_vx_x = cov_nabla_vx_x / var_nabla_vx
+        corr_vx_y = cov_nabla_vx_y / var_nabla_vx
+        corr_vx_z = cov_nabla_vx_z / var_nabla_vx
+        
+        corr_vy_x = cov_nabla_vy_x / var_nabla_vy
+        corr_vy_y = cov_nabla_vy_y / var_nabla_vy
+        corr_vy_z = cov_nabla_vy_z / var_nabla_vy
+        
+        corr_vz_x = cov_nabla_vz_x / var_nabla_vz
+        corr_vz_y = cov_nabla_vz_y / var_nabla_vz
+        corr_vz_z = cov_nabla_vz_z / var_nabla_vz
+
+        sq_vd_nabla_vx_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_x), max=1.0)
+        sq_vd_nabla_vx_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_y), max=1.0)
+        sq_vd_nabla_vx_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_z), max=1.0)
+        
+        sq_vd_nabla_vy_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_x), max=1.0)
+        sq_vd_nabla_vy_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_y), max=1.0)
+        sq_vd_nabla_vy_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_z), max=1.0)
+        
+        sq_vd_nabla_vz_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_x), max=1.0)
+        sq_vd_nabla_vz_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_y), max=1.0)
+        sq_vd_nabla_vz_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_z), max=1.0)
+
+        vd_nabla_vx = torch.sqrt(sq_vd_nabla_vx_x * sq_vd_nabla_vx_y * sq_vd_nabla_vx_z)
+        vd_nabla_vy = torch.sqrt(sq_vd_nabla_vy_x * sq_vd_nabla_vy_y * sq_vd_nabla_vy_z)
+        vd_nabla_vz = torch.sqrt(sq_vd_nabla_vz_x * sq_vd_nabla_vz_y * sq_vd_nabla_vz_z)
+
+        vd = vd_nabla_vx * vd_nabla_vy * vd_nabla_vz
+        return vd
+
+
 class MetricTracker:
     def __init__(self, *keys, writer=None):
         self.writer = writer

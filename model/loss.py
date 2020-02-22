@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
 
-from utils import gaussian_kernel_3d, GaussianGrad, GradientOperator
+from utils import gaussian_kernel_3d, vd_reg, GaussianGrad, GradientOperator
 
 import math
 import torch
@@ -334,8 +334,12 @@ class RegLossL2(RegLoss):
             raise Exception('Unknown differential operator')
 
     def forward(self, v):
+        alpha = 1.0
+
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)))
+        reg_term = self.w_reg * (torch.sum(torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)))
+
+        return reg_term, alpha
 
 
 class RegLossL2_Learnable(RegLoss):
@@ -357,14 +361,20 @@ class RegLossL2_Learnable(RegLoss):
     def log_scales(self):
         return self.log_w_reg
 
-    def forward(self, v):
+    def forward(self, v, vd=False):
         log_w_reg_smoothed = GaussianGrad.apply(self.log_w_reg, self.__gaussian_kernel_hat)
         w_reg = torch.exp(log_w_reg_smoothed)
+        
+        alpha = 1.0
+
+        if vd:  # virtual decimation
+            with torch.no_grad():
+                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz)
 
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
 
-        return -0.5 * 3.0 * log_w_reg_smoothed.sum() + torch.sum(w_reg * reg_term) 
+        return alpha * (-0.5 * 3.0 * log_w_reg_smoothed.sum() + torch.sum(w_reg * reg_term)), alpha
 
 class RegLossL2_Student(RegLoss):
     def __init__(self, diff_op, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
@@ -402,16 +412,22 @@ class RegLossL2_Student(RegLoss):
 
         self.N = None  # no. of voxels
 
-    def forward(self, v):
+    def forward(self, v, vd=False):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
+
+        alpha = 1.0
+
+        if vd:  # virtual decimation
+            with torch.no_grad():
+                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz)
 
         if self.N is None:
             self.N = v.numel() / 3.0
 
-        return torch.log(self.b0_twice +
-                         torch.sum(torch.pow(nabla_vx, 2)) +
-                         torch.sum(torch.pow(nabla_vy, 2)) +
-                         torch.sum(torch.pow(nabla_vz, 2))) * (self.a0 + self.N * 0.5)
+        return torch.log(self.b0_twice + alpha *
+                         (torch.sum(torch.pow(nabla_vx, 2)) +
+                          torch.sum(torch.pow(nabla_vy, 2)) +
+                          torch.sum(torch.pow(nabla_vz, 2)))) * (self.a0 + alpha * 3.0 * self.N * 0.5), alpha
 
 
 """

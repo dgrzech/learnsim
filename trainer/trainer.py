@@ -64,6 +64,7 @@ class Trainer(BaseTrainer):
 
         # virtual decimation
         self.vd = config['vd']
+        self.vd_reg = config['vd_reg']
 
         # resuming
         if config.resume is not None and self.VI:
@@ -315,7 +316,8 @@ class Trainer(BaseTrainer):
 
             self.train_metrics_mcmc.update('MCMC/data_term', data_term.item())
             self.train_metrics_mcmc.update('MCMC/reg_term', reg_term.item())
-            self.train_metrics_mcmc.update('VD/alpha', alpha_mean)
+            self.train_metrics_mcmc.update('other/alpha', alpha_mean)
+            self.train_metrics_mcmc.update('other/alpha_reg', alpha_reg.item())
 
             if sample_no == self.no_iters_burn_in:
                 self.logger.info('\nENDED BURNING IN\n')
