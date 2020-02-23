@@ -39,7 +39,11 @@ def main(config):
     proportion_prior = config.init_obj('proportion_prior', model_loss)
 
     reg_loss = config.init_obj('reg_loss', model_loss)
-    reg_loss_scale_prior = config.init_obj('scale_reg_prior', model_loss)
+
+    if type(reg_loss).__name__ == 'RegLossL2_Learnable':
+        reg_loss_scale_prior = config.init_obj('scale_reg_prior', model_loss)
+    else:
+        reg_loss_scale_prior = None
 
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 

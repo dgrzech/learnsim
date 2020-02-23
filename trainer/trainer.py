@@ -72,6 +72,8 @@ class Trainer(BaseTrainer):
         elif config.resume is not None and self.MCMC:
             self._resume_checkpoint_mcmc(config.resume)
 
+        self.use_moving_mask = config['use_moving_mask']  # whether to use the moving mask
+
     def _step_GMM(self, res, alpha=1.0):
         if self.optimizer_mixture_model is None:  # initialise the optimiser
             self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
@@ -86,14 +88,18 @@ class Trainer(BaseTrainer):
         data_term.backward()
         self.optimizer_mixture_model.step()  # backprop
 
-    def _step_VI(self, im_pair_idxs, im_moving):
+    def _step_VI(self, im_pair_idxs, im_moving, mask_moving):
         self.mu_v.requires_grad_(True)
         self.log_var_v.requires_grad_(True)
         self.u_v.requires_grad_(True)
 
         if self.optimizer_v is None:
-            self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
-                                                    [self.mu_v, self.log_var_v, self.u_v, self.reg_loss.log_w_reg])
+            if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
+                                                        [self.mu_v, self.log_var_v, self.u_v, self.reg_loss.log_w_reg])
+            else:
+                self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
+                                                        [self.mu_v, self.log_var_v, self.u_v])
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
@@ -117,7 +123,7 @@ class Trainer(BaseTrainer):
 
             im_moving_warped1, im_moving_warped2 = self.registration_module(im_moving, transformation1), \
                                                    self.registration_module(im_moving, transformation2)
-
+            
             n_F, n_M1 = self.data_loss.map(self.im_fixed, im_moving_warped1)
             n_F, n_M2 = self.data_loss.map(self.im_fixed, im_moving_warped2)
 
@@ -128,14 +134,28 @@ class Trainer(BaseTrainer):
 
             if self.vd:  # virtual decimation
                 # rescale the residuals by the estimated voxel-wise standard deviation
-                res1_rescaled = rescale_residuals(res1.detach(), self.mask_fixed, self.data_loss)
-                res2_rescaled = rescale_residuals(res2.detach(), self.mask_fixed, self.data_loss)
+                if self.use_moving_mask:
+                    mask_moving_warped1, mask_moving_warped2 = self.registration_module(mask_moving.float(), transformation1, mode='nearest').bool(), \
+                                                               self.registration_module(mask_moving.float(), transformation2, mode='nearest').bool()
+                    mask1, mask2 = (self.mask_fixed * mask_moving_warped1), (self.mask_fixed * mask_moving_warped2)
 
-                with torch.no_grad():
-                    alpha1, alpha2 = vd(res1_rescaled, self.mask_fixed), vd(res2_rescaled, self.mask_fixed)
-                    alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
+                    res1_rescaled = rescale_residuals(res1.detach(), mask1, self.data_loss)
+                    res2_rescaled = rescale_residuals(res2.detach(), mask2, self.data_loss)
 
-            res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
+                    with torch.no_grad():
+                        alpha1, alpha2 = vd(res1_rescaled, mask1), vd(res2_rescaled, mask2)
+                        alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
+                    
+                    res1_masked, res2_masked = res1[mask1], res2[mask2]
+                else:
+                    res1_rescaled = rescale_residuals(res1.detach(), self.mask_fixed, self.data_loss)
+                    res2_rescaled = rescale_residuals(res2.detach(), self.mask_fixed, self.data_loss)
+
+                    with torch.no_grad():
+                        alpha1, alpha2 = vd(res1_rescaled, self.mask_fixed), vd(res2_rescaled, self.mask_fixed)
+                        alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
+                    
+                    res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
 
             # Gaussian mixture
             self._step_GMM(res1_masked, alpha1)
@@ -146,9 +166,14 @@ class Trainer(BaseTrainer):
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            reg_term = self.reg_loss(v_sample1).sum() / 2.0
-            reg_term += self.reg_loss(v_sample2).sum() / 2.0
-            reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
+            reg_term1, alpha_reg1 = self.reg_loss(v_sample1, self.vd_reg)
+            reg_term2, alpha_reg2 = self.reg_loss(v_sample2, self.vd_reg)
+
+            reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
+            alpha_reg_mean = (alpha_reg1 + alpha_reg2) / 2.0
+
+            if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+                reg_term -= 3.0 * torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))  # prior
 
             entropy_term = self.entropy_loss(v_sample=v_sample1,
                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
@@ -175,10 +200,12 @@ class Trainer(BaseTrainer):
 
             self.train_metrics_vi.update('other/alpha', alpha_mean)
 
+            if self.vd_reg:
+                self.train_metrics_vi.update('other/alpha_reg', alpha_reg_mean)
+
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
                 with torch.no_grad():
                     # FIXME: should probably do this over the masked region
-                    mu_w_reg = torch.mean(torch.exp(self.reg_loss.log_scales()))
                     sigmas = torch.exp(self.data_loss.log_scales())
                     proportions = torch.exp(self.data_loss.log_proportions())
 
@@ -186,7 +213,10 @@ class Trainer(BaseTrainer):
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-                self.train_metrics_vi.update('other/mean_w_reg', mu_w_reg.item())
+                if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+                    with torch.no_grad():
+                       mu_w_reg = torch.mean(torch.exp(self.reg_loss.log_scales()))
+                       self.train_metrics_vi.update('other/mean_w_reg', mu_w_reg.item())
 
                 for idx in range(self.data_loss.num_components):
                     self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
@@ -204,7 +234,7 @@ class Trainer(BaseTrainer):
             outputs
             """
 
-            if math.log2(iter_no).is_integer():
+            if math.log2(iter_no).is_integer() or iter_no == self.no_iters_vi:
                 with torch.no_grad():
                     if self.sobolev_grad:
                         mu_v_smoothed = \
@@ -225,8 +255,12 @@ class Trainer(BaseTrainer):
                     log_det_J_transformation = torch.log(calc_det_J(nabla_x, nabla_y, nabla_z))
 
                     # tensorboard
-                    log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation,
-                               self.reg_loss.log_scales())
+                    if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+                        log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation,
+                                   self.reg_loss.log_scales())
+                    else:
+                        log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
+
                     log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
                     log_hist_res(self.writer, im_pair_idxs, res1_masked, self.data_loss)
 
@@ -241,7 +275,7 @@ class Trainer(BaseTrainer):
             if iter_no % self.save_period == 0 or iter_no == self.no_iters_vi:
                 self._save_checkpoint_vi(iter_no)
 
-    def _step_MCMC(self, im_pair_idxs, im_moving):
+    def _step_MCMC(self, im_pair_idxs, im_moving, mask_moving):
         self.mu_v.requires_grad_(False)
         self.log_var_v.requires_grad_(False)
         self.u_v.requires_grad_(False)
@@ -269,30 +303,45 @@ class Trainer(BaseTrainer):
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
-                reg_term = self.reg_loss(v_curr_state_noise_smoothed).sum()
-                reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
+                reg_term, alpha_reg = self.reg_loss(v_curr_state_noise_smoothed, self.vd_reg)
+
+                if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+                    reg_term -= 3.0 * torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
-                reg_term = self.reg_loss(v_curr_state_noise).sum()
-                reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
+                reg_term, alpha_reg = self.reg_loss(v_curr_state_noise, self.vd_reg)
+
+                if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+                    reg_term -= 3.0 * torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_scales()))
 
             transformation, displacement = add_noise_uniform(transformation), add_noise_uniform(displacement)
-
             im_moving_warped = self.registration_module(im_moving, transformation)
+
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
             res = n_F - n_M
+
+            if self.use_moving_mask:
+                mask_moving_warped = self.registration_module(mask_moving.float(), transformation, mode='nearest').bool()
+                mask = (self.mask_fixed * mask_moving_warped)
 
             alpha = 1.0
             alpha_mean = alpha
 
             if self.vd:  # virtual decimation
-                res_rescaled = rescale_residuals(res.detach(), self.mask_fixed, self.data_loss)
+                if self.use_moving_mask:
+                    res_rescaled = rescale_residuals(res.detach(), mask, self.data_loss)
+                    res_masked = res[mask]
 
-                with torch.no_grad():
-                    alpha = vd(res_rescaled, self.mask_fixed)
-                    alpha_mean = alpha.item()
-
-            res_masked = res[self.mask_fixed]
+                    with torch.no_grad():
+                        alpha = vd(res_rescaled, mask)
+                        alpha_mean = alpha.item()
+                else:
+                    res_rescaled = rescale_residuals(res.detach(), self.mask_fixed, self.data_loss)
+                    res_masked = res[self.mask_fixed]
+                    
+                    with torch.no_grad():
+                        alpha = vd(res_rescaled, self.mask_fixed)
+                        alpha_mean = alpha.item()
 
             # Gaussian mixture
             self._step_GMM(res_masked, alpha)
@@ -302,7 +351,7 @@ class Trainer(BaseTrainer):
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            loss = data_term + reg_term
+            loss = data_term + reg_term.sum()
 
             self.optimizer_mala.zero_grad()
             loss.backward()  # backprop
@@ -317,7 +366,9 @@ class Trainer(BaseTrainer):
             self.train_metrics_mcmc.update('MCMC/data_term', data_term.item())
             self.train_metrics_mcmc.update('MCMC/reg_term', reg_term.item())
             self.train_metrics_mcmc.update('other/alpha', alpha_mean)
-            self.train_metrics_mcmc.update('other/alpha_reg', alpha_reg.item())
+
+            if self.vd_reg:
+                self.train_metrics_mcmc.update('other/alpha_reg', alpha_reg.item())
 
             if sample_no == self.no_iters_burn_in:
                 self.logger.info('\nENDED BURNING IN\n')
@@ -352,7 +403,7 @@ class Trainer(BaseTrainer):
                     self._save_checkpoint_mcmc(sample_no)  # checkpoint
 
     def _train_epoch(self):
-        for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, im_moving, mu_v, log_var_v, u_v) \
+        for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, im_moving, mask_moving, mu_v, log_var_v, u_v) \
                 in enumerate(self.data_loader):
             if self.im_fixed is None:
                 self.im_fixed = im_fixed.to(self.device, non_blocking=True)
@@ -360,6 +411,9 @@ class Trainer(BaseTrainer):
                 self.mask_fixed = mask_fixed.to(self.device, non_blocking=True)
 
             im_moving = im_moving.to(self.device, non_blocking=True)
+
+            if mask_moving is not None:
+                mask_moving = mask_moving.to(self.device, non_blocking=True)
 
             if self.mu_v is None:
                 self.mu_v = mu_v.to(self.device, non_blocking=True)
@@ -378,9 +432,14 @@ class Trainer(BaseTrainer):
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
-
                 res = n_F - n_M
-                res_masked = res[self.mask_fixed]
+
+                if self.use_moving_mask:
+                    mask_moving_warped = self.registration_module(mask_moving.float(), transformation, mode='nearest').bool()
+                    mask = (self.mask_fixed * mask_moving_warped)
+                    res_masked = res[mask]
+                else:
+                    res_masked = res[self.mask_fixed]
 
                 res_mean = torch.mean(res_masked)
                 res_var = torch.mean(torch.pow(res_masked - res_mean, 2))
@@ -390,8 +449,12 @@ class Trainer(BaseTrainer):
                 alpha = 1.0
 
             if self.vd:  # virtual decimation
-                res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)
-                alpha = vd(res_rescaled, self.mask_fixed)  # virtual decimation
+                if self.use_moving_mask:
+                    res_rescaled = rescale_residuals(res, mask, self.data_loss)
+                    alpha = vd(res_rescaled, mask)  # virtual decimation
+                else:
+                    res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)
+                    alpha = vd(res_rescaled, self.mask_fixed)
 
             # Gaussian mixture
             self._step_GMM(res_masked, alpha)
@@ -412,7 +475,7 @@ class Trainer(BaseTrainer):
             """
 
             if self.VI:
-                self._step_VI(im_pair_idxs, im_moving)
+                self._step_VI(im_pair_idxs, im_moving, mask_moving)
 
             """
             MCMC
@@ -429,27 +492,42 @@ class Trainer(BaseTrainer):
                     if self.v_curr_state is None:
                         self.v_curr_state = self.mu_v.clone()
 
-                self._step_MCMC(im_pair_idxs, im_moving)
+                self._step_MCMC(im_pair_idxs, im_moving, mask_moving)
 
     def _save_checkpoint_vi(self, iter_no):
         """
         save a checkpoint (variational inference)
         """
 
-        state = {
-            'config': self.config,
-            'iter_no': iter_no,
-            'sample_no': self.start_sample,
+        if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+            state = {
+                'config': self.config,
+                'iter_no': iter_no,
+                'sample_no': self.start_sample,
 
-            'mu_v': self.mu_v,
-            'log_var_v': self.log_var_v,
-            'u_v': self.u_v,
-            'optimizer_v': self.optimizer_v.state_dict(),
+                'mu_v': self.mu_v,
+                'log_var_v': self.log_var_v,
+                'u_v': self.u_v,
+                'optimizer_v': self.optimizer_v.state_dict(),
 
-            'data_loss': self.data_loss.state_dict(),
-            'reg_loss': self.reg_loss.state_dict(),
-            'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
-        }
+                'data_loss': self.data_loss.state_dict(),
+                'reg_loss': self.reg_loss.state_dict(),
+                'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
+            }
+        else:
+            state = {
+                'config': self.config,
+                'iter_no': iter_no,
+                'sample_no': self.start_sample,
+
+                'mu_v': self.mu_v,
+                'log_var_v': self.log_var_v,
+                'u_v': self.u_v,
+                'optimizer_v': self.optimizer_v.state_dict(),
+
+                'data_loss': self.data_loss.state_dict(),
+                'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
+            }
 
         filename = str(self.checkpoint_dir / f'checkpoint_vi_{iter_no}.pth')
         self.logger.info("saving checkpoint: {}..".format(filename))
@@ -461,22 +539,39 @@ class Trainer(BaseTrainer):
         save a checkpoint (Markov chain Monte Carlo)
         """
 
-        state = {
-            'config': self.config,
-            'iter_no': self.no_iters_vi,
-            'sample_no': sample_no,
+        if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+            state = {
+                'config': self.config,
+                'iter_no': self.no_iters_vi,
+                'sample_no': sample_no,
 
-            'mu_v': self.mu_v,
-            'log_var_v': self.log_var_v,
-            'u_v': self.u_v,
+                'mu_v': self.mu_v,
+                'log_var_v': self.log_var_v,
+                'u_v': self.u_v,
 
-            'data_loss': self.data_loss.state_dict(),
-            'reg_loss': self.reg_loss.state_dict(),
-            'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
+                'data_loss': self.data_loss.state_dict(),
+                'reg_loss': self.reg_loss.state_dict(),
+                'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
 
-            'v_curr_state': self.v_curr_state,
-            'optimizer_mala': self.optimizer_mala.state_dict()
-        }
+                'v_curr_state': self.v_curr_state,
+                'optimizer_mala': self.optimizer_mala.state_dict()
+            }
+        else:
+            state = {
+                'config': self.config,
+                'iter_no': self.no_iters_vi,
+                'sample_no': sample_no,
+
+                'mu_v': self.mu_v,
+                'log_var_v': self.log_var_v,
+                'u_v': self.u_v,
+
+                'data_loss': self.data_loss.state_dict(),
+                'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
+
+                'v_curr_state': self.v_curr_state,
+                'optimizer_mala': self.optimizer_mala.state_dict()
+            }
 
         filename = str(self.checkpoint_dir / f'checkpoint_mcmc_{sample_no}.pth')
         self.logger.info("saving checkpoint: {}..".format(filename))
@@ -496,15 +591,21 @@ class Trainer(BaseTrainer):
         self.start_sample = checkpoint['sample_no'] + 1
 
         # reg. loss
-        self.reg_loss.load_state_dict(checkpoint['reg_loss'])
+        if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+            self.reg_loss.load_state_dict(checkpoint['reg_loss'])
 
         # VI
         self.mu_v = checkpoint['mu_v']
         self.log_var_v = checkpoint['log_var_v']
         self.u_v = checkpoint['u_v']
 
-        self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
-                                                [self.mu_v, self.log_var_v, self.u_v, self.reg_loss.log_w_reg])
+        if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+            self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
+                                                    [self.mu_v, self.log_var_v, self.u_v, self.reg_loss.log_w_reg])
+        else:
+            self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim,
+                                                    [self.mu_v, self.log_var_v, self.u_v])
+
         self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
 
         # GMM
@@ -530,7 +631,8 @@ class Trainer(BaseTrainer):
         self.start_sample = checkpoint['sample_no'] + 1
 
         # regularisation loss
-        self.reg_loss.load_state_dict(checkpoint['reg_loss'])
+        if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
+            self.reg_loss.load_state_dict(checkpoint['reg_loss'])
 
         # VI
         self.mu_v = checkpoint['mu_v']

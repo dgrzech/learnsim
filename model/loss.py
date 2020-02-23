@@ -333,7 +333,7 @@ class RegLossL2(RegLoss):
         else:
             raise Exception('Unknown differential operator')
 
-    def forward(self, v):
+    def forward(self, v, vd=False):
         alpha = 1.0
 
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)

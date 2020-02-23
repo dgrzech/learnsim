@@ -44,7 +44,7 @@
     "optimizer_v": {
         "type": "Adam",
         "args": {
-            "lr": 5e-4
+            "lr": 5e-3
         }
     },
     "optimizer_mala": {
@@ -74,11 +74,12 @@
 	    "lambda": 0.5
     },
 
+    "use_moving_mask": false,
     "vd": true,
-    "vd_reg": true,
+    "vd_reg": false,
 
     "trainer": {
-        "no_iters_vi": 16384,
+        "no_iters_vi": 1536,
         "no_iters_burn_in": 20000,
 	    "no_samples": 50000,
 

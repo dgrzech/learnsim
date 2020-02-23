@@ -104,7 +104,9 @@ class BiobankDataset(Dataset):
             idx = idx.tolist()
 
         im_mask_pair = self.im_mask_pairs[idx]
+
         im_moving_path = im_mask_pair[1][0]
+        mask_moving_path = im_mask_pair[1][1]
 
         im_moving = sitk.ReadImage(im_moving_path, sitk.sitkFloat32)
         im_moving_arr = np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0))
@@ -119,11 +121,28 @@ class BiobankDataset(Dataset):
         im_moving = F.interpolate(im_moving,
                                   size=(self.dim_x, self.dim_y, self.dim_z), mode='trilinear', align_corners=True)
 
+        if mask_moving_path is not None:
+            mask_moving = sitk.ReadImage(mask_moving_path, sitk.sitkFloat32)
+            mask_moving_arr = np.transpose(sitk.GetArrayFromImage(mask_moving), (2, 1, 0))
+
+            # pad
+            mask_moving_arr_padded = np.pad(mask_moving_arr,
+                                           ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+            # resize
+            mask_moving = torch.from_numpy(mask_moving_arr_padded)
+            mask_moving.unsqueeze_(0).unsqueeze_(0)
+
+            mask_moving = F.interpolate(mask_moving, size=(self.dim_x, self.dim_y, self.dim_z), mode='nearest').bool()
+        else:
+            mask_moving = torch.ones_like(im_moving).bool()
+
         im_moving.squeeze_(0)
+        mask_moving.squeeze_(0)
+
         assert self.im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
         mu_v = init_mu_v(self.dims_v)
         log_var_v = init_log_var_v(self.dims_v)
         u_v = init_u_v(self.dims_v)
 
-        return idx, self.im_fixed, self.mask_fixed, im_moving, mu_v, log_var_v, u_v
+        return idx, self.im_fixed, self.mask_fixed, im_moving, mask_moving, mu_v, log_var_v, u_v
