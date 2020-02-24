@@ -177,7 +177,7 @@ class Trainer(BaseTrainer):
             alpha_reg_mean = (alpha_reg1 + alpha_reg2) / 2.0
 
             if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
-                reg_term -= 3.0 * torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_w_reg()))  # prior
+                reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_w_reg()))  # prior
 
             entropy_term = self.entropy_loss(v_sample=v_sample1,
                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
@@ -316,13 +316,13 @@ class Trainer(BaseTrainer):
                 reg_term, alpha_reg = self.reg_loss(v_curr_state_noise_smoothed, self.mask_fixed, self.vd_reg)  # FIXME
 
                 if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
-                    reg_term -= 3.0 * torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_w_reg()))
+                    reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_w_reg()))
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
                 reg_term, alpha_reg = self.reg_loss(v_curr_state_noise, self.mask_fixed, self.vd_reg)  # FIXME
 
                 if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
-                    reg_term -= 3.0 * torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_w_reg()))
+                    reg_term -= torch.sum(self.reg_loss_scale_prior(self.reg_loss.log_w_reg()))
 
             transformation, displacement = add_noise_uniform(transformation), add_noise_uniform(displacement)
             im_moving_warped = self.registration_module(im_moving, transformation)
