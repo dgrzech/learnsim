@@ -462,8 +462,7 @@ def vd_reg(nabla_vx, nabla_vy, nabla_vz, mask):
         vd_nabla_vy = torch.sqrt(sq_vd_nabla_vy_x * sq_vd_nabla_vy_y * sq_vd_nabla_vy_z)
         vd_nabla_vz = torch.sqrt(sq_vd_nabla_vz_x * sq_vd_nabla_vz_y * sq_vd_nabla_vz_z)
 
-        vd = vd_nabla_vx * vd_nabla_vy * vd_nabla_vz
-        return vd
+        return (vd_nabla_vx + vd_nabla_vy + vd_nabla_vz) / 3.0
 
 
 class MetricTracker:
