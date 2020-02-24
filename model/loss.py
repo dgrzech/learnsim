@@ -333,13 +333,11 @@ class RegLossL2(RegLoss):
         else:
             raise Exception('Unknown differential operator')
 
-    def forward(self, v, vd=False):
+    def forward(self, v, mask=None, vd=False):
+        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         alpha = 1.0
 
-        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        reg_term = self.w_reg * (torch.sum(torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)))
-
-        return reg_term, alpha
+        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2))), alpha
 
 
 class RegLossL2_Learnable(RegLoss):
@@ -356,25 +354,25 @@ class RegLossL2_Learnable(RegLoss):
         self.__gaussian_kernel_hat.requires_grad_(False)
 
         # voxel-specific regularisation weight
-        self.log_w_reg = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
+        self._log_w_reg = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
 
-    def log_scales(self):
-        return self.log_w_reg
+    def log_w_reg(self):
+        return self._log_w_reg
 
-    def forward(self, v, vd=False):
-        log_w_reg_smoothed = GaussianGrad.apply(self.log_w_reg, self.__gaussian_kernel_hat)
+    def forward(self, v, mask=None, vd=False):
+        log_w_reg_smoothed = GaussianGrad.apply(self._log_w_reg, self.__gaussian_kernel_hat)
         w_reg = torch.exp(log_w_reg_smoothed)
         
+        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         alpha = 1.0
 
         if vd:  # virtual decimation
             with torch.no_grad():
-                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz)
+                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz, mask)
 
-        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
-
         return alpha * (-0.5 * 3.0 * log_w_reg_smoothed.sum() + torch.sum(w_reg * reg_term)), alpha
+
 
 class RegLossL2_Student(RegLoss):
     def __init__(self, diff_op, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
@@ -412,14 +410,13 @@ class RegLossL2_Student(RegLoss):
 
         self.N = None  # no. of voxels
 
-    def forward(self, v, vd=False):
+    def forward(self, v, mask=None, vd=False):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-
         alpha = 1.0
 
         if vd:  # virtual decimation
             with torch.no_grad():
-                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz)
+                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz, mask)
 
         if self.N is None:
             self.N = v.numel() / 3.0

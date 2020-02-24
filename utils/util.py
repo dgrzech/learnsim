@@ -285,7 +285,7 @@ def separable_conv_3d(field, *args):
         kernel = args[0]
         padding_sz = args[1]
 
-        N, C, D, H, W = field_out.size()
+        N, C, D, H, W = field_out.shape
 
         padding_3d = (padding_sz, padding_sz, 0, 0, 0, 0)
 
@@ -349,7 +349,7 @@ def transform_coordinates(field):
     """
 
     field_out = field.clone()
-    dims = field.size()[2:]
+    dims = field.shape[2:]
 
     for idx in range(3):
         field_out[:, idx] = field_out[:, idx] * 2.0 / float(dims[idx] - 1)
@@ -399,25 +399,40 @@ def vd(residual, mask):
         return torch.sqrt(sq_vd_x * sq_vd_y * sq_vd_z)
 
 
-def vd_reg(nabla_vx, nabla_vy, nabla_vz):
+def vd_reg(nabla_vx, nabla_vy, nabla_vz, mask):
     with torch.no_grad():
+        mask_stacked = torch.cat((mask, mask, mask), dim=1)
+
         # variance
-        var_nabla_vx = torch.mean(nabla_vx ** 2)
-        var_nabla_vy = torch.mean(nabla_vy ** 2)
-        var_nabla_vz = torch.mean(nabla_vz ** 2)
+        nabla_vx_masked = nabla_vx[mask_stacked]
+        nabla_vy_masked = nabla_vy[mask_stacked]
+        nabla_vz_masked = nabla_vz[mask_stacked]
+
+        var_nabla_vx = torch.mean(nabla_vx_masked ** 2)
+        var_nabla_vy = torch.mean(nabla_vy_masked ** 2)
+        var_nabla_vz = torch.mean(nabla_vz_masked ** 2)
 
         # covariance..
-        cov_nabla_vx_x = torch.mean(nabla_vx[:, :, :-1] * nabla_vx[:, :, 1:])
-        cov_nabla_vx_y = torch.mean(nabla_vx[:, :, :, :-1] * nabla_vx[:, :, :, 1:])
-        cov_nabla_vx_z = torch.mean(nabla_vx[:, :, :, :, :-1] * nabla_vx[:, :, :, :, 1:])
+        no_unmasked_voxels = torch.sum(mask_stacked)
+
+        nabla_vx_masked = torch.where(mask_stacked, nabla_vx, torch.zeros_like(nabla_vx))
+        nabla_vy_masked = torch.where(mask_stacked, nabla_vy, torch.zeros_like(nabla_vy))
+        nabla_vz_masked = torch.where(mask_stacked, nabla_vz, torch.zeros_like(nabla_vz))
+
+        cov_nabla_vx_x = torch.sum(nabla_vx_masked[:, :, :-1] * nabla_vx_masked[:, :, 1:]) / no_unmasked_voxels
+        cov_nabla_vx_y = torch.sum(nabla_vx_masked[:, :, :, :-1] * nabla_vx_masked[:, :, :, 1:]) / no_unmasked_voxels
+        cov_nabla_vx_z = \
+            torch.sum(nabla_vx_masked[:, :, :, :, :-1] * nabla_vx_masked[:, :, :, :, 1:]) / no_unmasked_voxels
         
-        cov_nabla_vy_x = torch.mean(nabla_vy[:, :, :-1] * nabla_vy[:, :, 1:])
-        cov_nabla_vy_y = torch.mean(nabla_vy[:, :, :, :-1] * nabla_vy[:, :, :, 1:])
-        cov_nabla_vy_z = torch.mean(nabla_vy[:, :, :, :, :-1] * nabla_vy[:, :, :, :, 1:])
+        cov_nabla_vy_x = torch.sum(nabla_vy_masked[:, :, :-1] * nabla_vy_masked[:, :, 1:]) / no_unmasked_voxels
+        cov_nabla_vy_y = torch.sum(nabla_vy_masked[:, :, :, :-1] * nabla_vy_masked[:, :, :, 1:]) / no_unmasked_voxels
+        cov_nabla_vy_z = \
+            torch.sum(nabla_vy_masked[:, :, :, :, :-1] * nabla_vy_masked[:, :, :, :, 1:]) / no_unmasked_voxels
         
-        cov_nabla_vz_x = torch.mean(nabla_vz[:, :, :-1] * nabla_vz[:, :, 1:])
-        cov_nabla_vz_y = torch.mean(nabla_vz[:, :, :, :-1] * nabla_vz[:, :, :, 1:])
-        cov_nabla_vz_z = torch.mean(nabla_vz[:, :, :, :, :-1] * nabla_vz[:, :, :, :, 1:])
+        cov_nabla_vz_x = torch.sum(nabla_vz_masked[:, :, :-1] * nabla_vz_masked[:, :, 1:]) / no_unmasked_voxels
+        cov_nabla_vz_y = torch.sum(nabla_vz_masked[:, :, :, :-1] * nabla_vz_masked[:, :, :, 1:]) / no_unmasked_voxels
+        cov_nabla_vz_z = \
+            torch.sum(nabla_vz_masked[:, :, :, :, :-1] * nabla_vz_masked[:, :, :, :, 1:]) / no_unmasked_voxels
 
         corr_vx_x = cov_nabla_vx_x / var_nabla_vx
         corr_vx_y = cov_nabla_vx_y / var_nabla_vx

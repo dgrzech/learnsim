@@ -32,9 +32,9 @@ class GradientOperator(DifferentialOperator):
 
     def forward(self, v):
         if self.pixel_spacing is None:
-            dim_x = v.size()[4]
-            dim_y = v.size()[3]
-            dim_z = v.size()[2]
+            dim_x = v.shape[4]
+            dim_y = v.shape[3]
+            dim_z = v.shape[2]
 
             self.pixel_spacing = (2.0 / float(dim_x - 1), 2.0 / float(dim_y - 1), 2.0 / float(dim_z - 1))
 

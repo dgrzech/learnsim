@@ -83,11 +83,11 @@
         "no_iters_burn_in": 20000,
 	    "no_samples": 50000,
 
-        "log_period": 128,
+        "log_period": 32,
         "tensorboard": true,
         "verbosity": 2,
 
         "save_dir": "saved/",
-        "save_period": 256
+        "save_period": 64
     }
 }

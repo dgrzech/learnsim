@@ -99,7 +99,7 @@ class UtilsTestMethods(unittest.TestCase):
 
         # separable convolution implemented as three 1D convolutions
         v_out = separable_conv_3d(v, S, padding_sz)
-        v_out_size = v_out.size()
+        v_out_size = v_out.shape
 
         assert v_out_size[0] == 2
         assert v_out_size[1] == 3
@@ -128,7 +128,7 @@ class UtilsTestMethods(unittest.TestCase):
 
         # separable convolution implemented as 3D convolutions
         v_out = separable_conv_3d(v, S_x, S_y, S_z, padding_sz)
-        v_out_size = v_out.size()
+        v_out_size = v_out.shape
 
         assert v_out_size[0] == 2
         assert v_out_size[1] == 3
