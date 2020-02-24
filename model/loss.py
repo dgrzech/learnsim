@@ -368,7 +368,11 @@ class RegLossL2_Learnable(RegLoss):
 
         if vd:  # virtual decimation
             with torch.no_grad():
-                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz, mask)
+                nabla_vx_vd = nabla_vx * torch.sqrt(w_reg)
+                nabla_vy_vd = nabla_vy * torch.sqrt(w_reg)
+                nabla_vz_vd = nabla_vz * torch.sqrt(w_reg)
+
+                alpha = vd_reg(nabla_vx_vd, nabla_vy_vd, nabla_vz_vd, mask)
 
         reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
         return alpha * (-0.5 * 3.0 * log_w_reg_smoothed.sum() + torch.sum(w_reg * reg_term)), alpha
