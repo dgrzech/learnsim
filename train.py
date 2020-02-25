@@ -30,6 +30,8 @@ def main(config):
     dim_y = config['data_loader']['args']['dim_y']
     dim_z = config['data_loader']['args']['dim_z']
 
+    dims = (dim_x, dim_y, dim_z)
+
     transformation_model = config.init_obj('transformation_model', transformation, dim_x, dim_y, dim_z)
     registration_module = config.init_obj('registration_module', registration)
 
@@ -38,11 +40,11 @@ def main(config):
     scale_prior = config.init_obj('scale_prior', model_loss)
     proportion_prior = config.init_obj('proportion_prior', model_loss)
 
-    reg_loss = config.init_obj('reg_loss', model_loss)
-
+    reg_loss = config.init_obj('reg_loss', model_loss, dims)
     reg_loss_scale_prior = None
+
     if type(reg_loss).__name__ == 'RegLossL2_Learnable':
-        reg_loss_scale_prior = config.init_obj('scale_reg_prior', model_loss)
+        reg_loss_scale_prior = config.init_obj('reg_loss_scale_prior', model_loss)
 
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
@@ -53,7 +55,7 @@ def main(config):
 
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
                   'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
-                  'other/alpha', 'other/alpha_reg', 'other/mean_w_reg'] + sigmas + proportions
+                  'other/alpha', 'other/alpha_reg', 'other/dof', 'other/mean_w_reg'] + sigmas + proportions
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'other/alpha']
 
     # run the model

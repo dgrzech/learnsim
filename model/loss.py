@@ -5,6 +5,7 @@ from torch.nn.functional import log_softmax
 from utils import gaussian_kernel_3d, vd_reg, GaussianGrad, GradientOperator
 
 import math
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -231,10 +232,12 @@ class ScaleLogNormalPrior(nn.Module):
             scale = math.log(10)
 
         loc_is_float = True
+
         try:
             val = float(loc)
         except:
             loc_is_float = False
+
         if loc_is_float:
             loc = torch.Tensor([loc])
         else:
@@ -243,10 +246,12 @@ class ScaleLogNormalPrior(nn.Module):
             loc = loc.clone()
 
         scale_is_float = True
+
         try:
             val = float(scale)
         except:
             scale_is_float = False
+
         if scale_is_float:
             scale = torch.Tensor([scale])
         else:
@@ -315,8 +320,13 @@ class RegLoss(nn.Module, ABC):
     base class for all regularisation losses
     """
 
-    def __init__(self):
+    def __init__(self, diff_op):
         super(RegLoss, self).__init__()
+        
+        if diff_op == 'GradientOperator':
+            self.diff_op = GradientOperator()
+        else:
+            raise Exception('Unknown differential operator')
 
     @abstractmethod
     def forward(self, v):
@@ -325,44 +335,49 @@ class RegLoss(nn.Module, ABC):
 
 class RegLossL2(RegLoss):
     def __init__(self, diff_op, w_reg):
-        super(RegLossL2, self).__init__()
+        super(RegLossL2, self).__init__(diff_op)
         self.w_reg = w_reg
 
-        if diff_op == 'GradientOperator':
-            self.diff_op = GradientOperator()
-        else:
-            raise Exception('Unknown differential operator')
-
-    def forward(self, v, mask=None, vd=False):
+    def forward(self, v, nu=None, mask=None, vd=False):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        alpha = 1.0
+        reg_term = self.w_reg * (torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2))
 
-        return self.w_reg * (torch.sum(torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2))), alpha
+        return 0.5 * reg_term.sum(), 1.0
 
 
 class RegLossL2_Learnable(RegLoss):
-    def __init__(self, diff_op, sigma_init, w_reg_init=1.0):
-        super(RegLossL2_Learnable, self).__init__()
+    def __init__(self, dims, diff_op, sigma_init, w_reg_init=1.0):
+        super(RegLossL2_Learnable, self).__init__(diff_op)
 
-        if diff_op == 'GradientOperator':
-            self.diff_op = GradientOperator()
-        else:
-            raise Exception('Unknown differential operator')
+        self.dims = dims
+        self.N = np.prod(dims)  # no. of voxels
 
+        # gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(dim_x, sigma=sigma_init)).float()
         gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(96, sigma=sigma_init)).float()
         self.__gaussian_kernel_hat = nn.Parameter(torch.rfft(gaussian_kernel, 3, onesided=False))
         self.__gaussian_kernel_hat.requires_grad_(False)
 
         # voxel-specific regularisation weight
-        self._log_w_reg = nn.Parameter(math.log(w_reg_init) + torch.zeros((96, 96, 96)))
+        self._log_nu = nn.Parameter(math.log(self.N) + torch.Tensor([0.0]))  # degrees of freedom
+        self._log_w_reg = nn.Parameter(math.log(w_reg_init) + torch.zeros(self.dims))
+
+    def log_nu(self):
+        return self._log_nu
+
+    def nu(self):
+        return torch.exp(self._log_nu)
 
     def log_w_reg(self):
         return self._log_w_reg
 
+    def w_reg(self):
+        return torch.exp(self._log_w_reg)
+
     def forward(self, v, mask=None, vd=False):
         log_w_reg_smoothed = GaussianGrad.apply(self._log_w_reg, self.__gaussian_kernel_hat)
         w_reg = torch.exp(log_w_reg_smoothed)
-        
+        nu = torch.exp(self._log_nu)
+
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         alpha = 1.0
 
@@ -375,7 +390,10 @@ class RegLossL2_Learnable(RegLoss):
                 alpha = vd_reg(nabla_vx_vd, nabla_vy_vd, nabla_vz_vd, mask)
 
         reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
-        return alpha * (-0.5 * 3.0 * log_w_reg_smoothed.sum() + torch.sum(w_reg * reg_term)), alpha
+        loss_val = alpha * (-1.5 * nu / self.N * log_w_reg_smoothed.sum() + 0.5 * torch.sum(w_reg * reg_term)
+                            -1.5 * (nu - self.N) * torch.log(reg_term).sum() + torch.lgamma(nu))
+
+        return loss_val, alpha
 
 
 class RegLossL2_Student(RegLoss):
@@ -395,7 +413,9 @@ class RegLossL2_Student(RegLoss):
         lambda0 gives a more direct access to the strength of the prior
         """
 
-        super(RegLossL2_Student, self).__init__()
+        super(RegLossL2_Student, self).__init__(diff_op)
+
+        self.N = None  # no. of transformation parameters
 
         if nu0 != 2e-6:
             self.a0 = nu0 / 2.0
@@ -407,14 +427,7 @@ class RegLossL2_Student(RegLoss):
 
         self.b0_twice = b0 * 2.0
 
-        if diff_op == 'GradientOperator':
-            self.diff_op = GradientOperator()
-        else:
-            raise Exception('Unknown differential operator')
-
-        self.N = None  # no. of voxels
-
-    def forward(self, v, mask=None, vd=False):
+    def forward(self, v, nu=None, mask=None, vd=False):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
         alpha = 1.0
 
@@ -423,12 +436,12 @@ class RegLossL2_Student(RegLoss):
                 alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz, mask)
 
         if self.N is None:
-            self.N = v.numel() / 3.0
+            self.N = v.numel()
 
-        return torch.log(self.b0_twice + alpha *
-                         (torch.sum(torch.pow(nabla_vx, 2)) +
-                          torch.sum(torch.pow(nabla_vy, 2)) +
-                          torch.sum(torch.pow(nabla_vz, 2)))) * (self.a0 + alpha * 3.0 * self.N * 0.5), alpha
+        reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
+        loss_val = torch.log(self.b0_twice + alpha * reg_term.sum()) * (self.a0 + alpha * 0.5 * self.N)
+
+        return loss_val, alpha
 
 
 """

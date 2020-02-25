@@ -26,7 +26,6 @@ class BaseTrainer:
         self.proportion_prior = proportion_prior.to(self.device)
 
         self.reg_loss = reg_loss.to(self.device)
-        
         if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
             self.reg_loss_scale_prior = reg_loss_scale_prior.to(self.device)
 
@@ -41,7 +40,6 @@ class BaseTrainer:
             self.proportion_prior = torch.nn.DataParallel(proportion_prior, device_ids=device_ids)
 
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
-            
             if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
                 self.reg_loss_scale_prior = torch.nn.DataParallel(reg_loss_scale_prior, device_ids=device_ids)
 

@@ -97,7 +97,8 @@ class Trainer(BaseTrainer):
             self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
 
         if type(self.reg_loss).__name__ == 'RegLossL2_Learnable' and self.optimizer_w_reg is None:
-            self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim, [self.reg_loss._log_w_reg])
+            self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim, 
+                                                        [self.reg_loss._log_w_reg, self.reg_loss._log_nu])
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
@@ -225,8 +226,8 @@ class Trainer(BaseTrainer):
 
                 if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
                     with torch.no_grad():
-                        mu_w_reg = torch.mean(torch.exp(self.reg_loss.log_w_reg()))
-                        self.train_metrics_vi.update('other/mean_w_reg', mu_w_reg.item())
+                        self.train_metrics_vi.update('other/mean_w_reg', torch.mean(self.reg_loss.w_reg()).item())
+                        self.train_metrics_vi.update('other/dof', self.reg_loss.nu().item())
 
                 for idx in range(self.data_loss.num_components):
                     self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
@@ -626,7 +627,8 @@ class Trainer(BaseTrainer):
         if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
             self.reg_loss.load_state_dict(checkpoint['reg_loss'])
 
-            self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim, [self.reg_loss._log_w_reg])
+            self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim, 
+                                                        [self.reg_loss._log_w_reg, self.reg_loss._log_nu])
             self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
 
         self.logger.info("checkpoint loaded, resuming training..")
@@ -660,7 +662,8 @@ class Trainer(BaseTrainer):
         if type(self.reg_loss).__name__ == 'RegLossL2_Learnable':
             self.reg_loss.load_state_dict(checkpoint['reg_loss'])
 
-            self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim, [self.reg_loss._log_w_reg])
+            self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim, 
+                                                        [self.reg_loss._log_w_reg, self.reg_loss.log_nu])
             self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
 
         # MCMC
