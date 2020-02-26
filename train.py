@@ -43,7 +43,7 @@ def main(config):
     reg_loss = config.init_obj('reg_loss', model_loss, dims)
     reg_loss_scale_prior = None
 
-    if type(reg_loss).__name__ == 'RegLossL2_Learnable':
+    if type(reg_loss).__name__ in ['RegLossL2_Learnable', 'RegLossL2_Fourier_Learnable']:
         reg_loss_scale_prior = config.init_obj('reg_loss_scale_prior', model_loss)
 
     entropy_loss = config.init_obj('entropy_loss', model_loss)
@@ -55,7 +55,7 @@ def main(config):
 
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
                   'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
-                  'other/alpha', 'other/alpha_reg', 'other/dof', 'other/mean_w_reg'] + sigmas + proportions
+                  'other/alpha', 'other/alpha_reg', 'other/w_reg'] + sigmas + proportions
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'other/alpha']
 
     # run the model

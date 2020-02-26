@@ -341,42 +341,37 @@ class RegLossL2(RegLoss):
 
     def forward(self, v, nu=None, mask=None, vd=False):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        reg_term = self.w_reg * 0.5 * (torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2))
+        reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
 
-        return reg_term.sum(), 1.0
+        return self.w_reg * 0.5 * reg_term.sum(), 1.0
 
 
 class RegLossL2_Fourier(RegLoss):
-    def __init__(self, w_reg):
-        super(RegLossL2_Fourier, self).__init__(w_reg=w_reg)
+    def __init__(self, dims, w_reg):
+        super(RegLossL2_Fourier, self).__init__(diff_op='GradientOperator', w_reg=w_reg)
 
-        self.N = None
-        self.omega_sq = None
+        N = dims[0]
+        freqs = torch.from_numpy(np.fft.fftfreq(N)).float()
+
+        omega_x = freqs.expand(N, -1).expand(N, -1, -1)
+        omega_x.unsqueeze_(0).unsqueeze_(4)
+
+        omega_y = freqs.expand(N, -1).expand(N, -1, -1).transpose(1, 2)
+        omega_y.unsqueeze_(0).unsqueeze_(4)
+
+        omega_z = freqs.expand(N, -1).transpose(0, 1).expand(N, -1, -1).transpose(0, 1)
+        omega_z.unsqueeze_(0).unsqueeze_(4)
+
+        omega = torch.cat((omega_x, omega_y, omega_z), 4).transpose(1, 4)
+        omega_sq = torch.sum(torch.pow(omega, 2.0), dim=1, keepdim=True)
+        self.omega_sq = nn.Parameter(omega_sq).requires_grad_(False)
 
     def forward(self, v):
-        if self.N is None:
-            N = v.shape[-1]
-            freqs = torch.from_numpy(np.fft.fftfreq(N)).float()
-
-            omega_x = freqs.expand(N, -1).expand(N, -1, -1)
-            omega_x.unsqueeze_(0).unsqueeze_(4)
-
-            omega_y = freqs.expand(N, -1).expand(N, -1, -1).transpose(1, 2)
-            omega_y.unsqueeze_(0).unsqueeze_(4)
-
-            omega_z = freqs.expand(N, -1).transpose(0, 1).expand(N, -1, -1).transpose(0, 1)
-            omega_z.unsqueeze_(0).unsqueeze_(4)
-
-            omega = torch.cat((omega_x, omega_y, omega_z), 4).transpose(1, 4)
-
-            self.N = N
-            self.omega_sq = torch.sum(torch.pow(omega, 2.0), dim=1, keepdim=True)
-
-        v_hat = torch.rfft(v, 3, normalized=True, onesided=False)
+        v_hat = torch.rfft(v, 3, normalized=False, onesided=False)
         v_hat_norm_sq = v_hat[:, :, :, :, :, 0] ** 2 + v_hat[:, :, :, :, :, 1] ** 2  # Re + Im
 
-        reg_term = self.w_reg * 0.5 * self.omega_sq * v_hat_norm_sq
-        return reg_term.sum(), 1.0
+        reg_term = self.omega_sq * v_hat_norm_sq
+        return self.w_reg * 0.5 * reg_term.sum(), 1.0
 
 
 class RegLossL2_Learnable(RegLoss):
@@ -386,14 +381,17 @@ class RegLossL2_Learnable(RegLoss):
         self.dims = dims
         self.N = np.prod(dims)  # no. of voxels
 
-        # gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(dim_x, sigma=sigma_init)).float()
-        gaussian_kernel = torch.from_numpy(gaussian_kernel_3d(96, sigma=sigma_init)).float()
-        self.__gaussian_kernel_hat = nn.Parameter(torch.rfft(gaussian_kernel, 3, onesided=False))
-        self.__gaussian_kernel_hat.requires_grad_(False)
+        gaussian_kernel_arr = gaussian_kernel_3d(dims[0], sigma=sigma_init)
+        gaussian_kernel = torch.from_numpy(gaussian_kernel_arr).float()
+        self.__gaussian_kernel_hat = \
+            nn.Parameter(torch.rfft(gaussian_kernel, 3, normalized=True, onesided=False)).requires_grad_(False)
 
         # voxel-specific regularisation weight
-        self._log_nu = nn.Parameter(math.log(self.N) + torch.Tensor([0.0]))  # degrees of freedom
-        self._log_w_reg = nn.Parameter(math.log(w_reg_init) + torch.zeros(self.dims))
+        log_nu_init = math.log(self.N)
+        self._log_nu = nn.Parameter(torch.Tensor([log_nu_init]))  # degrees of freedom
+
+        log_w_reg_init = math.log(w_reg_init)
+        self._log_w_reg = nn.Parameter(log_w_reg_init + torch.zeros(self.dims))
 
     def log_nu(self):
         return self._log_nu
@@ -428,6 +426,48 @@ class RegLossL2_Learnable(RegLoss):
                             -1.5 * (nu - self.N) * torch.log(reg_term).sum() + torch.lgamma(nu))
 
         return loss_val, alpha
+
+
+class RegLossL2_Fourier_Learnable(RegLoss):
+    def __init__(self, dims, w_reg_init=1.0):
+        super(RegLossL2_Fourier_Learnable, self).__init__(diff_op='GradientOperator')
+
+        self.dims = dims
+        self.N = np.prod(dims)  # no. of voxels
+
+        # log regularisation weight
+        log_w_reg_init = math.log(w_reg_init)
+        self._log_w_reg = nn.Parameter(torch.Tensor([log_w_reg_init]))
+
+        # frequencies
+        N = dims[-1]
+        freqs = torch.from_numpy(np.fft.fftfreq(N)).float()
+
+        omega_x = freqs.expand(N, -1).expand(N, -1, -1)
+        omega_x.unsqueeze_(0).unsqueeze_(4)
+
+        omega_y = freqs.expand(N, -1).expand(N, -1, -1).transpose(1, 2)
+        omega_y.unsqueeze_(0).unsqueeze_(4)
+
+        omega_z = freqs.expand(N, -1).transpose(0, 1).expand(N, -1, -1).transpose(0, 1)
+        omega_z.unsqueeze_(0).unsqueeze_(4)
+
+        omega = torch.cat((omega_x, omega_y, omega_z), 4).transpose(1, 4)
+        omega_sq = torch.sum(torch.pow(omega, 2.0), dim=1, keepdim=True)
+        self.omega_sq = nn.Parameter(omega_sq).requires_grad_(False)
+
+    def log_w_reg(self):
+        return self._log_w_reg
+
+    def forward(self, v):
+        v_hat = torch.rfft(v, 3, normalized=False, onesided=False)
+        v_hat_norm_sq = v_hat[:, :, :, :, :, 0] ** 2 + v_hat[:, :, :, :, :, 1] ** 2
+
+        w_reg = torch.exp(self._log_w_reg)
+        reg_term = self.omega_sq * v_hat_norm_sq
+
+        loss_val = -1.5 * self.N * self._log_w_reg + w_reg * 0.5 * reg_term.sum()
+        return loss_val, 1.0
 
 
 class RegLossL2_Student(RegLoss):

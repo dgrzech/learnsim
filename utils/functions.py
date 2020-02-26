@@ -74,8 +74,8 @@ def gaussian_kernel_3d(_s, sigma=1.0):
 class GaussianGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, _log_lambda, _gaussian_kernel_hat):
-        _log_lambda_hat = torch.rfft(_log_lambda, 3, normalized=True, onesided=False)
-        return torch.irfft(_gaussian_kernel_hat * _log_lambda_hat, 3, normalized=True, onesided=False)
+        _log_lambda_hat = torch.rfft(_log_lambda, 3, normalized=False, onesided=False)
+        return torch.irfft(_gaussian_kernel_hat * _log_lambda_hat, 3, normalized=False, onesided=False)
 
     @staticmethod
     def backward(ctx, grad_output):
