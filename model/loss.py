@@ -320,13 +320,15 @@ class RegLoss(nn.Module, ABC):
     base class for all regularisation losses
     """
 
-    def __init__(self, diff_op):
+    def __init__(self, diff_op=None, w_reg=1.0):
         super(RegLoss, self).__init__()
-        
-        if diff_op == 'GradientOperator':
-            self.diff_op = GradientOperator()
-        else:
-            raise Exception('Unknown differential operator')
+        self.w_reg = w_reg
+
+        if diff_op is not None:
+            if diff_op == 'GradientOperator':
+                self.diff_op = GradientOperator()
+            else:
+                raise Exception('Unknown differential operator')
 
     @abstractmethod
     def forward(self, v):
@@ -335,19 +337,51 @@ class RegLoss(nn.Module, ABC):
 
 class RegLossL2(RegLoss):
     def __init__(self, diff_op, w_reg):
-        super(RegLossL2, self).__init__(diff_op)
-        self.w_reg = w_reg
+        super(RegLossL2, self).__init__(diff_op=diff_op, w_reg=w_reg)
 
     def forward(self, v, nu=None, mask=None, vd=False):
         nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        reg_term = self.w_reg * (torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2))
+        reg_term = self.w_reg * 0.5 * (torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2))
 
-        return 0.5 * reg_term.sum(), 1.0
+        return reg_term.sum(), 1.0
+
+
+class RegLossL2_Fourier(RegLoss):
+    def __init__(self, w_reg):
+        super(RegLossL2_Fourier, self).__init__(w_reg=w_reg)
+
+        self.N = None
+        self.omega_sq = None
+
+    def forward(self, v):
+        if self.N is None:
+            N = v.shape[-1]
+            freqs = torch.from_numpy(np.fft.fftfreq(N)).float()
+
+            omega_x = freqs.expand(N, -1).expand(N, -1, -1)
+            omega_x.unsqueeze_(0).unsqueeze_(4)
+
+            omega_y = freqs.expand(N, -1).expand(N, -1, -1).transpose(1, 2)
+            omega_y.unsqueeze_(0).unsqueeze_(4)
+
+            omega_z = freqs.expand(N, -1).transpose(0, 1).expand(N, -1, -1).transpose(0, 1)
+            omega_z.unsqueeze_(0).unsqueeze_(4)
+
+            omega = torch.cat((omega_x, omega_y, omega_z), 4).transpose(1, 4)
+
+            self.N = N
+            self.omega_sq = torch.sum(torch.pow(omega, 2.0), dim=1, keepdim=True)
+
+        v_hat = torch.rfft(v, 3, normalized=True, onesided=False)
+        v_hat_norm_sq = v_hat[:, :, :, :, :, 0] ** 2 + v_hat[:, :, :, :, :, 1] ** 2  # Re + Im
+
+        reg_term = self.w_reg * 0.5 * self.omega_sq * v_hat_norm_sq
+        return reg_term.sum(), 1.0
 
 
 class RegLossL2_Learnable(RegLoss):
     def __init__(self, dims, diff_op, sigma_init, w_reg_init=1.0):
-        super(RegLossL2_Learnable, self).__init__(diff_op)
+        super(RegLossL2_Learnable, self).__init__(diff_op=diff_op)
 
         self.dims = dims
         self.N = np.prod(dims)  # no. of voxels
@@ -413,7 +447,7 @@ class RegLossL2_Student(RegLoss):
         lambda0 gives a more direct access to the strength of the prior
         """
 
-        super(RegLossL2_Student, self).__init__(diff_op)
+        super(RegLossL2_Student, self).__init__(diff_op=diff_op)
 
         self.N = None  # no. of transformation parameters
 
