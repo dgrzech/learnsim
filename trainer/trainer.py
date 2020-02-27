@@ -108,10 +108,10 @@ class Trainer(BaseTrainer):
                 log_var_v_old = self.log_var_v.detach().clone()
                 u_v_old = self.u_v.detach().clone()
 
-            v_sample1, v_sample2 = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=2)
+            v_sample1_unsmoothed, v_sample2_unsmoothed = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=2)
             if self.sobolev_grad:
-                v_sample1 = SobolevGrad.apply(v_sample1, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                v_sample2 = SobolevGrad.apply(v_sample2, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                v_sample1 = SobolevGrad.apply(v_sample1_unsmoothed, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                v_sample2 = SobolevGrad.apply(v_sample2_unsmoothed, self.S_x, self.S_y, self.S_z, self.padding_sz)
 
             transformation1, displacement1 = self.transformation_model(v_sample1)
             transformation2, displacement2 = self.transformation_model(v_sample2)
@@ -173,9 +173,9 @@ class Trainer(BaseTrainer):
             reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
             alpha_reg_mean = (alpha_reg1 + alpha_reg2) / 2.0
 
-            entropy_term = self.entropy_loss(v_sample=v_sample1,
+            entropy_term = self.entropy_loss(v_sample=v_sample1_unsmoothed,
                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
-            entropy_term += self.entropy_loss(v_sample=v_sample2,
+            entropy_term += self.entropy_loss(v_sample=v_sample2_unsmoothed,
                                               mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
             entropy_term += self.entropy_loss(log_var_v=self.log_var_v, u_v=self.u_v).sum()
 
@@ -287,7 +287,7 @@ class Trainer(BaseTrainer):
         for sample_no in range(self.start_sample, self.no_samples + 1):
             self.train_metrics_mcmc.reset()
 
-            if sample_no < self.no_iters_burn_in and sample_no % 2000 == 0:
+            if sample_no < self.no_iters_burn_in and sample_no % self.log_period_mcmc == 0:
                 self.logger.info('burn-in sample no. ' + str(sample_no) + '/' + str(self.no_iters_burn_in))
             
             """
@@ -365,7 +365,7 @@ class Trainer(BaseTrainer):
                 self.logger.info('\nENDED BURNING IN\n')
 
             # tensorboard
-            if sample_no > self.no_iters_burn_in and sample_no % self.log_period == 0:
+            if sample_no > self.no_iters_burn_in and sample_no % self.log_period_mcmc == 0:
                 with torch.no_grad():
                     log = {'sample_no': sample_no}
                     log.update(self.train_metrics_mcmc.result())
@@ -382,7 +382,7 @@ class Trainer(BaseTrainer):
             outputs
             """
 
-            if sample_no % self.save_period == 0 or sample_no == self.no_samples:
+            if sample_no % self.save_period_mcmc == 0 or sample_no == self.no_samples:
                 with torch.no_grad():
                     if self.sobolev_grad:
                         save_sample(self.data_loader.save_dirs, im_pair_idxs,

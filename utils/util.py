@@ -357,6 +357,20 @@ def transform_coordinates(field):
     return field_out
 
 
+def transform_coordinates_inv(field):
+    """
+    coordinate transformation from normalised coordinates (-1, ..., 1) to absolute (0, 1, ..., n)
+    """
+
+    field_out = field.clone()
+    dims = field.shape[2:]
+
+    for idx in range(3):
+        field_out[:, idx] = field_out[:, idx] * float(dims[idx] - 1) / 2.0
+
+    return field_out
+
+
 def vd(residual, mask):
     """
     virtual decimation

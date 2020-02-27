@@ -40,7 +40,7 @@ def main(config):
     scale_prior = config.init_obj('scale_prior', model_loss)
     proportion_prior = config.init_obj('proportion_prior', model_loss)
 
-    reg_loss = config.init_obj('reg_loss', model_loss, dims)
+    reg_loss = config.init_obj('reg_loss', model_loss)
     reg_loss_scale_prior = None
 
     if type(reg_loss).__name__ in ['RegLossL2_Learnable', 'RegLossL2_Fourier_Learnable']:

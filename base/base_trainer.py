@@ -55,6 +55,9 @@ class BaseTrainer:
         self.log_period = cfg_trainer['log_period']
         self.save_period = cfg_trainer['save_period']
 
+        self.log_period_mcmc = cfg_trainer['log_period_mcmc']
+        self.save_period_mcmc = cfg_trainer['save_period_mcmc']
+
         # setup visualization writer instance
         self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])
 

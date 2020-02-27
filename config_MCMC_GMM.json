@@ -54,7 +54,6 @@
         }
     },
 
-
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
@@ -84,10 +83,12 @@
 	    "no_samples": 50000,
 
         "log_period": 32,
+        "log_period_mcmc": 100,
         "tensorboard": true,
         "verbosity": 2,
 
         "save_dir": "saved/",
-        "save_period": 64
+        "save_period": 64,
+        "save_period_mcmc": 1000
     }
 }

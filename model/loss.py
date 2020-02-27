@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
 
-from utils import gaussian_kernel_3d, vd_reg, GaussianGrad, GradientOperator
+from utils import gaussian_kernel_3d, transform_coordinates_inv, vd_reg, GaussianGrad, GradientOperator
 
 import math
 import numpy as np
@@ -560,7 +560,7 @@ class EntropyMultivariateNormal(Entropy):
 
             sigma_v = torch.exp(0.5 * log_var_v)
 
-            v = (v_sample - mu_v) / sigma_v
+            v = transform_coordinates_inv(v_sample - mu_v) / sigma_v  # FIXME: aiyoo..
             u_n = u_v / sigma_v
 
             t1 = torch.sum(torch.pow(v, 2))
