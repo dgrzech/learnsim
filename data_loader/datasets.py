@@ -1,3 +1,5 @@
+from utils import get_omega_norm_sq
+
 from os import listdir, path
 from torch.utils.data import Dataset
 
@@ -7,16 +9,18 @@ import torch
 import torch.nn.functional as F
 
 
-def init_mu_v(dims):
+def init_mu_hat(dims):
     return torch.zeros(dims)
 
 
-def init_log_var_v(dims):
-    var_v = (0.5 ** 2) * torch.ones(dims)
-    return torch.log(var_v)
+def init_log_var_hat(dims):
+    dims_omega = (dims[1] + 1, dims[2] + 1, dims[3] + 1, dims[4])
+    omega_norm_sq = get_omega_norm_sq(dims_omega)[:, 1:, 1:, 1:]
+
+    return torch.log(torch.ones(dims) * omega_norm_sq)
 
 
-def init_u_v(dims):
+def init_u_hat(dims):
     return torch.zeros(dims)
 
 
@@ -30,7 +34,7 @@ class BiobankDataset(Dataset):
         self.dim_z = dim_z
 
         self.dims_im = (1, self.dim_x, self.dim_y, self.dim_z)
-        self.dims_v = (3, self.dim_x, self.dim_y, self.dim_z)
+        self.dims_v = (3, self.dim_x - 1, self.dim_y - 1, self.dim_z // 2, 2)
 
         # image filenames
         im_filenames = sorted([path.join(im_paths, f)
@@ -187,8 +191,8 @@ class BiobankDataset(Dataset):
 
         assert self.im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
-        mu_v = init_mu_v(self.dims_v)
-        log_var_v = init_log_var_v(self.dims_v)
-        u_v = init_u_v(self.dims_v)
+        mu_hat = init_mu_hat(self.dims_v)
+        log_var_hat = init_log_var_hat(self.dims_v)
+        u_hat = init_u_hat(self.dims_v)
 
-        return idx, self.im_fixed, self.mask_fixed, self.seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v, u_v
+        return idx, self.im_fixed, self.mask_fixed, self.seg_fixed, im_moving, mask_moving, seg_moving, mu_hat, log_var_hat, u_hat

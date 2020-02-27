@@ -1,8 +1,9 @@
-from utils import init_identity_grid_2d, init_identity_grid_3d
+from utils import gaussian_kernel_3d, init_identity_grid_2d, init_identity_grid_3d
 
 from abc import ABC, abstractmethod
 from torch import nn
 
+import torch
 import torch.nn.functional as F
 
 
@@ -55,14 +56,23 @@ class SVF_3D(TransformationModel):
     def __init__(self, dim_x, dim_y, dim_z):
         super(SVF_3D, self).__init__()
         self.no_steps = 32
+        self.dims = (dim_x, dim_y, dim_z)
 
         identity_grid = init_identity_grid_3d(dim_x, dim_y, dim_z)
         self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
 
-    def forward(self, v):
+        gaussian_kernel_arr = gaussian_kernel_3d(dim_x, sigma=0.5)
+        gaussian_kernel = torch.from_numpy(gaussian_kernel_arr)
+        gaussian_kernel.unsqueeze_(0).unsqueeze_(0).unsqueeze_(-1)
+        self.gaussian_kernel = nn.Parameter(gaussian_kernel, requires_grad=False)
+
+    def forward(self, z_hat):
         """
         integrate a 3D stationary velocity field through scaling and squaring
         """
+
+        z_hat_smoothed = z_hat * self.gaussian_kernel
+        v = torch.irfft(z_hat_smoothed, 3, normalized=True, onesided=True, signal_sizes=self.dims)
 
         displacement = v / float(2 ** self.no_steps)
 

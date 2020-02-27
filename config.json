@@ -1,5 +1,5 @@
 {
-    "name": "sg_mcmc",
+    "name": "sg_mcmc_freq",
     "n_gpu": 1,
 
     "data_loss": {
@@ -25,19 +25,16 @@
     },
 
     "reg_loss": {
-        "type": "RegLoss_LogNormal",
+        "type": "RegLoss_L2",
         "args": {
-            "diff_op": "GradientOperator",
-	        "learnable": true,
-            "loc_learnable": true,
-	        "scale_learnable": true,
-	        "w_reg": 0.2
+            "w_reg": 5e-3,
+            "diff_op": "Fourier1stDerivativeOperator"
         }
     },
     "reg_loss_prior_loc": {
     	"type": "LogEnergyExpGammaPrior",
 	    "args": {
-	        "w_reg": 0.2,
+	        "w_reg": 5e-3,
 	        "dof": 2654208.0,
 	        "learnable": false
 	    }
@@ -67,7 +64,7 @@
     "optimizer_v": {
         "type": "Adam",
         "args": {
-            "lr": 5e-3
+            "lr": 2e-1
         }
     },
     "optimizer_mala": {

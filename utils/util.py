@@ -116,6 +116,26 @@ def calc_norm(v):
     return torch.norm(v, p=2, dim=0, keepdim=True)
 
 
+def get_omega_norm_sq(dims, onesided=True, c=0.1):
+    N = dims[0]
+    freqs = torch.from_numpy(np.fft.fftfreq(N)).float()
+
+    omega_x = freqs.expand(N, -1).expand(N, -1, -1)
+    omega_y = freqs.expand(N, -1).expand(N, -1, -1).transpose(1, 2)
+    omega_z = freqs.expand(N, -1).transpose(0, 1).expand(N, -1, -1).transpose(0, 1)
+
+    if onesided:
+        omega = torch.stack((omega_x[:, :, :49], omega_y[:, :, :49], omega_z[:, :, :49]), 0)
+    else:
+        omega = torch.stack((omega_x, omega_y, omega_z), 0)
+
+    omega0 = c * torch.max(omega)
+    omega /= omega0
+
+    omega_norm_sq = torch.sum(torch.pow(omega, 2.0), dim=0, keepdim=True).unsqueeze(-1)
+    return omega_norm_sq
+
+
 def get_module_attr(module, name):
     if isinstance(module, nn.DataParallel):
         return getattr(module.module, name)

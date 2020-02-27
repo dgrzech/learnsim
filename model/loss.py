@@ -2,7 +2,8 @@ from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
 
-from utils import gaussian_kernel_3d, transform_coordinates_inv, vd_reg, GaussianGrad, DifferentialOperator
+from utils import gaussian_kernel_3d, get_omega_norm_sq, transform_coordinates_inv, vd_reg, \
+    GaussianGrad, DifferentialOperator
 
 import model.distributions as model_distr
 
@@ -425,24 +426,24 @@ class EntropyMultivariateNormal(Entropy):
 
     def forward(self, **kwargs):
         if len(kwargs) == 2:
-            log_var_v = kwargs['log_var_v']
-            u_v = kwargs['u_v']
+            log_var = kwargs['log_var']
+            u = kwargs['u']
 
-            sigma_v = torch.exp(0.5 * log_var_v)
-            return 0.5 * (torch.log1p(torch.sum(torch.pow(u_v / sigma_v, 2))) + torch.sum(log_var_v))
+            sigma = torch.exp(0.5 * log_var)
+            return 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2))) + torch.sum(log_var))
         elif len(kwargs) == 4:
-            v_sample = kwargs['v_sample']
+            z_sample = kwargs['z_sample']
 
-            mu_v = kwargs['mu_v']
-            log_var_v = kwargs['log_var_v']
-            u_v = kwargs['u_v']
+            mu = kwargs['mu']
+            log_var = kwargs['log_var']
+            u = kwargs['u']
 
-            sigma_v = torch.exp(0.5 * log_var_v)
+            sigma = torch.exp(0.5 * log_var)
 
-            v = transform_coordinates_inv(v_sample - mu_v) / sigma_v  # FIXME: aiyoo..
-            u_n = u_v / sigma_v
+            z = (z_sample[:, :, 1:, 1:, 1:] - mu) / sigma
+            u_n = u / sigma
 
-            t1 = torch.sum(torch.pow(v, 2))
-            t2 = torch.pow(torch.sum(v * u_n), 2) / (1.0 + torch.sum(torch.pow(u_n, 2)))
+            t1 = torch.sum(torch.pow(z, 2))
+            t2 = torch.pow(torch.sum(z * u_n), 2) / (1.0 + torch.sum(torch.pow(u_n, 2)))
 
             return 0.5 * (t1 - t2)

@@ -66,8 +66,11 @@ def gaussian_kernel_3d(_s, sigma=1.0):
     approximate the Gaussian kernel
     """
 
-    x, y, z = np.mgrid[-_s // 2 + 1:_s // 2 + 1, -_s // 2 + 1:_s // 2 + 1,  -_s // 2 + 1:_s // 2 + 1]
+    freqs = torch.from_numpy(np.fft.fftfreq(_s)).float()
+    x, y, z = np.meshgrid(freqs, freqs, freqs)
+
     g = np.exp(-1.0 * (x ** 2 + y ** 2 + z ** 2) / (2.0 * sigma ** 2))
+    g = g[:, :, :_s // 2 + 1]
 
     return g / g.sum()
 
@@ -91,8 +94,9 @@ class MALA(torch.autograd.Function):
 class GaussianGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, _log_lambda, _gaussian_kernel_hat):
-        _log_lambda_hat = torch.rfft(_log_lambda, 3, normalized=False, onesided=False)
-        return torch.irfft(_gaussian_kernel_hat * _log_lambda_hat, 3, normalized=False, onesided=False)
+        _log_lambda_hat = torch.rfft(_log_lambda, 3, normalized=True, onesided=True)
+        return torch.irfft(_gaussian_kernel_hat * _log_lambda_hat, 3,
+                           normalized=True, onesided=True, signal_sizes=(96, 96, 96))
 
     @staticmethod
     def backward(ctx, grad_output):

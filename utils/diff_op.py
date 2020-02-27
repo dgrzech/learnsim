@@ -1,6 +1,9 @@
+from utils import get_omega_norm_sq
+
 from abc import ABC
 from torch import nn
 
+import math
 import torch
 import torch.nn.functional as F
 
@@ -19,9 +22,10 @@ def _get_all_subclasses(cls):
 
 class DifferentialOperator(nn.Module, ABC):
     """
-    from_string is just a convenience method to create an instance of subclass s from string s.
+    from_string is just a convenience method to create an instance of subclass s from string s,
     e.g. DifferentialOperator.from_string('GradientOperator')
     """
+
     def __init__(self):
         super(DifferentialOperator, self).__init__()
         
@@ -35,31 +39,34 @@ class DifferentialOperator(nn.Module, ABC):
         
     def forward(self, input):
         """
-        Override in children classes, default behaviour is identity map.
-        Our GradientOperator should stack the 3 x, y, z maps on a new dimension.
+        Override in children classes, default behaviour is identity map. Our GradientOperator should stack the three
+        x, y, z maps on a new dimension.
         """
+
         return input
 
     
 class Fourier1stDerivativeOperator(DifferentialOperator):
     """
-    Square root of the Laplacian operator computed in frequency domain:
-        alpha -> alpha * |omega|
+    Square root of the Laplacian operator computed in frequency domain: alpha -> alpha * |omega|
     (technically it's not the nabla operator)
     
     image_size (int): number of voxels along x, y, or z (assumed to be the same)
     """
     
-    def __init__(self, image_size):
+    def __init__(self, dims=(96, 96, 96)):
         super(DifferentialOperator, self).__init__()
-        omega_sq = get_omega_norm_sq((image_size, image_size, image_size)).transpose(1, 4)
-        self.omega_abs = nn.Parameter(omega_sq.sqrt_().unsqueeze(-1)).requires_grad_(False)
+        
+        c = 2.0
+        omega_norm_inv = math.sqrt(c) / torch.sqrt(get_omega_norm_sq(dims) + c)
+        self.omega_norm_inv = nn.Parameter(omega_norm_inv).requires_grad_(False)
 
     def forward(self, input):
         """
         input: a field in frequency domain ('z_hat'), with its real and imaginary parts along dim=-1
         """
-        return input * self.omega_abs
+
+        return input * self.omega_norm_inv
     
     
 class GradientOperator(DifferentialOperator):
