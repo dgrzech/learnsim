@@ -117,8 +117,8 @@ class Trainer(BaseTrainer):
             transformation2, displacement2 = self.transformation_model(v_sample2)
 
             # add noise to account for interpolation uncertainty
-            transformation1, displacement1 = add_noise_uniform(transformation1), add_noise_uniform(displacement1)
-            transformation2, displacement2 = add_noise_uniform(transformation2), add_noise_uniform(displacement2)
+            transformation1 = add_noise_uniform(transformation1)
+            transformation2 = add_noise_uniform(transformation2)
 
             im_moving_warped1, im_moving_warped2 = self.registration_module(im_moving, transformation1), \
                                                    self.registration_module(im_moving, transformation2)
@@ -305,7 +305,7 @@ class Trainer(BaseTrainer):
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
                 reg_term, alpha_reg = self.reg_loss(v_curr_state_noise)
 
-            transformation, displacement = add_noise_uniform(transformation), add_noise_uniform(displacement)
+            transformation = add_noise_uniform(transformation)
             im_moving_warped = self.registration_module(im_moving, transformation)
 
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
