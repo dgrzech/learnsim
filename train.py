@@ -40,11 +40,9 @@ def main(config):
     scale_prior = config.init_obj('scale_prior', model_loss)
     proportion_prior = config.init_obj('proportion_prior', model_loss)
 
-    reg_loss = config.init_obj('reg_loss', model_loss)
-    reg_loss_scale_prior = None
-
-    if type(reg_loss).__name__ in ['RegLossL2_Learnable', 'RegLossL2_Fourier_Learnable']:
-        reg_loss_scale_prior = config.init_obj('reg_loss_scale_prior', model_loss)
+    reg_loss = config.init_obj('reg_loss', model_loss, dims)
+    reg_loss_dof_prior = config.init_obj('reg_loss_dof_prior', model_loss)
+    reg_loss_w_reg_prior = config.init_obj('reg_loss_w_reg_prior', model_loss)
 
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
@@ -55,11 +53,11 @@ def main(config):
 
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
                   'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
-                  'other/alpha', 'other/alpha_reg', 'other/w_reg'] + sigmas + proportions
+                  'other/alpha', 'other/alpha_reg', 'other/w_reg', 'other/k'] + sigmas + proportions
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'other/alpha']
 
     # run the model
-    trainer = Trainer(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_scale_prior, entropy_loss,
+    trainer = Trainer(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_dof_prior, reg_loss_w_reg_prior, entropy_loss,
                       transformation_model, registration_module, metrics_vi, metrics_mcmc,
                       config=config, data_loader=data_loader)
     trainer.train()

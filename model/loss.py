@@ -518,6 +518,43 @@ class RegLossL2_Student(RegLoss):
         return loss_val, alpha
 
 
+class RegLossL2_New(RegLoss):
+    def __init__(self, dims, diff_op, k_init, w_reg_init):
+        super(RegLossL2_New, self).__init__(diff_op=diff_op)
+
+        self.N = float(dims[0]) ** 3
+
+        log_k_init = math.log(k_init)
+        self.log_k = nn.Parameter(torch.Tensor([log_k_init]))
+
+        log_w_reg = math.log(w_reg_init)
+        self.log_w_reg = nn.Parameter(torch.Tensor([log_w_reg]))
+
+    def forward(self, v):
+        k = torch.exp(self.log_k)
+        w_reg = torch.exp(self.log_w_reg)
+
+        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
+        reg_term = torch.pow(nabla_vx, 2.0) + torch.pow(nabla_vy, 2.0) + torch.pow(nabla_vz, 2.0)
+
+        loss_val = -0.5 * k * self.log_w_reg + torch.lgamma(0.5 * k) + 0.5 * k * math.log(2.0) \
+                   - 0.5 * (k - self.N) * torch.log(reg_term.sum()) + 0.5 * w_reg * reg_term.sum()
+        return loss_val, 1.0
+
+
+class RegLossGammaPrior(nn.Module):
+    def __init__(self, y0=10000.0, r0=0.5):
+        super(RegLossGammaPrior, self).__init__()
+
+        self.y0 = y0
+        self.r0 = r0
+    
+    def forward(self, log_k):
+        k = torch.exp(log_k)
+        return (0.5 * k - 1.0) * (math.log(self.y0) + math.log(self.r0)) \
+                - torch.lgamma(0.5 * k) - math.log(self.r0) + log_k
+
+
 """
 entropy
 """

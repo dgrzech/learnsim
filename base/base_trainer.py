@@ -1,6 +1,9 @@
 from logger import TensorboardWriter
+import model.loss as model_loss
 
 from abc import abstractmethod
+
+import math
 import torch
 
 
@@ -9,7 +12,7 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_scale_prior, entropy_loss,
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_dof_prior, reg_loss_w_reg_prior, entropy_loss,
                  transformation_model, registration_module, config):
         self.config = config
         self.checkpoint_dir = config.save_dir
@@ -26,8 +29,8 @@ class BaseTrainer:
         self.proportion_prior = proportion_prior.to(self.device)
 
         self.reg_loss = reg_loss.to(self.device)
-        if type(reg_loss).__name__ in ['RegLossL2_Learnable', 'RegLossL2_Fourier_Learnable']:
-            self.reg_loss_scale_prior = reg_loss_scale_prior.to(self.device)
+        self.reg_loss_dof_prior = reg_loss_dof_prior.to(self.device)
+        self.reg_loss_w_reg_prior = reg_loss_w_reg_prior.to(self.device)
 
         self.entropy_loss = entropy_loss.to(self.device)
 
@@ -40,8 +43,8 @@ class BaseTrainer:
             self.proportion_prior = torch.nn.DataParallel(proportion_prior, device_ids=device_ids)
 
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
-            if type(reg_loss).__name__ in ['RegLossL2_Learnable', 'RegLossL2_Fourier_Learnable']:
-                self.reg_loss_scale_prior = torch.nn.DataParallel(reg_loss_scale_prior, device_ids=device_ids)
+            self.reg_loss_dof_prior = torch.nn.DataParallel(reg_loss_dof_prior, device_ids=device_ids)
+            self.reg_loss_w_reg_prior = torch.nn.DataParallel(reg_loss_w_reg_prior, device_ids=device_ids)
 
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
 
