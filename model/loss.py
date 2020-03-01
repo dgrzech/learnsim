@@ -349,7 +349,7 @@ class RegLoss(nn.Module, ABC):
         '''
 
         D_input = self.diff_op(input)
-        y = torch.sum(D_input**2)  # "chi-square" variable / energy
+        y = torch.sum(D_input ** 2)  # "chi-square" variable / energy
         
         return self._loss(y, *args, **kwargs)
     
@@ -462,7 +462,7 @@ class RegLoss_EnergyBased(RegLoss):
         To adjust the behaviour, adjust the _mlog_energy_prior (and the class attributes)
         '''
         
-        return self._mlog_energy_prior(y, *args, **kwargs) + (dof * 0.5 - 1.0) * torch.log(y) , 1.0
+        return self._mlog_energy_prior(y, *args, **kwargs) + (dof * 0.5 - 1.0) * torch.log(y), torch.log(y)
         
 
 class RegLoss_LogNormal(RegLoss_EnergyBased):
@@ -470,7 +470,7 @@ class RegLoss_LogNormal(RegLoss_EnergyBased):
     log-Normal prior on the energy y, as returned by self.forward.
     '''
     
-    def __init__(self, diff_op=None, loc=1.0, scale=1.0, learnable=True):
+    def __init__(self, diff_op=None, loc=1.0, scale=1.0, learnable=False, loc_learnable=False, scale_learnable=False):
         '''
         The default values have no reason to be good values. If no prior knowledge, use learnable=True along with:
         - A Normal hyperprior on loc, or another choice (see below)
@@ -489,11 +489,17 @@ class RegLoss_LogNormal(RegLoss_EnergyBased):
         regulates the amount of deviations of ln(y), the log of the actual energy from the mean loc.
         '''
         super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
-        
-        self.loc = nn.Parameter(torch.Tensor([loc])).requires_grad_(learnable)
 
-        log_scale = math.log(scale)
-        self.log_scale = nn.Parameter(torch.Tensor([log_scale])).requires_grad_(learnable)
+        if not learnable:
+            loc_learnable = False
+            scale_learnable = False
+        
+        log_energy_exp_gamma_prior = model_distr.LogEnergyExpGammaPrior(0.2, 96.0 ** 3 * 3.0)
+        loc_init = log_energy_exp_gamma_prior.expectation()
+        self.loc = nn.Parameter(torch.Tensor([loc_init]), requires_grad=loc_learnable)
+
+        log_scale = math.log(0.1) + math.log(loc_init)
+        self.log_scale = nn.Parameter(torch.Tensor([log_scale]), requires_grad=scale_learnable)
         
     def _mlog_energy_prior(self, y, *args, **kwargs):
         scale = torch.exp(self.log_scale)

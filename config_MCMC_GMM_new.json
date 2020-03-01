@@ -24,16 +24,27 @@
         "type": "RegLoss_LogNormal",
         "args": {
             "diff_op": "GradientOperator",
-	    "learnable": true
+	    "learnable": true,
+	    "loc_learnable": true,
+	    "scale_learnable": true,
+	    "loc": 0.0,
+	    "scale": 1.0
         }
     },
     "reg_loss_prior_loc": {
-    	"type": "NormalPrior",
-	"args": {}
+    	"type": "LogEnergyExpGammaPrior",
+	"args": {
+	    "w_reg": 0.2,
+	    "dof": 2654208.0,
+	    "learnable": false
+	}
     },
     "reg_loss_prior_scale": {
-    	"type": "ScaleExpGammaPrior",
-	"args": {}
+    	"type": "LogScaleNormalPrior",
+	"args": {
+	    "loc": 2.7973,
+	    "scale": 5.0
+	}
     },
     "entropy_loss": {
         "type": "EntropyMultivariateNormal",

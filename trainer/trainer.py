@@ -169,13 +169,15 @@ class Trainer(BaseTrainer):
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            reg_term1, alpha_reg1 = self.reg_loss(v_sample1, dof=96.0 ** 3)
-            reg_term2, alpha_reg2 = self.reg_loss(v_sample2, dof=96.0 ** 3)
+            reg_term1, log_y1 = self.reg_loss(v_sample1, dof=96.0 ** 3 * 3.0)
+            reg_term2, log_y2 = self.reg_loss(v_sample2, dof=96.0 ** 3 * 3.0)
 
-            reg_term_prior_loc = self.reg_loss_prior_loc(self.reg_loss.log_scale)
+            reg_term_prior_loc = self.reg_loss_prior_loc(log_y1) / 2.0
+            reg_term_prior_loc += self.reg_loss_prior_loc(log_y2) / 2.0
             reg_term_prior_scale = self.reg_loss_prior_scale(self.reg_loss.log_scale)
 
-            reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
+            reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0 - reg_term_prior_loc - reg_term_prior_scale
+            alpha_reg1 = alpha_reg2 = torch.Tensor([1.0])
             alpha_reg_mean = (alpha_reg1 + alpha_reg2) / 2.0
 
             entropy_term = self.entropy_loss(v_sample=v_sample1_unsmoothed,
@@ -220,8 +222,9 @@ class Trainer(BaseTrainer):
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-                    # self.train_metrics_vi.update('other/k', self.reg_loss.loc.item())
-                    # self.train_metrics_vi.update('other/w_reg', self.reg_loss.log_scale.item())
+                    self.train_metrics_vi.update('other/loc', self.reg_loss.loc.item())
+                    self.train_metrics_vi.update('other/log_scale', self.reg_loss.log_scale.item())
+                    self.train_metrics_vi.update('other/y', log_y1.exp().item())
 
                 for idx in range(self.data_loss.num_components):
                     self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])

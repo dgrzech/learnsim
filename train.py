@@ -54,7 +54,7 @@ def main(config):
 
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
                   'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
-                  'other/alpha', 'other/alpha_reg', 'other/w_reg', 'other/k'] + sigmas + proportions
+                  'other/alpha', 'other/alpha_reg', 'other/loc', 'other/log_scale', 'other/y'] + sigmas + proportions
     metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'other/alpha']
 
     # run the model

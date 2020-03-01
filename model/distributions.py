@@ -163,7 +163,7 @@ class ExpGammaDistribution(nn.Module):
         self.gamma_distribution = _GammaDistribution(shape, rate, shape_learnable, rate_learnable, learnable)
         
     def expectation(self):
-        return torch.digamma(self.gamma_distribution.shape) - torch.log(self.gamma_distribution.rate)
+        return expgamma_expectation(self.gamma_distribution.shape, self.gamma_distribution.rate)
 
     def forward(self, x):
         return self.gamma_distribution(x) + x
@@ -172,6 +172,8 @@ class ExpGammaDistribution(nn.Module):
 def expgamma_log_pdf(x, shape, rate):
     return gamma_log_pdf(x, shape, rate) + x
 
+def expgamma_expectation(shape, rate):
+    return torch.digamma(shape) - torch.log(rate)
 
 '''
 Useful hyperpriors.
@@ -202,6 +204,9 @@ class LogEnergyExpGammaPrior(nn.Module):
         self.register_buffer('dof', torch.Tensor([dof]))  # never learnable
 
         self.nu = nn.Parameter(torch.Tensor([nu])).requires_grad_(learnable)
+
+    def expectation(self):
+        return expgamma_expectation(0.5 * self.nu * self.dof, 0.5 * self.nu * self.w_reg)
         
     def forward(self, log_energy):
         return expgamma_log_pdf(log_energy, 0.5 * self.nu * self.dof, 0.5 * self.nu * self.w_reg)  
