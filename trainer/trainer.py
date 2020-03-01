@@ -5,6 +5,8 @@ from optimizers import Adam
 from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, \
     rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, SobolevGrad
 
+from torch import nn
+
 import math
 import numpy as np
 import torch
@@ -15,9 +17,9 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_dof_prior, reg_loss_w_reg_prior, entropy_loss,
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale, entropy_loss,
                  transformation_model, registration_module, metric_ftns_vi, metric_ftns_mcmc, config, data_loader):
-        super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_dof_prior, reg_loss_w_reg_prior, entropy_loss,
+        super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale, entropy_loss,
                          transformation_model, registration_module, config)
 
         self.config = config
@@ -98,7 +100,7 @@ class Trainer(BaseTrainer):
 
         if self.optimizer_w_reg is None:
             self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim,
-                                                        [self.reg_loss.log_k, self.reg_loss.log_w_reg])
+                                                        [self.reg_loss.loc, self.reg_loss.log_scale])
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
@@ -167,13 +169,13 @@ class Trainer(BaseTrainer):
             data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
             data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
 
-            reg_term1, alpha_reg1 = self.reg_loss(v_sample1)
-            reg_term2, alpha_reg2 = self.reg_loss(v_sample2)
+            reg_term1, alpha_reg1 = self.reg_loss(v_sample1, dof=96.0 ** 3)
+            reg_term2, alpha_reg2 = self.reg_loss(v_sample2, dof=96.0 ** 3)
 
-            reg_prior_dof = self.reg_loss_dof_prior(self.reg_loss.log_k)
-            reg_prior_w_reg = self.reg_loss_w_reg_prior(self.reg_loss.log_w_reg)
+            reg_term_prior_loc = self.reg_loss_prior_loc(self.reg_loss.log_scale)
+            reg_term_prior_scale = self.reg_loss_prior_scale(self.reg_loss.log_scale)
 
-            reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0 - reg_prior_dof.sum() - reg_prior_w_reg.sum()
+            reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
             alpha_reg_mean = (alpha_reg1 + alpha_reg2) / 2.0
 
             entropy_term = self.entropy_loss(v_sample=v_sample1_unsmoothed,
@@ -218,8 +220,8 @@ class Trainer(BaseTrainer):
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-                    self.train_metrics_vi.update('other/k', torch.exp(self.reg_loss.log_k).item())
-                    self.train_metrics_vi.update('other/w_reg', torch.exp(self.reg_loss.log_w_reg).item())
+                    # self.train_metrics_vi.update('other/k', self.reg_loss.loc.item())
+                    # self.train_metrics_vi.update('other/w_reg', self.reg_loss.log_scale.item())
 
                 for idx in range(self.data_loss.num_components):
                     self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
@@ -254,7 +256,9 @@ class Trainer(BaseTrainer):
                         transformation, displacement = self.transformation_model(self.mu_v)
 
                     im_moving_warped = self.registration_module(im_moving, transformation)
-                    nabla_x, nabla_y, nabla_z = get_module_attr(self.reg_loss, 'diff_op')(transformation)
+
+                    nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation)
+                    nabla_x, nabla_y, nabla_z = nabla_v[:, :, :, :, :, 0], nabla_v[:, :, :, :, :, 1], nabla_v[:, :, :, :, :, 2]
                     log_det_J_transformation = torch.log(calc_det_J(nabla_x, nabla_y, nabla_z))
 
                     # tensorboard

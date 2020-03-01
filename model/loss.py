@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
 
-from utils import gaussian_kernel_3d, transform_coordinates_inv, vd_reg, GaussianGrad, GradientOperator
+from utils import gaussian_kernel_3d, transform_coordinates_inv, vd_reg, GaussianGrad, DifferentialOperator
 
 import math
 import numpy as np
@@ -314,166 +314,93 @@ class ScaleGammaPrior(nn.Module):
 regularisation loss
 """
 
-
 class RegLoss(nn.Module, ABC):
     """
-    base class for all regularisation losses
+    base class for all regularisation losses.
+    
+    diff_op: takes an input tensor and outputs a tensor, the result of the action of diff_op on the input.
+    Or strings that can be parsed to a diff_op
     """
 
-    def __init__(self, diff_op=None, w_reg=1.0):
+    def __init__(self, diff_op=None):
         super(RegLoss, self).__init__()
-        self.w_reg = w_reg
 
         if diff_op is not None:
-            if diff_op == 'GradientOperator':
-                self.diff_op = GradientOperator()
+            if isinstance(diff_op, str):  
+                # create from string, e.g. diff_op='GradientOperator'
+                self.diff_op = DifferentialOperator.from_string(diff_op)
             else:
-                raise Exception('Unknown differential operator')
+                if isinstance(diff_op, DifferentialOperator):
+                    # point to passed instance, e.g. diff_op=GradientOperator()
+                    self.diff_op = diff_op
+                else:
+                    # create instance from class name, e.g. diff_op=GradientOperator
+                    self.diff_op = diff_op()
+        else:
+            # identity operator
+            self.diff_op = DifferentialOperator()
+            
+    def forward(self, input, *args, **kwargs):
+        '''
+        All RegLosses operate as functions of the energy defined by the differential operator.
+        This is not meant to be overriden, just define the proper diff_op and _loss.
+        '''
 
+        D_input = self.diff_op(input)
+        y = torch.sum(D_input**2)  # "chi-square" variable / energy
+        
+        return self._loss(y, *args, **kwargs)
+    
     @abstractmethod
-    def forward(self, v):
+    def _loss(y, *args, **kwargs):
+        '''
+        Override this in children classes. For Bayesian RegLosses, this _loss is of the form 
+            - log_pdf(...) and potentially includes hyperpriors for tunable parameters.
+        '''
         pass
 
 
-class RegLossL2(RegLoss):
-    def __init__(self, diff_op, w_reg):
-        super(RegLossL2, self).__init__(diff_op=diff_op, w_reg=w_reg)
+class RegLoss_L2(RegLoss):
+    '''
+    This implements all spatial and Fourier logGaussian losses, by passing
+    1) a suitable differential operator
+    2) a suitable input to forward (implemented in parent class)
+    
+    Example 1. Penalty on the squared Froebenius norm of the Jacobian of the velocity, implemented in spatial domain:
+        diff_op = GradientOperator
+        input = v.
+    Example 2. Smooth Sobolev space equivalent of the above.
+        diff_op = GradientOperator
+        v = K^{1/2} alpha is the (Sobolev-smooth) velocity field obtained from its L2-preimage alpha
+        input = alpha
+    Example 3. Equivalent of example 2, but implemented in frequency domain.
+        diff_op = Fourier1stDerivativeOperator
+        alpha is an L2 preimage of the velocity, it lives in the frequency domain.
+        v = fft(half_kernel_hat * alpha * 1 / sqrt(|omega|**2 + 1)) is the (Sobolev-smooth) velocity field
+    '''
+    
+    def __init__(self, w_reg, diff_op=None, learnable=False):
+        super(RegLoss_L2, self).__init__(diff_op=diff_op)
 
-    def forward(self, v, nu=None, mask=None, vd=False):
-        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
+        log_w_reg = math.log(w_reg)
+        self.log_w_reg = nn.Parameter(torch.tensor([log_w_reg])).requires_grad_(learnable)
 
-        return self.w_reg * 0.5 * reg_term.sum(), 1.0
+    def _loss(self, y, dof=0):
+        '''
+        num degrees of freedom dof only matters for learnable w_reg, the argument doesn't need to be passed otherwise.
+        '''
 
+        return self.log_w_reg.exp() * 0.5 * y - .5 * dof * self.log_w_reg, 1.0
 
-class RegLossL2_Fourier(RegLoss):
-    def __init__(self, dims, w_reg):
-        super(RegLossL2_Fourier, self).__init__(diff_op='GradientOperator', w_reg=w_reg)
-
-        N = dims[0]
-        freqs = torch.from_numpy(np.fft.fftfreq(N)).float()
-
-        omega_x = freqs.expand(N, -1).expand(N, -1, -1)
-        omega_x.unsqueeze_(0).unsqueeze_(4)
-
-        omega_y = freqs.expand(N, -1).expand(N, -1, -1).transpose(1, 2)
-        omega_y.unsqueeze_(0).unsqueeze_(4)
-
-        omega_z = freqs.expand(N, -1).transpose(0, 1).expand(N, -1, -1).transpose(0, 1)
-        omega_z.unsqueeze_(0).unsqueeze_(4)
-
-        omega = torch.cat((omega_x, omega_y, omega_z), 4).transpose(1, 4)
-        omega_sq = torch.sum(torch.pow(omega, 2.0), dim=1, keepdim=True)
-        self.omega_sq = nn.Parameter(omega_sq).requires_grad_(False)
-
-    def forward(self, v):
-        v_hat = torch.rfft(v, 3, normalized=False, onesided=False)
-        v_hat_norm_sq = v_hat[:, :, :, :, :, 0] ** 2 + v_hat[:, :, :, :, :, 1] ** 2  # Re + Im
-
-        reg_term = self.omega_sq * v_hat_norm_sq
-        return self.w_reg * 0.5 * reg_term.sum(), 1.0
-
-
-class RegLossL2_Learnable(RegLoss):
-    def __init__(self, dims, diff_op, sigma_init, w_reg_init=1.0):
-        super(RegLossL2_Learnable, self).__init__(diff_op=diff_op)
-
-        self.dims = dims
-        self.N = np.prod(dims)  # no. of voxels
-
-        gaussian_kernel_arr = gaussian_kernel_3d(dims[0], sigma=sigma_init)
-        gaussian_kernel = torch.from_numpy(gaussian_kernel_arr).float()
-        self.__gaussian_kernel_hat = \
-            nn.Parameter(torch.rfft(gaussian_kernel, 3, normalized=True, onesided=False)).requires_grad_(False)
-
-        # voxel-specific regularisation weight
-        log_nu_init = math.log(self.N)
-        self._log_nu = nn.Parameter(torch.Tensor([log_nu_init]))  # degrees of freedom
-
-        log_w_reg_init = math.log(w_reg_init)
-        self._log_w_reg = nn.Parameter(log_w_reg_init + torch.zeros(self.dims))
-
-    def log_nu(self):
-        return self._log_nu
-
-    def nu(self):
-        return torch.exp(self._log_nu)
-
-    def log_w_reg(self):
-        return self._log_w_reg
-
-    def w_reg(self):
-        return torch.exp(self._log_w_reg)
-
-    def forward(self, v, mask=None, vd=False):
-        log_w_reg_smoothed = GaussianGrad.apply(self._log_w_reg, self.__gaussian_kernel_hat)
-        w_reg = torch.exp(log_w_reg_smoothed)
-        nu = torch.exp(self._log_nu)
-
-        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        alpha = 1.0
-
-        if vd:  # virtual decimation
-            with torch.no_grad():
-                nabla_vx_vd = nabla_vx * torch.sqrt(w_reg)
-                nabla_vy_vd = nabla_vy * torch.sqrt(w_reg)
-                nabla_vz_vd = nabla_vz * torch.sqrt(w_reg)
-
-                alpha = vd_reg(nabla_vx_vd, nabla_vy_vd, nabla_vz_vd, mask)
-
-        reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
-        loss_val = alpha * (-1.5 * nu / self.N * log_w_reg_smoothed.sum() + 0.5 * torch.sum(w_reg * reg_term)
-                            -1.5 * (nu - self.N) * torch.log(reg_term).sum() + torch.lgamma(nu))
-
-        return loss_val, alpha
-
-
-class RegLossL2_Fourier_Learnable(RegLoss):
-    def __init__(self, dims, w_reg_init=1.0):
-        super(RegLossL2_Fourier_Learnable, self).__init__(diff_op='GradientOperator')
-
-        self.dims = dims
-        self.N = np.prod(dims)  # no. of voxels
-
-        # log regularisation weight
-        log_w_reg_init = math.log(w_reg_init)
-        self._log_w_reg = nn.Parameter(torch.Tensor([log_w_reg_init]))
-
-        # frequencies
-        N = dims[-1]
-        freqs = torch.from_numpy(np.fft.fftfreq(N)).float()
-
-        omega_x = freqs.expand(N, -1).expand(N, -1, -1)
-        omega_x.unsqueeze_(0).unsqueeze_(4)
-
-        omega_y = freqs.expand(N, -1).expand(N, -1, -1).transpose(1, 2)
-        omega_y.unsqueeze_(0).unsqueeze_(4)
-
-        omega_z = freqs.expand(N, -1).transpose(0, 1).expand(N, -1, -1).transpose(0, 1)
-        omega_z.unsqueeze_(0).unsqueeze_(4)
-
-        omega = torch.cat((omega_x, omega_y, omega_z), 4).transpose(1, 4)
-        omega_sq = torch.sum(torch.pow(omega, 2.0), dim=1, keepdim=True)
-        self.omega_sq = nn.Parameter(omega_sq).requires_grad_(False)
-
-    def log_w_reg(self):
-        return self._log_w_reg
-
-    def forward(self, v):
-        v_hat = torch.rfft(v, 3, normalized=False, onesided=False)
-        v_hat_norm_sq = v_hat[:, :, :, :, :, 0] ** 2 + v_hat[:, :, :, :, :, 1] ** 2
-
-        w_reg = torch.exp(self._log_w_reg)
-        reg_term = self.omega_sq * v_hat_norm_sq
-
-        loss_val = -1.5 * self.N * self._log_w_reg + w_reg * 0.5 * reg_term.sum()
-        return loss_val, 1.0
-
-
-class RegLossL2_Student(RegLoss):
-    def __init__(self, diff_op, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
-        """
-        t_nu0(x | 0, lambda0) with  nu0 = 2 * a0 deg. of freedom and scale lambda0 = a0 / b0,
+    
+class RegLoss_Student(RegLoss):
+    '''
+    See RegLossL2 for tips.
+    '''
+    
+    def __init__(self, diff_op=None, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
+        '''
+         t_nu0(x | 0, lambda0) with  nu0 = 2 * a0 deg. of freedom and scale lambda0 = a0 / b0,
         following a canonical parameterisation of the multivariate student distribution t_nu(x | mu, Lambda)
 
         if lambda0 is specified, b0 is ignored
@@ -484,13 +411,10 @@ class RegLossL2_Student(RegLoss):
         lambda0 would be the expected "precision" E_{lambda ~ Gamma(lambda | a0, b0)}[lambda] = a0 / b0,
         hence the design choice
 
-        lambda0 gives a more direct access to the strength of the prior
-        """
-
-        super(RegLossL2_Student, self).__init__(diff_op=diff_op)
-
-        self.N = None  # no. of transformation parameters
-
+        lambda0 gives a more direct access to the strength of the prior       
+        '''
+        super(RegLoss_Student, self).__init__(diff_op=diff_op)
+        
         if nu0 != 2e-6:
             self.a0 = nu0 / 2.0
         else:
@@ -501,58 +425,79 @@ class RegLossL2_Student(RegLoss):
 
         self.b0_twice = b0 * 2.0
 
-    def forward(self, v, nu=None, mask=None, vd=False):
-        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        alpha = 1.0
-
-        if vd:  # virtual decimation
-            with torch.no_grad():
-                alpha = vd_reg(nabla_vx, nabla_vy, nabla_vz, mask)
-
-        if self.N is None:
-            self.N = v.numel()
-
-        reg_term = torch.pow(nabla_vx, 2) + torch.pow(nabla_vy, 2) + torch.pow(nabla_vz, 2)
-        loss_val = torch.log(self.b0_twice + alpha * reg_term.sum()) * (self.a0 + alpha * 0.5 * self.N)
-
-        return loss_val, alpha
-
-
-class RegLossL2_New(RegLoss):
-    def __init__(self, dims, diff_op, k_init, w_reg_init):
-        super(RegLossL2_New, self).__init__(diff_op=diff_op)
-
-        self.N = float(dims[0]) ** 3
-
-        log_k_init = math.log(k_init)
-        self.log_k = nn.Parameter(torch.Tensor([log_k_init]))
-
-        log_w_reg = math.log(w_reg_init)
-        self.log_w_reg = nn.Parameter(torch.Tensor([log_w_reg]))
-
-    def forward(self, v):
-        k = torch.exp(self.log_k)
-        w_reg = torch.exp(self.log_w_reg)
-
-        nabla_vx, nabla_vy, nabla_vz = self.diff_op(v)
-        reg_term = torch.pow(nabla_vx, 2.0) + torch.pow(nabla_vy, 2.0) + torch.pow(nabla_vz, 2.0)
-
-        loss_val = -0.5 * k * self.log_w_reg + torch.lgamma(0.5 * k) + 0.5 * k * math.log(2.0) \
-                   - 0.5 * (k - self.N) * torch.log(reg_term.sum()) + 0.5 * w_reg * reg_term.sum()
-        return loss_val, 1.0
-
-
-class RegLossGammaPrior(nn.Module):
-    def __init__(self, y0=10000.0, r0=0.5):
-        super(RegLossGammaPrior, self).__init__()
-
-        self.y0 = y0
-        self.r0 = r0
+    def _loss(self, y, dof):
+        '''
+        num degrees of freedom dof is the number of free variables in the field to which this is a prior
+        WARNING. dof = 3*number of voxels for a prior on a velocity field
+            I changed your multiplicative factor from 1.5 to .5, but dof = 3*N
+        '''
+        return torch.log(self.b0_twice + y) * (self.a0 + .5 * dof), 1.0
     
-    def forward(self, log_k):
-        k = torch.exp(log_k)
-        return (0.5 * k - 1.0) * (math.log(self.y0) + math.log(self.r0)) \
-                - torch.lgamma(0.5 * k) - math.log(self.r0) + log_k
+
+class RegLoss_EnergyBased(RegLoss):
+    '''
+    All these EnergyBasedRegLosses derive from expressing a prior on the scalar energy (returned by forward()),
+    and converting it to a prior on the underlying field with dof number of degrees of freedom.
+    
+    RegLossL2 actually belongs to this family, 
+    with _mlog_energy_prior corresponding to -log Gamma(dof/2,wreg/2),
+    up to the quality of numerical implementation in here.
+    '''
+    
+    def __init__(self, diff_op=None):
+        super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
+    
+    @abstractmethod
+    def _mlog_energy_prior(self, y, *args, **kwargs):
+        '''
+        Override in children classes, this is -log pdf of the prior on the energy y.
+        '''
+        pass
+        
+    def _loss(self, y, dof, *args, **kwargs):
+        '''
+        All EnergyBasedRegLosses should use this _loss, not meant to be overriden.
+        To adjust the behaviour, adjust the _mlog_energy_prior (and the class attributes)
+        '''
+        
+        return self._mlog_energy_prior(y, *args, **kwargs) + (dof * 0.5 - 1.0) * torch.log(y) , 1.0
+        
+
+class RegLoss_LogNormal(RegLoss_EnergyBased):
+    '''
+    log-Normal prior on the energy y, as returned by self.forward.
+    '''
+    
+    def __init__(self, diff_op=None, loc=1.0, scale=1.0, learnable=True):
+        '''
+        The default values have no reason to be good values. If no prior knowledge, use learnable=True along with:
+        - A Normal hyperprior on loc, or another choice (see below)
+        - A suitable scale hyperprior on scale (Gamma or Log-Normal). Careful since you will probably implement it
+          as a prior on log_scale, which induces a change of variable p(log_scale)=p(scale)*scale. Convenient when it
+          turns a LogNormal prior on scale into a Normal prior on LogScale; more tricky when using a Gamma prior on scale.
+          
+        A potential choice of hyperprior on loc is actually an exponential-Gamma(dof/2, wreg/2). 
+        Recall that loc is the logarithm of an energy. What this prior means is that exp(loc) is Gamma(dof/2,wreg/2).
+        This allows to fall back onto the "familiar" regularisation strength wreg to calibrate and initialize loc.
+        expGamma(dof/2,wreg/2) has a mean at digamma(dof/2) - ln(wreg/2), and it will be sharply peaked if dof is big.
+        This would yield a very informative prior on loc. A variant if necessary would be Gamma(nu/2,wreg/2) with
+        learnable degrees of freedom nu.
+        
+        Choosing the hyperprior on scale is more intuitive and based on how vague or informative we want it to be, it 
+        regulates the amount of deviations of ln(y), the log of the actual energy from the mean loc.
+        '''
+        super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
+        
+        self.loc = nn.Parameter(torch.Tensor([loc])).requires_grad_(learnable)
+
+        log_scale = math.log(scale)
+        self.log_scale = nn.Parameter(torch.Tensor([log_scale])).requires_grad_(learnable)
+        
+    def _mlog_energy_prior(self, y, *args, **kwargs):
+        scale = torch.exp(self.log_scale)
+        log_y = torch.log(y)
+        
+        return log_y + self.log_scale + 0.5 * ((log_y - self.loc) / scale) ** 2
 
 
 """
@@ -604,3 +549,130 @@ class EntropyMultivariateNormal(Entropy):
             t2 = torch.pow(torch.sum(v * u_n), 2) / (1.0 + torch.sum(torch.pow(u_n, 2)))
 
             return 0.5 * (t1 - t2)
+
+
+'''
+useful hyperpriors
+'''
+        
+class NormalPrior(nn.Module):
+    """
+    Lots of wrapping for not much -_-
+    This prior is written as a prior p(log_scale) over log_scale.
+    """
+
+    def __init__(self, loc=None, scale=None):
+        super(NormalPrior, self).__init__()
+
+        if loc is None:
+            loc = 0.
+        if scale is None:
+            scale = math.log(10)
+
+        loc_is_float = True
+
+        try:
+            val = float(loc)
+        except:
+            loc_is_float = False
+
+        if loc_is_float:
+            loc = torch.Tensor([loc])
+        else:
+            if len(loc) != 1:
+                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(loc)))
+            loc = loc.clone()
+
+        scale_is_float = True
+
+        try:
+            val = float(scale)
+        except:
+            scale_is_float = False
+
+        if scale_is_float:
+            scale = torch.Tensor([scale])
+        else:
+            if len(scale) != 1:
+                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(scale)))
+            scale = scale.clone()
+
+        self.loc = nn.Parameter(loc.detach(), requires_grad=False)
+        self.log_scale = nn.Parameter(torch.log(scale).detach(), requires_grad=False)
+        self.register_buffer('_log_sqrt_2pi', (torch.log(torch.Tensor([math.pi * 2.0])) / 2.0).detach())
+
+    def forward(self, log_scales):
+        E = ((log_scales - self.loc) * torch.exp(-self.log_scale)) ** 2 / 2.0
+        return -E - self.log_scale - self._log_sqrt_2pi
+
+
+class GammaPrior(nn.Module):
+    """
+    Wrapping torch distribution is even worse than copy paste -_-
+    This prior is written as a prior p(scale) over the scale, with log p(scale) = forward(-2*log_scale) + cst.
+    For a prior p(log_scale) over log_scale, 
+        log p(log_scale) = forward(-2*log_scale) + log_scale + cst. by change of variable.
+
+    PS remove constants if you want
+    """
+
+    def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
+        super(GammaPrior, self).__init__() 
+        
+        if not learnable:
+            shape_learnable=False
+            rate_learnable=False
+            
+        shape_is_float = True
+        try:
+            val = float(shape)
+        except:
+            shape_is_float = False
+
+        if shape_is_float:
+            self.shape = nn.Parameter(torch.Tensor([shape]), requires_grad=shape_learnable)
+        else:
+            if len(shape) != 1:
+                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(shape)))
+            self.shape = nn.Parameter(shape.clone().squeeze().detach()).requires_grad_(shape_learnable)
+            
+        rate_is_float = True
+
+        try:
+            val = float(rate)
+        except:
+            rate_is_float = False
+
+        if rate_is_float:
+            self.rate = nn.Parameter(torch.Tensor([rate]), requires_grad=rate_learnable)
+        else:
+            if len(rate) != 1:
+                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(rate)))
+            self.rate = nn.Parameter(rate.clone().squeeze().detach()).requires_grad_(rate_learnable)
+            
+    def expectation(self):
+        return self.shape/self.rate
+    
+    def forward(self, log_precision):
+        return self.shape * torch.log(self.rate) + (self.shape - 1) * log_precision - \
+               self.rate * torch.exp(log_precision) - torch.lgamma(self.shape)
+    
+    
+class ScaleExpGammaPrior(nn.Module):
+    '''
+    This is a prior p(log_scale) on the log_scale parameter (suitable for a positive scale parameter).
+    '''
+
+    def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
+        super(ScaleExpGammaPrior, self).__init__() 
+        self.gamma_prior = GammaPrior(shape, rate, shape_learnable, rate_learnable, learnable)
+        
+    def expectation(self):
+        return torch.digamma(self.gamma_prior.shape) - torch.log(self.gamma_prior.rate)
+
+    def forward(self, log_scale):
+        '''
+        We assume scale has the virtual unit of a standard deviation, -2*log_scale has the virtual unit of a log_precision.
+        '''
+        
+        return self.gamma_prior(-2.0 * log_scale) + log_scale

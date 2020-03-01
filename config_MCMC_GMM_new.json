@@ -21,26 +21,19 @@
 	    }
     },
     "reg_loss": {
-        "type": "RegLossL2_New",
+        "type": "RegLoss_LogNormal",
         "args": {
             "diff_op": "GradientOperator",
-	    "k_init": 442368.0,
-            "w_reg_init": 0.2
+	    "learnable": true
         }
     },
-    "reg_loss_dof_prior": {
-    	"type": "RegLossGammaPrior",
-	"args": {
-	    "y0": 10000.0,
-	    "r0": 0.5
-	}
+    "reg_loss_prior_loc": {
+    	"type": "NormalPrior",
+	"args": {}
     },
-    "reg_loss_w_reg_prior": {
-	"type": "ScaleLogNormalPrior",
-	"args": {
-	    "loc": -1.60,
-	    "scale": 0.1
-	}
+    "reg_loss_prior_scale": {
+    	"type": "ScaleExpGammaPrior",
+	"args": {}
     },
     "entropy_loss": {
         "type": "EntropyMultivariateNormal",

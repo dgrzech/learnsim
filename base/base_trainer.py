@@ -12,7 +12,7 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_dof_prior, reg_loss_w_reg_prior, entropy_loss,
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale, entropy_loss,
                  transformation_model, registration_module, config):
         self.config = config
         self.checkpoint_dir = config.save_dir
@@ -29,8 +29,8 @@ class BaseTrainer:
         self.proportion_prior = proportion_prior.to(self.device)
 
         self.reg_loss = reg_loss.to(self.device)
-        self.reg_loss_dof_prior = reg_loss_dof_prior.to(self.device)
-        self.reg_loss_w_reg_prior = reg_loss_w_reg_prior.to(self.device)
+        self.reg_loss_prior_loc = reg_loss_prior_loc.to(self.device)
+        self.reg_loss_prior_scale = reg_loss_prior_scale.to(self.device)
 
         self.entropy_loss = entropy_loss.to(self.device)
 
@@ -43,8 +43,8 @@ class BaseTrainer:
             self.proportion_prior = torch.nn.DataParallel(proportion_prior, device_ids=device_ids)
 
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
-            self.reg_loss_dof_prior = torch.nn.DataParallel(reg_loss_dof_prior, device_ids=device_ids)
-            self.reg_loss_w_reg_prior = torch.nn.DataParallel(reg_loss_w_reg_prior, device_ids=device_ids)
+            self.reg_loss_prior_loc = torch.nn.DataParallel(reg_loss_prior_loc, device_ids=device_ids)
+            self.reg_loss_prior_scale = torch.nn.DataParallel(reg_loss_prior_scale, device_ids=device_ids)
 
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
 
