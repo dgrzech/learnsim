@@ -227,7 +227,7 @@ def save_grid_to_disk(grid, file_path):
     """
 
     grid = grid.cpu().numpy()
-    
+
     x = grid[0, :, :, :]
     y = grid[1, :, :, :]
     z = grid[2, :, :, :]
@@ -437,12 +437,12 @@ def vd_reg(nabla_vx, nabla_vy, nabla_vz, mask):
         cov_nabla_vx_y = torch.sum(nabla_vx_masked[:, :, :, :-1] * nabla_vx_masked[:, :, :, 1:]) / no_unmasked_voxels
         cov_nabla_vx_z = \
             torch.sum(nabla_vx_masked[:, :, :, :, :-1] * nabla_vx_masked[:, :, :, :, 1:]) / no_unmasked_voxels
-        
+
         cov_nabla_vy_x = torch.sum(nabla_vy_masked[:, :, :-1] * nabla_vy_masked[:, :, 1:]) / no_unmasked_voxels
         cov_nabla_vy_y = torch.sum(nabla_vy_masked[:, :, :, :-1] * nabla_vy_masked[:, :, :, 1:]) / no_unmasked_voxels
         cov_nabla_vy_z = \
             torch.sum(nabla_vy_masked[:, :, :, :, :-1] * nabla_vy_masked[:, :, :, :, 1:]) / no_unmasked_voxels
-        
+
         cov_nabla_vz_x = torch.sum(nabla_vz_masked[:, :, :-1] * nabla_vz_masked[:, :, 1:]) / no_unmasked_voxels
         cov_nabla_vz_y = torch.sum(nabla_vz_masked[:, :, :, :-1] * nabla_vz_masked[:, :, :, 1:]) / no_unmasked_voxels
         cov_nabla_vz_z = \
@@ -451,11 +451,11 @@ def vd_reg(nabla_vx, nabla_vy, nabla_vz, mask):
         corr_vx_x = cov_nabla_vx_x / var_nabla_vx
         corr_vx_y = cov_nabla_vx_y / var_nabla_vx
         corr_vx_z = cov_nabla_vx_z / var_nabla_vx
-        
+
         corr_vy_x = cov_nabla_vy_x / var_nabla_vy
         corr_vy_y = cov_nabla_vy_y / var_nabla_vy
         corr_vy_z = cov_nabla_vy_z / var_nabla_vy
-        
+
         corr_vz_x = cov_nabla_vz_x / var_nabla_vz
         corr_vz_y = cov_nabla_vz_y / var_nabla_vz
         corr_vz_z = cov_nabla_vz_z / var_nabla_vz
@@ -463,11 +463,11 @@ def vd_reg(nabla_vx, nabla_vy, nabla_vz, mask):
         sq_vd_nabla_vx_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_x), max=1.0)
         sq_vd_nabla_vx_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_y), max=1.0)
         sq_vd_nabla_vx_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_z), max=1.0)
-        
+
         sq_vd_nabla_vy_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_x), max=1.0)
         sq_vd_nabla_vy_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_y), max=1.0)
         sq_vd_nabla_vy_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_z), max=1.0)
-        
+
         sq_vd_nabla_vz_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_x), max=1.0)
         sq_vd_nabla_vz_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_y), max=1.0)
         sq_vd_nabla_vz_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_z), max=1.0)
@@ -484,7 +484,7 @@ class MetricTracker:
         self.writer = writer
         self._data = pd.DataFrame(index=keys, columns=['total', 'counts', 'average'])
         self.reset()
-        
+
     def reset(self):
         for col in self._data.columns:
             self._data[col].values[:] = 0
@@ -499,6 +499,6 @@ class MetricTracker:
 
     def avg(self, key):
         return self._data.average[key]
-    
+
     def result(self):
         return dict(self._data.average)

@@ -5,13 +5,16 @@
     "data_loss": {
         "type": "GaussianMixtureLoss",
         "args": {
-	        "num_components": 4,
+            "num_components": 4,
             "s": 3
 	    }
     },
     "scale_prior": {
-        "type": "ScaleLogNormalPrior",
-        "args": {}
+        "type": "LogScaleNormalPrior",
+        "args": {
+            "loc": 0.0,
+		    "scale": 2.30
+	    }
     },
     "proportion_prior": {
 	    "type": "DirichletPrior",
@@ -20,13 +23,33 @@
 	        "alpha": 0.5
 	    }
     },
+
     "reg_loss": {
-        "type": "RegLossL2",
+        "type": "RegLoss_LogNormal",
         "args": {
             "diff_op": "GradientOperator",
-            "w_reg": 0.2
+	        "learnable": true,
+            "loc_learnable": true,
+	        "scale_learnable": true,
+	        "w_reg": 0.2
         }
     },
+    "reg_loss_prior_loc": {
+    	"type": "LogEnergyExpGammaPrior",
+	    "args": {
+	        "w_reg": 0.2,
+	        "dof": 2654208.0,
+	        "learnable": false
+	    }
+    },
+    "reg_loss_prior_scale": {
+    	"type": "LogScaleNormalPrior",
+	    "args": {
+	        "loc": 2.7973,
+	        "scale": 5.0
+	    }
+    },
+
     "entropy_loss": {
         "type": "EntropyMultivariateNormal",
         "args": {}
@@ -75,7 +98,6 @@
 
     "use_moving_mask": false,
     "vd": true,
-    "vd_reg": false,
 
     "trainer": {
         "no_iters_vi": 1536,

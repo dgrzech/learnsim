@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from torch import nn
 
 import torch
@@ -9,6 +9,7 @@ import torch.nn.functional as F
 differential operator
 """    
 
+
 def _get_all_subclasses(cls):
     for scls in cls.__subclasses__():
         yield scls
@@ -17,10 +18,10 @@ def _get_all_subclasses(cls):
 
 
 class DifferentialOperator(nn.Module, ABC):
-    '''
+    """
     from_string is just a convenience method to create an instance of subclass s from string s.
     e.g. DifferentialOperator.from_string('GradientOperator')
-    '''
+    """
     def __init__(self):
         super(DifferentialOperator, self).__init__()
         
@@ -33,21 +34,21 @@ class DifferentialOperator(nn.Module, ABC):
         raise ValueError('Unknown differential operator: {}'.format(s))
         
     def forward(self, input):
-        '''
+        """
         Override in children classes, default behaviour is identity map.
         Our GradientOperator should stack the 3 x, y, z maps on a new dimension.
-        '''
+        """
         return input
 
     
 class Fourier1stDerivativeOperator(DifferentialOperator):
-    '''
+    """
     Square root of the Laplacian operator computed in frequency domain:
         alpha -> alpha * |omega|
     (technically it's not the nabla operator)
     
     image_size (int): number of voxels along x, y, or z (assumed to be the same)
-    '''
+    """
     
     def __init__(self, image_size):
         super(DifferentialOperator, self).__init__()
@@ -55,16 +56,13 @@ class Fourier1stDerivativeOperator(DifferentialOperator):
         self.omega_abs = nn.Parameter(omega_sq.sqrt_().unsqueeze(-1)).requires_grad_(False)
 
     def forward(self, input):
-        '''
+        """
         input: a field in frequency domain ('z_hat'), with its real and imaginary parts along dim=-1
-        '''
+        """
         return input * self.omega_abs
     
     
 class GradientOperator(DifferentialOperator):
-    '''
-    Modified (and maybe broken :)) to return a single tensor, do adjust for the best.
-    '''
     def __init__(self):
         super(GradientOperator, self).__init__()
 
@@ -94,4 +92,3 @@ class GradientOperator(DifferentialOperator):
         nabla_vz = torch.stack((dv_dx[:, 2], dv_dy[:, 2], dv_dz[:, 2]), 1)
 
         return torch.stack([nabla_vx, nabla_vy, nabla_vz], dim=-1)
-

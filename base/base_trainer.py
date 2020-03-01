@@ -1,9 +1,7 @@
 from logger import TensorboardWriter
-import model.loss as model_loss
 
 from abc import abstractmethod
 
-import math
 import torch
 
 
@@ -12,8 +10,8 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale, entropy_loss,
-                 transformation_model, registration_module, config):
+    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
+                 entropy_loss, transformation_model, registration_module, config):
         self.config = config
         self.checkpoint_dir = config.save_dir
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])

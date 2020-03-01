@@ -41,7 +41,7 @@ class BiobankDataset(Dataset):
 
         if listdir(mask_paths):
             mask_filenames = sorted([path.join(mask_paths, f)
-                                    for f in listdir(mask_paths) if path.isfile(path.join(mask_paths, f))])
+                                     for f in listdir(mask_paths) if path.isfile(path.join(mask_paths, f))])
         else:
             mask_filenames = ['' for _ in range(len(im_filenames))]
 
@@ -113,7 +113,7 @@ class BiobankDataset(Dataset):
 
         # pad
         im_moving_arr_padded = np.pad(im_moving_arr,
-                                     ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+                                      ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
         # resize
         im_moving = torch.from_numpy(im_moving_arr_padded)
         im_moving.unsqueeze_(0).unsqueeze_(0)
@@ -127,7 +127,7 @@ class BiobankDataset(Dataset):
 
             # pad
             mask_moving_arr_padded = np.pad(mask_moving_arr,
-                                           ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+                                            ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
             # resize
             mask_moving = torch.from_numpy(mask_moving_arr_padded)
             mask_moving.unsqueeze_(0).unsqueeze_(0)

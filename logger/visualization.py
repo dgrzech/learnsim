@@ -34,8 +34,8 @@ class TensorboardWriter:
 
             if not succeeded:
                 message = "Warning: visualization (Tensorboard) is configured to use, but currently not installed on " \
-                    "this machine. Please install TensorboardX with 'pip install tensorboardx', upgrade PyTorch to " \
-                    "version >= 1.1 to use 'torch.utils.tensorboard' or turn off the option in the 'config.json' file."
+                          "this machine. Please install TensorboardX with 'pip install tensorboardx', upgrade PyTorch to " \
+                          "version >= 1.1 to use 'torch.utils.tensorboard' or turn off the option in the 'config.json' file."
                 logger.warning(message)
 
         self.step = 0
@@ -68,6 +68,7 @@ class TensorboardWriter:
             def wrapper(tag, data, *args, **kwargs):
                 if add_data is not None:
                     add_data(tag, data, self.step, *args, **kwargs)
+
             return wrapper
         else:
             # default action for returning methods defined in this class, set_step() for instance.
@@ -214,7 +215,7 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
         axs[4, i].imshow(im_flip(log_det_J_slices[i]))
 
         if w_reg_slices is not None:
-           axs[5, i].imshow(im_flip(w_reg_slices[i]))
+            axs[5, i].imshow(im_flip(w_reg_slices[i]))
 
     return fig
 
@@ -257,7 +258,7 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
 
         log_det_J = log_det_J_batch[loop_idx]
         log_det_J_slices = [log_det_J[:, :, mid_x], log_det_J[:, mid_y, :], log_det_J[mid_z, :, :]]
-        
+
         if log_w_reg is not None:
             w_reg_slices = [w_reg[:, :, mid_x], w_reg[:, mid_y], w_reg[mid_z]]
             writer.add_figure('q_v/' + str(im_pair_idx),
