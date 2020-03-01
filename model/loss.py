@@ -4,6 +4,8 @@ from torch.nn.functional import log_softmax
 
 from utils import gaussian_kernel_3d, transform_coordinates_inv, vd_reg, GaussianGrad, DifferentialOperator
 
+import model.distributions as model_distr
+
 import math
 import numpy as np
 import torch
@@ -500,6 +502,16 @@ class RegLoss_LogNormal(RegLoss_EnergyBased):
         return log_y + self.log_scale + 0.5 * ((log_y - self.loc) / scale) ** 2
 
 
+class RegLoss_LogNormal_L2(RegLoss_EnergyBased):
+    def __init__(self, diff_op=None, loc=1.0, scale=1.0, learnable=True):
+        super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
+        self.gamma_distr = model_distr._GammaDistribution(96.0 ** 3 * 1.5, 0.1, learnable=False)
+        
+    def _mlog_energy_prior(self, y, *args, **kwargs):
+        log_y = torch.log(y)
+        return -1.0 * self.gamma_distr(log_y)
+
+
 """
 entropy
 """
@@ -549,130 +561,3 @@ class EntropyMultivariateNormal(Entropy):
             t2 = torch.pow(torch.sum(v * u_n), 2) / (1.0 + torch.sum(torch.pow(u_n, 2)))
 
             return 0.5 * (t1 - t2)
-
-
-'''
-useful hyperpriors
-'''
-        
-class NormalPrior(nn.Module):
-    """
-    Lots of wrapping for not much -_-
-    This prior is written as a prior p(log_scale) over log_scale.
-    """
-
-    def __init__(self, loc=None, scale=None):
-        super(NormalPrior, self).__init__()
-
-        if loc is None:
-            loc = 0.
-        if scale is None:
-            scale = math.log(10)
-
-        loc_is_float = True
-
-        try:
-            val = float(loc)
-        except:
-            loc_is_float = False
-
-        if loc_is_float:
-            loc = torch.Tensor([loc])
-        else:
-            if len(loc) != 1:
-                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(loc)))
-            loc = loc.clone()
-
-        scale_is_float = True
-
-        try:
-            val = float(scale)
-        except:
-            scale_is_float = False
-
-        if scale_is_float:
-            scale = torch.Tensor([scale])
-        else:
-            if len(scale) != 1:
-                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(scale)))
-            scale = scale.clone()
-
-        self.loc = nn.Parameter(loc.detach(), requires_grad=False)
-        self.log_scale = nn.Parameter(torch.log(scale).detach(), requires_grad=False)
-        self.register_buffer('_log_sqrt_2pi', (torch.log(torch.Tensor([math.pi * 2.0])) / 2.0).detach())
-
-    def forward(self, log_scales):
-        E = ((log_scales - self.loc) * torch.exp(-self.log_scale)) ** 2 / 2.0
-        return -E - self.log_scale - self._log_sqrt_2pi
-
-
-class GammaPrior(nn.Module):
-    """
-    Wrapping torch distribution is even worse than copy paste -_-
-    This prior is written as a prior p(scale) over the scale, with log p(scale) = forward(-2*log_scale) + cst.
-    For a prior p(log_scale) over log_scale, 
-        log p(log_scale) = forward(-2*log_scale) + log_scale + cst. by change of variable.
-
-    PS remove constants if you want
-    """
-
-    def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
-        super(GammaPrior, self).__init__() 
-        
-        if not learnable:
-            shape_learnable=False
-            rate_learnable=False
-            
-        shape_is_float = True
-        try:
-            val = float(shape)
-        except:
-            shape_is_float = False
-
-        if shape_is_float:
-            self.shape = nn.Parameter(torch.Tensor([shape]), requires_grad=shape_learnable)
-        else:
-            if len(shape) != 1:
-                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(shape)))
-            self.shape = nn.Parameter(shape.clone().squeeze().detach()).requires_grad_(shape_learnable)
-            
-        rate_is_float = True
-
-        try:
-            val = float(rate)
-        except:
-            rate_is_float = False
-
-        if rate_is_float:
-            self.rate = nn.Parameter(torch.Tensor([rate]), requires_grad=rate_learnable)
-        else:
-            if len(rate) != 1:
-                raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(rate)))
-            self.rate = nn.Parameter(rate.clone().squeeze().detach()).requires_grad_(rate_learnable)
-            
-    def expectation(self):
-        return self.shape/self.rate
-    
-    def forward(self, log_precision):
-        return self.shape * torch.log(self.rate) + (self.shape - 1) * log_precision - \
-               self.rate * torch.exp(log_precision) - torch.lgamma(self.shape)
-    
-    
-class ScaleExpGammaPrior(nn.Module):
-    '''
-    This is a prior p(log_scale) on the log_scale parameter (suitable for a positive scale parameter).
-    '''
-
-    def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
-        super(ScaleExpGammaPrior, self).__init__() 
-        self.gamma_prior = GammaPrior(shape, rate, shape_learnable, rate_learnable, learnable)
-        
-    def expectation(self):
-        return torch.digamma(self.gamma_prior.shape) - torch.log(self.gamma_prior.rate)
-
-    def forward(self, log_scale):
-        '''
-        We assume scale has the virtual unit of a standard deviation, -2*log_scale has the virtual unit of a log_precision.
-        '''
-        
-        return self.gamma_prior(-2.0 * log_scale) + log_scale

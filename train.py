@@ -7,6 +7,7 @@ import torch
 import numpy as np
 
 import data_loader.data_loaders as module_data
+import model.distributions as model_distr
 import model.loss as model_loss
 import utils.registration as registration
 import utils.transformation as transformation
@@ -41,8 +42,8 @@ def main(config):
     proportion_prior = config.init_obj('proportion_prior', model_loss)
 
     reg_loss = config.init_obj('reg_loss', model_loss)
-    reg_loss_prior_loc = config.init_obj('reg_loss_prior_loc', model_loss)
-    reg_loss_prior_scale = config.init_obj('reg_loss_prior_scale', model_loss)
+    reg_loss_prior_loc = config.init_obj('reg_loss_prior_loc', model_distr)
+    reg_loss_prior_scale = config.init_obj('reg_loss_prior_scale', model_distr)
 
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
