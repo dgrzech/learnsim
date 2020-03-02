@@ -85,9 +85,9 @@ class Trainer(BaseTrainer):
                                                  {'params': [self.data_loss.logits], 'lr': 1e-2}],
                                                 lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
 
-        data_term = self.data_loss(res.detach()) * alpha
-        data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
-        data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
+        data_term = self.data_loss(res.detach()).sum() * alpha
+        data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
+        data_term -= self.proportion_prior(self.data_loss.log_proportions()).sum()
 
         self.optimizer_mixture_model.zero_grad()
         data_term.backward()
@@ -167,18 +167,18 @@ class Trainer(BaseTrainer):
             self._step_GMM(res1_masked, alpha1)
 
             # q_v
-            data_term = self.data_loss(res1_masked) / 2.0 * alpha1
-            data_term += self.data_loss(res2_masked) / 2.0 * alpha2
+            data_term = self.data_loss(res1_masked).sum() / 2.0 * alpha1
+            data_term += self.data_loss(res2_masked).sum() / 2.0 * alpha2
 
-            data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
-            data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
+            data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
+            data_term -= self.proportion_prior(self.data_loss.log_proportions()).sum()
 
             reg_term1, log_y1 = self.reg_loss(v_sample1, dof=self.dof)
             reg_term2, log_y2 = self.reg_loss(v_sample2, dof=self.dof)
 
-            reg_term_prior_loc = self.reg_loss_prior_loc(log_y1) / 2.0
-            reg_term_prior_loc += self.reg_loss_prior_loc(log_y2) / 2.0
-            reg_term_prior_scale = self.reg_loss_prior_scale(self.reg_loss.log_scale)
+            reg_term_prior_loc = self.reg_loss_prior_loc(log_y1).sum() / 2.0
+            reg_term_prior_loc += self.reg_loss_prior_loc(log_y2).sum() / 2.0
+            reg_term_prior_scale = self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
 
             reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0 - reg_term_prior_loc - reg_term_prior_scale
 
@@ -311,13 +311,15 @@ class Trainer(BaseTrainer):
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
-                reg_term, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=self.dof)
+                reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=self.dof)
+                reg_term = reg.sum()
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
-                reg_term, log_y = self.reg_loss(v_curr_state_noise, dof=self.dof)
+                reg, log_y = self.reg_loss(v_curr_state_noise, dof=self.dof)
+                reg_term = reg.sum()
             
-            reg_term -= self.reg_loss_prior_loc(log_y)
-            reg_term -= self.reg_loss_prior_scale(self.reg_loss.log_scale)
+            reg_term -= self.reg_loss_prior_loc(log_y).sum()
+            reg_term -= self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
 
             transformation = add_noise_uniform(transformation)
             im_moving_warped = self.registration_module(im_moving, transformation)
@@ -352,11 +354,11 @@ class Trainer(BaseTrainer):
             self._step_GMM(res_masked, alpha)
 
             # MCMC
-            data_term = self.data_loss(res_masked) * alpha
-            data_term -= torch.sum(self.scale_prior(self.data_loss.log_scales()))
-            data_term -= torch.sum(self.proportion_prior(self.data_loss.log_proportions()))
+            data_term = self.data_loss(res_masked).sum() * alpha
+            data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
+            data_term -= self.proportion_prior(self.data_loss.log_proportions()).sum()
 
-            loss = data_term + reg_term.sum()
+            loss = data_term + reg_term
 
             self.optimizer_mala.zero_grad()
             loss.backward()  # backprop

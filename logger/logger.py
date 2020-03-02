@@ -1,7 +1,7 @@
 from os import path
 
 from pathlib import Path
-from utils import calc_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk
+from utils import calc_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk, transform_coordinates_inv
 
 import logging
 import logging.config
@@ -122,13 +122,15 @@ def save_norms(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batc
 
     im_pair_idxs = im_pair_idxs.tolist()
 
-    mu_v_batch = var_params_batch['mu_v']
+    mu_v_batch_voxel_units = transform_coordinates_inv(var_params_batch['mu_v'])
+    displacement_batch_voxel_units = transform_coordinates_inv(displacement_batch)
+
     log_var_v_batch = var_params_batch['log_var_v']
     sigma_v_batch = torch.exp(0.5 * log_var_v_batch)
     u_v_batch = var_params_batch['u_v']
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        temp = calc_norm(mu_v_batch[loop_idx])
+        temp = calc_norm(mu_v_batch_voxel_units[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
         save_mu_v_norm(save_dirs_dict, im_pair_idx, mu_v_norm)
 
@@ -140,7 +142,7 @@ def save_norms(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batc
         u_v_norm = temp[0].cpu().numpy()
         save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm)
 
-        temp = calc_norm(displacement_batch[loop_idx])
+        temp = calc_norm(displacement_batch_voxel_units[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
         save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm)
 
@@ -182,14 +184,16 @@ def save_fields(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_bat
 
     im_pair_idxs = im_pair_idxs.tolist()
 
-    mu_v_batch = var_params_batch['mu_v']
+    mu_v_batch_voxel_units = transform_coordinates_inv(var_params_batch['mu_v'])
+    displacement_batch_voxel_units = transform_coordinates_inv(displacement_batch)
+
     log_var_v_batch = var_params_batch['log_var_v']
     sigma_v_batch = torch.exp(0.5 * log_var_v_batch)
     u_v_batch = var_params_batch['u_v']
     log_det_J_batch = log_det_J_batch.cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        mu_v = mu_v_batch[loop_idx]
+        mu_v = mu_v_batch_voxel_units[loop_idx]
         save_mu_v_field(save_dirs_dict, im_pair_idx, mu_v)
 
         sigma_v = sigma_v_batch[loop_idx]
@@ -198,7 +202,7 @@ def save_fields(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_bat
         u_v = u_v_batch[loop_idx]
         save_u_v_field(save_dirs_dict, im_pair_idx, u_v)
 
-        displacement = displacement_batch[loop_idx]
+        displacement = displacement_batch_voxel_units[loop_idx]
         save_displacement_field(save_dirs_dict, im_pair_idx, displacement)
 
         log_det_J = log_det_J_batch[loop_idx]
@@ -235,6 +239,8 @@ def save_sample(save_dirs_dict, im_pair_idxs, sample_no, im_moving_warped_batch,
     """
 
     im_pair_idxs = im_pair_idxs.tolist()
+
+    v_batch_voxel_units = transform_coordinates_inv(v_batch)
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -244,6 +250,6 @@ def save_sample(save_dirs_dict, im_pair_idxs, sample_no, im_moving_warped_batch,
                       'sample_' + str(sample_no) + '_im_moving_warped_' + str(im_pair_idx) + '.nii.gz')
         save_im_to_disk(im_moving_warped, im_moving_warped_path)
 
-        v = v_batch[loop_idx]
+        v = v_batch_voxel_units[loop_idx]
         v_path = path.join(save_dirs_dict['samples'], 'sample_' + str(sample_no) + '_v_' + str(im_pair_idx) + '.vtk')
         save_field_to_disk(v, v_path)

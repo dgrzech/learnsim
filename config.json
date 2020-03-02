@@ -1,5 +1,5 @@
 {
-    "name": "mcmc_gmm_sobolev",
+    "name": "spatial",
     "n_gpu": 1,
 
     "data_loss": {
@@ -73,7 +73,7 @@
     "optimizer_mala": {
         "type": "SGD",
         "args": {
-            "lr": 1e-4
+            "lr": 5e-4
         }
     },
 

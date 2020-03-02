@@ -187,7 +187,7 @@ def rescale_residuals(res, mask, data_loss):
     return torch.sum(scaled_res * scaled_res.grad, dim=-1).view(res.shape)
 
 
-def save_field_to_disk(field, file_path):
+def save_field_to_disk(field, file_path, spacing=(1, 1, 1)):
     """
     save a vector field to a .vtk file
 
@@ -211,7 +211,7 @@ def save_field_to_disk(field, file_path):
     vectors = vectors.transpose(2, 1, 0, 3).copy()
     vectors.shape = vectors.size // 3, 3
 
-    im_vtk = tvtk.ImageData(spacing=(1, 1, 1), origin=(0, 0, 0), dimensions=dim)
+    im_vtk = tvtk.ImageData(spacing=spacing, origin=(0, 0, 0), dimensions=dim)
     im_vtk.point_data.vectors = vectors
     im_vtk.point_data.vectors.name = 'field'
 

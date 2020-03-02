@@ -6,7 +6,7 @@ import numpy as np
 import seaborn as sns
 import torch
 
-from utils import calc_norm
+from utils import calc_norm, transform_coordinates_inv
 
 
 def im_flip(array):
@@ -183,19 +183,14 @@ vector fields
 """
 
 
-def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices,
-                w_reg_slices=None):
+def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices):
     """
     plot of the norms of output vector fields to log in tensorboard
     """
 
-    if w_reg_slices is not None:
-        fig, axs = plt.subplots(nrows=6, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
-        rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J', 'w_reg']
-    else:
-        fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
-        rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J']
+    fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
 
+    rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J']
     cols = ['axial', 'coronal', 'sagittal']
 
     for ax, col in zip(axs[0], cols):
@@ -214,35 +209,32 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
         axs[3, i].imshow(im_flip(u_v_norm_slices[i]))
         axs[4, i].imshow(im_flip(log_det_J_slices[i]))
 
-        if w_reg_slices is not None:
-            axs[5, i].imshow(im_flip(w_reg_slices[i]))
-
     return fig
 
 
-def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch, log_w_reg=None):
+def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
     im_pair_idxs = im_pair_idxs.tolist()
 
     mu_v_batch = var_params_batch['mu_v']
+    mu_v_batch_voxel_units = transform_coordinates_inv(mu_v_batch)
+    displacement_batch_voxel_units = transform_coordinates_inv(displacement_batch)
+
     log_var_v_batch = var_params_batch['log_var_v']
     sigma_v_batch = torch.exp(0.5 * log_var_v_batch)
     u_v_batch = var_params_batch['u_v']
 
     log_det_J_batch = log_det_J_batch.cpu().numpy()
 
-    if log_w_reg is not None:
-        w_reg = torch.exp(log_w_reg).cpu().numpy()
-
     mid_x = int(mu_v_batch.shape[4] / 2)
     mid_y = int(mu_v_batch.shape[3] / 2)
     mid_z = int(mu_v_batch.shape[2] / 2)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        temp = calc_norm(mu_v_batch[loop_idx])
+        temp = calc_norm(mu_v_batch_voxel_units[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
         mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
 
-        temp = calc_norm(displacement_batch[loop_idx])
+        temp = calc_norm(displacement_batch_voxel_units[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
         displacement_norm_slices = [displacement_norm[:, :, mid_x],
                                     displacement_norm[:, mid_y, :],
@@ -259,15 +251,9 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
         log_det_J = log_det_J_batch[loop_idx]
         log_det_J_slices = [log_det_J[:, :, mid_x], log_det_J[:, mid_y, :], log_det_J[mid_z, :, :]]
 
-        if log_w_reg is not None:
-            w_reg_slices = [w_reg[:, :, mid_x], w_reg[:, mid_y], w_reg[mid_z]]
-            writer.add_figure('q_v/' + str(im_pair_idx),
-                              fields_grid(mu_v_norm_slices, displacement_norm_slices,
-                                          sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices, w_reg_slices))
-        else:
-            writer.add_figure('q_v/' + str(im_pair_idx),
-                              fields_grid(mu_v_norm_slices, displacement_norm_slices,
-                                          sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
+        writer.add_figure('q_v/' + str(im_pair_idx),
+                          fields_grid(mu_v_norm_slices, displacement_norm_slices,
+                                      sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
 
 
 """
@@ -308,6 +294,9 @@ def log_sample(writer, im_pair_idxs, data_loss, im_moving_warped_batch, res_batc
     im_pair_idxs = im_pair_idxs.tolist()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
+    v_batch_voxel_units = transform_coordinates_inv(v_batch)
+    displacement_batch_voxel_units = transform_coordinates_inv(displacement_batch)
+
     mid_x = int(v_batch.shape[4] / 2)
     mid_y = int(v_batch.shape[3] / 2)
     mid_z = int(v_batch.shape[2] / 2)
@@ -318,11 +307,11 @@ def log_sample(writer, im_pair_idxs, data_loss, im_moving_warped_batch, res_batc
                                    im_moving_warped[:, mid_y, :],
                                    im_moving_warped[mid_z, :, :]]
 
-        temp = calc_norm(v_batch[loop_idx])
+        temp = calc_norm(v_batch_voxel_units[loop_idx])
         mu_v_norm = temp[0].cpu().numpy()
         mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
 
-        temp = calc_norm(displacement_batch[loop_idx])
+        temp = calc_norm(displacement_batch_voxel_units[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
         displacement_norm_slices = [displacement_norm[:, :, mid_x],
                                     displacement_norm[:, mid_y, :],
