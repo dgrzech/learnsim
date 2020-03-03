@@ -1,7 +1,8 @@
 from os import path
 
 from pathlib import Path
-from utils import calc_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk, transform_coordinates_inv
+from utils import calc_norm, read_json, save_field_to_disk, save_grid_to_disk, save_im_to_disk, \
+    transform_coordinates_inv
 
 import logging
 import logging.config
@@ -48,29 +49,32 @@ images
 """
 
 
-def save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed):
+def save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed, spacing):
     im_fixed_path = path.join(save_dirs_dict['images'], 'im_fixed_' + str(im_pair_idx) + '.nii.gz')
     
     if not path.exists(im_fixed_path):
-        save_im_to_disk(im_fixed, im_fixed_path)
+        save_im_to_disk(im_fixed, im_fixed_path, spacing)
 
         
-def save_im_moving(save_dirs_dict, im_pair_idx, im_moving):
+def save_im_moving(save_dirs_dict, im_pair_idx, im_moving, spacing):
     im_moving_path = path.join(save_dirs_dict['images'], 'im_moving_' + str(im_pair_idx) + '.nii.gz')
     
     if not path.exists(im_moving_path):
-        save_im_to_disk(im_moving, im_moving_path)
+        save_im_to_disk(im_moving, im_moving_path, spacing)
 
 
-def save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped):
+def save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped, spacing):
     im_moving_warped_path = path.join(save_dirs_dict['images'], 'im_moving_warped_' + str(im_pair_idx) + '.nii.gz')
-    save_im_to_disk(im_moving_warped, im_moving_warped_path)
+    save_im_to_disk(im_moving_warped, im_moving_warped_path, spacing)
 
 
-def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
+def save_images(data_loader, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
     """
     save input and output images to .nii.gz
     """
+
+    save_dirs_dict = data_loader.save_dirs
+    spacing = data_loader.dataset.spacing
 
     im_pair_idxs = im_pair_idxs.tolist()
 
@@ -80,13 +84,13 @@ def save_images(save_dirs_dict, im_pair_idxs, im_fixed_batch, im_moving_batch, i
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_fixed = im_fixed_batch[loop_idx, 0]
-        save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed)
+        save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed, spacing)
 
         im_moving = im_moving_batch[loop_idx, 0]
-        save_im_moving(save_dirs_dict, im_pair_idx, im_moving)
+        save_im_moving(save_dirs_dict, im_pair_idx, im_moving, spacing)
 
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-        save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped)
+        save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped, spacing)
 
 
 """
@@ -115,10 +119,13 @@ def save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm):
     save_im_to_disk(u_v_norm, u_v_norm_path)
 
 
-def save_norms(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batch):
+def save_norms(data_loader, im_pair_idxs, var_params_batch, displacement_batch):
     """
     save norms of output vector fields to .nii.gz
     """
+
+    save_dirs_dict = data_loader.save_dirs
+    spacing = data_loader.dataset.spacing
 
     im_pair_idxs = im_pair_idxs.tolist()
 
@@ -130,19 +137,19 @@ def save_norms(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batc
     u_v_batch = var_params_batch['u_v']
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        temp = calc_norm(mu_v_batch_voxel_units[loop_idx])
+        temp = calc_norm(mu_v_batch_voxel_units[loop_idx]) * spacing[0]
         mu_v_norm = temp[0].cpu().numpy()
         save_mu_v_norm(save_dirs_dict, im_pair_idx, mu_v_norm)
 
-        temp = calc_norm(sigma_v_batch[loop_idx])
+        temp = calc_norm(sigma_v_batch[loop_idx]) * spacing[0]
         sigma_v_norm = temp[0].cpu().numpy()
         save_sigma_v_norm(save_dirs_dict, im_pair_idx, sigma_v_norm)
 
-        temp = calc_norm(u_v_batch[loop_idx])
+        temp = calc_norm(u_v_batch[loop_idx]) * spacing[0]
         u_v_norm = temp[0].cpu().numpy()
         save_u_v_norm(save_dirs_dict, im_pair_idx, u_v_norm)
 
-        temp = calc_norm(displacement_batch_voxel_units[loop_idx])
+        temp = calc_norm(displacement_batch_voxel_units[loop_idx]) * spacing[0]
         displacement_norm = temp[0].cpu().numpy()
         save_displacement_norm(save_dirs_dict, im_pair_idx, displacement_norm)
 
@@ -157,30 +164,33 @@ def save_log_det_J(save_dirs_dict, im_pair_idx, log_det_J):
     save_im_to_disk(log_det_J, log_det_J_path)
 
 
-def save_displacement_field(save_dirs_dict, im_pair_idx, displacement):
+def save_displacement_field(save_dirs_dict, im_pair_idx, displacement, spacing):
     displacement_path = path.join(save_dirs_dict['fields'], 'displacement_' + str(im_pair_idx) + '.vtk')
-    save_field_to_disk(displacement, displacement_path)
+    save_field_to_disk(displacement, displacement_path, spacing)
 
 
-def save_mu_v_field(save_dirs_dict, im_pair_idx, v):
+def save_mu_v_field(save_dirs_dict, im_pair_idx, v, spacing):
     v_path = path.join(save_dirs_dict['fields'], 'mu_v_' + str(im_pair_idx) + '.vtk')
-    save_field_to_disk(v, v_path)
+    save_field_to_disk(v, v_path, spacing)
 
 
-def save_sigma_v_field(save_dirs_dict, im_pair_idx, sigma_v):
+def save_sigma_v_field(save_dirs_dict, im_pair_idx, sigma_v, spacing):
     sigma_v_field_path = path.join(save_dirs_dict['fields'], 'sigma_v_' + str(im_pair_idx) + '.vtk')
-    save_field_to_disk(sigma_v, sigma_v_field_path)
+    save_field_to_disk(sigma_v, sigma_v_field_path, spacing)
 
 
-def save_u_v_field(save_dirs_dict, im_pair_idx, u_v):
+def save_u_v_field(save_dirs_dict, im_pair_idx, u_v, spacing):
     u_v_field_path = path.join(save_dirs_dict['fields'], 'u_v_' + str(im_pair_idx) + '.vtk')
-    save_field_to_disk(u_v, u_v_field_path)
+    save_field_to_disk(u_v, u_v_field_path, spacing)
 
 
-def save_fields(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
+def save_fields(data_loader, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
     """
     save output vector fields to .vtk
     """
+
+    save_dirs_dict = data_loader.save_dirs
+    spacing = data_loader.dataset.spacing
 
     im_pair_idxs = im_pair_idxs.tolist()
 
@@ -193,17 +203,17 @@ def save_fields(save_dirs_dict, im_pair_idxs, var_params_batch, displacement_bat
     log_det_J_batch = log_det_J_batch.cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        mu_v = mu_v_batch_voxel_units[loop_idx]
-        save_mu_v_field(save_dirs_dict, im_pair_idx, mu_v)
+        mu_v = mu_v_batch_voxel_units[loop_idx] * spacing[0]
+        save_mu_v_field(save_dirs_dict, im_pair_idx, mu_v, spacing)
 
-        sigma_v = sigma_v_batch[loop_idx]
-        save_sigma_v_field(save_dirs_dict, im_pair_idx, sigma_v)
+        sigma_v = sigma_v_batch[loop_idx] * spacing[0]
+        save_sigma_v_field(save_dirs_dict, im_pair_idx, sigma_v, spacing)
 
-        u_v = u_v_batch[loop_idx]
-        save_u_v_field(save_dirs_dict, im_pair_idx, u_v)
+        u_v = u_v_batch[loop_idx] * spacing[0]
+        save_u_v_field(save_dirs_dict, im_pair_idx, u_v, spacing)
 
-        displacement = displacement_batch_voxel_units[loop_idx]
-        save_displacement_field(save_dirs_dict, im_pair_idx, displacement)
+        displacement = displacement_batch_voxel_units[loop_idx] * spacing[0]
+        save_displacement_field(save_dirs_dict, im_pair_idx, displacement, spacing)
 
         log_det_J = log_det_J_batch[loop_idx]
         save_log_det_J(save_dirs_dict, im_pair_idx, log_det_J)
@@ -214,11 +224,12 @@ transformation grids
 """
 
 
-def save_grids(save_dirs_dict, im_pair_idxs, grids):
+def save_grids(data_loader, im_pair_idxs, grids):
     """
     save output structured grids to .vtk
     """
 
+    save_dirs_dict = data_loader.save_dirs
     im_pair_idxs = im_pair_idxs.tolist()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
@@ -233,10 +244,13 @@ samples
 """
 
 
-def save_sample(save_dirs_dict, im_pair_idxs, sample_no, im_moving_warped_batch, v_batch):
+def save_sample(data_loader, im_pair_idxs, sample_no, im_moving_warped_batch, v_batch):
     """
     save output images and vector fields related to a sample from MCMC
     """
+
+    save_dirs_dict = data_loader.save_dirs
+    spacing = data_loader.dataset.spacing
 
     im_pair_idxs = im_pair_idxs.tolist()
 
@@ -248,8 +262,8 @@ def save_sample(save_dirs_dict, im_pair_idxs, sample_no, im_moving_warped_batch,
         im_moving_warped_path = \
             path.join(save_dirs_dict['samples'],
                       'sample_' + str(sample_no) + '_im_moving_warped_' + str(im_pair_idx) + '.nii.gz')
-        save_im_to_disk(im_moving_warped, im_moving_warped_path)
+        save_im_to_disk(im_moving_warped, im_moving_warped_path, spacing)
 
-        v = v_batch_voxel_units[loop_idx]
+        v = v_batch_voxel_units[loop_idx] * spacing[0]
         v_path = path.join(save_dirs_dict['samples'], 'sample_' + str(sample_no) + '_v_' + str(im_pair_idx) + '.vtk')
-        save_field_to_disk(v, v_path)
+        save_field_to_disk(v, v_path, spacing)

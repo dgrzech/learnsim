@@ -193,9 +193,11 @@ def save_field_to_disk(field, file_path, spacing=(1, 1, 1)):
 
     :param field: field to save
     :param file_path: path to use
+    :param spacing: voxel spacing
     """
 
     field = field.cpu().numpy()
+    spacing = spacing.numpy()
 
     field_x = field[0]
     field_y = field[1]
@@ -245,15 +247,24 @@ def save_grid_to_disk(grid, file_path):
     write_data(sg, file_path)
 
 
-def save_im_to_disk(im, file_path):
+def save_im_to_disk(im, file_path, spacing=(1, 1, 1)):
     """
     save an image stored in a numpy array to a .nii.gz file
 
     :param im: 3D image
     :param file_path: path to use
+    :param spacing: voxel spacing
     """
 
     im = nib.Nifti1Image(im, np.eye(4))
+    im.header.set_xyzt_units(2)
+
+    try:
+        spacing = spacing.numpy()
+        im.header.set_zooms(spacing)
+    except:
+        im.header.set_zooms(spacing)
+
     im.to_filename(file_path)
 
 

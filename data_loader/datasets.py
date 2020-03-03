@@ -95,6 +95,8 @@ class BiobankDataset(Dataset):
 
         self.im_fixed = im_fixed.squeeze(0)
         self.mask_fixed = mask_fixed.squeeze(0)
+        self.spacing = torch.tensor([longest_dim / self.dim_x, longest_dim / self.dim_y, longest_dim / self.dim_z],
+                                    dtype=torch.float32)
 
     def __len__(self):
         return len(self.im_mask_pairs)

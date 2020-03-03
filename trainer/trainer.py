@@ -270,11 +270,10 @@ class Trainer(BaseTrainer):
                     log_hist_res(self.writer, im_pair_idxs, res1_masked, self.data_loss)
 
                     # .nii.gz/.vtk
-                    save_fields(
-                        self.data_loader.save_dirs, im_pair_idxs, var_params, displacement, log_det_J_transformation)
-                    save_grids(self.data_loader.save_dirs, im_pair_idxs, transformation)
-                    save_images(self.data_loader.save_dirs, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
-                    save_norms(self.data_loader.save_dirs, im_pair_idxs, var_params, displacement)
+                    save_fields(self.data_loader, im_pair_idxs, var_params, displacement, log_det_J_transformation)
+                    save_grids(self.data_loader, im_pair_idxs, transformation)
+                    save_images(self.data_loader, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
+                    save_norms(self.data_loader, im_pair_idxs, var_params, displacement)
 
             # checkpoint
             if iter_no % self.save_period == 0 or iter_no == self.no_iters_vi:
@@ -398,11 +397,10 @@ class Trainer(BaseTrainer):
             if sample_no % self.save_period_mcmc == 0 or sample_no == self.no_samples:
                 with torch.no_grad():
                     if self.sobolev_grad:
-                        save_sample(self.data_loader.save_dirs, im_pair_idxs,
-                                    sample_no, im_moving_warped, v_curr_state_noise_smoothed)
+                        save_sample(self.data_loader, im_pair_idxs, sample_no,
+                                    im_moving_warped, v_curr_state_noise_smoothed)
                     else:
-                        save_sample(self.data_loader.save_dirs, im_pair_idxs,
-                                    sample_no, im_moving_warped, v_curr_state_noise)
+                        save_sample(self.data_loader, im_pair_idxs, sample_no, im_moving_warped, v_curr_state_noise)
 
                     self._save_checkpoint_mcmc(sample_no)  # checkpoint
 
