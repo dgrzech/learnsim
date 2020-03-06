@@ -49,13 +49,20 @@ def main(config):
 
     # metrics
     num_components = config['data_loss']['args']['num_components']
-    sigmas = ['GM/sigma_' + str(idx) for idx in range(num_components)]
-    proportions = ['GM/proportion_' + str(idx) for idx in range(num_components)]
+
+    sigmas_vi = ['GM/VI/sigma_' + str(idx) for idx in range(num_components)]
+    proportions_vi = ['GM/VI/proportion_' + str(idx) for idx in range(num_components)]
 
     metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
                   'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
-                  'other/alpha', 'other/loc', 'other/log_scale', 'other/y'] + sigmas + proportions
-    metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'other/alpha']
+                  'other/VI/alpha', 'other/VI/loc', 'other/VI/log_scale', 'other/VI/y'] + sigmas_vi + proportions_vi
+
+    sigmas_mcmc = ['GM/MCMC/sigma_' + str(idx) for idx in range(num_components)]
+    proportions_mcmc = ['GM/MCMC/proportion_' + str(idx) for idx in range(num_components)]
+
+    metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term',
+                    'other/MCMC/alpha', 'other/MCMC/loc', 'other/MCMC/log_scale', 'other/MCMC/y'] \
+                   + sigmas_mcmc + proportions_mcmc
 
     # run the model
     trainer = Trainer(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,

@@ -73,7 +73,7 @@
     "optimizer_mala": {
         "type": "SGD",
         "args": {
-            "lr": 5e-4
+            "lr": 1e-4
         }
     },
 

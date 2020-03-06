@@ -209,7 +209,7 @@ class Trainer(BaseTrainer):
             self.train_metrics_vi.update('VI/entropy_term', entropy_term.item())
             self.train_metrics_vi.update('VI/total_loss', loss_q_v.item())
             
-            self.train_metrics_vi.update('other/alpha', alpha_mean)
+            self.train_metrics_vi.update('other/VI/alpha', alpha_mean)
 
             if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
                 with torch.no_grad():
@@ -217,16 +217,16 @@ class Trainer(BaseTrainer):
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-                    self.train_metrics_vi.update('other/loc', self.reg_loss.loc.item())
-                    self.train_metrics_vi.update('other/log_scale', self.reg_loss.log_scale.item())
-                    self.train_metrics_vi.update('other/y', log_y1.exp().item())
+                    self.train_metrics_vi.update('other/VI/loc', self.reg_loss.loc.item())
+                    self.train_metrics_vi.update('other/VI/log_scale', self.reg_loss.log_scale.item())
+                    self.train_metrics_vi.update('other/VI/y', log_y1.exp().item())
                     
                     sigmas = torch.exp(self.data_loss.log_scales())
                     proportions = torch.exp(self.data_loss.log_proportions())
 
                 for idx in range(self.data_loss.num_components):
-                    self.train_metrics_vi.update('GM/sigma_' + str(idx), sigmas[idx])
-                    self.train_metrics_vi.update('GM/proportion_' + str(idx), proportions[idx])
+                    self.train_metrics_vi.update('GM/VI/sigma_' + str(idx), sigmas[idx])
+                    self.train_metrics_vi.update('GM/VI/proportion_' + str(idx), proportions[idx])
 
                 self.train_metrics_vi.update('other/max_updates/mu_v', max_update_mu_v.item())
                 self.train_metrics_vi.update('other/max_updates/log_var_v', max_update_log_var_v.item())
@@ -283,9 +283,6 @@ class Trainer(BaseTrainer):
         self.mu_v.requires_grad_(False)
         self.log_var_v.requires_grad_(False)
         self.u_v.requires_grad_(False)
-
-        self.reg_loss.loc.requires_grad_(False)
-        self.reg_loss.log_scale.requires_grad_(False)
 
         self.v_curr_state.requires_grad_(True)
 
@@ -360,8 +357,13 @@ class Trainer(BaseTrainer):
             loss = data_term + reg_term
 
             self.optimizer_mala.zero_grad()
+            self.optimizer_w_reg.zero_grad()
+
             loss.backward()  # backprop
+
             self.optimizer_mala.step()
+            self.optimizer_w_reg.step()
+
 
             """
             metrics and prints
@@ -371,7 +373,9 @@ class Trainer(BaseTrainer):
 
             self.train_metrics_mcmc.update('MCMC/data_term', data_term.item())
             self.train_metrics_mcmc.update('MCMC/reg_term', reg_term.item())
-            self.train_metrics_mcmc.update('other/alpha', alpha_mean)
+            self.train_metrics_mcmc.update('other/MCMC/alpha', alpha_mean)
+            self.train_metrics_mcmc.update('other/MCMC/loc', self.reg_loss.loc.item())
+            self.train_metrics_mcmc.update('other/MCMC/log_scale', self.reg_loss.log_scale.item())
 
             if sample_no == self.no_iters_burn_in:
                 self.logger.info('\nENDED BURNING IN\n')
@@ -382,6 +386,15 @@ class Trainer(BaseTrainer):
                     log = {'sample_no': sample_no}
                     log.update(self.train_metrics_mcmc.result())
                     print_log(self.logger, log)
+
+                    self.train_metrics_mcmc.update('other/MCMC/y', log_y.exp().item())
+
+                    sigmas = torch.exp(self.data_loss.log_scales())
+                    proportions = torch.exp(self.data_loss.log_proportions())
+
+                    for idx in range(self.data_loss.num_components):
+                        self.train_metrics_mcmc.update('GM/MCMC/sigma_' + str(idx), sigmas[idx])
+                        self.train_metrics_mcmc.update('GM/MCMC/proportion_' + str(idx), proportions[idx])
 
                     if self.sobolev_grad:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
