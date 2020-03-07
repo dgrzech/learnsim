@@ -302,14 +302,18 @@ class Trainer(BaseTrainer):
             stochastic gradient Langevin dynamics
             """
 
-            v_curr_state_noise = add_noise(self.v_curr_state, self.sigma_scaled, self.u_v_scaled)
+            v_curr_state_noise = add_noise(self.v_curr_state,
+                                           self.sqrt_tau_twice * self.sigma_scaled,
+                                           self.sqrt_tau_twice * self.u_v_scaled)
 
             if self.sobolev_grad:
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                v_curr_state_noise_smoothed = MALAGrad.apply(v_curr_state_noise_smoothed,
-                                                             self.sigma_scaled, self.u_v_scaled, self.tau)
+                v_curr_state_noise_smoothed = \
+                    MALAGrad.apply(v_curr_state_noise_smoothed, self.sigma_scaled, self.u_v_scaled, self.tau)
+
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
+                
                 reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=self.dof)
                 reg_term = reg.sum()
             else:
@@ -502,11 +506,11 @@ class Trainer(BaseTrainer):
             if self.MCMC:
                 with torch.no_grad():
                     tau = self.config['optimizer_mala']['args']['lr']
-                    sqrt_tau_twice = np.sqrt(2.0 * tau)
 
                     self.tau = tau
-                    self.sigma_scaled = sqrt_tau_twice * transform_coordinates(torch.exp(0.5 * self.log_var_v))
-                    self.u_v_scaled = sqrt_tau_twice * transform_coordinates(self.u_v)
+                    self.sqrt_tau_twice = np.sqrt(2.0 * tau)
+                    self.sigma_scaled = transform_coordinates(torch.exp(0.5 * self.log_var_v))
+                    self.u_v_scaled = transform_coordinates(self.u_v)
 
                     if self.v_curr_state is None:
                         self.v_curr_state = self.mu_v.clone()

@@ -93,7 +93,7 @@ class MALAGrad(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        return ctx.tau * (ctx.sigma_scaled + ctx.u_v_scaled) * grad_output, None, None, None
+        return ctx.tau * (ctx.sigma_scaled ** 2 + ctx.u_v_scaled ** 2) * grad_output, None, None, None
 
 
 class SobolevGrad(torch.autograd.Function):
