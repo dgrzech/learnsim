@@ -3,7 +3,7 @@ from logger import log_fields, log_hist_res, log_images, log_sample, print_log, 
     save_norms, save_sample
 from optimizers import Adam
 from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, \
-    rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, SobolevGrad
+    rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, MALAGrad, SobolevGrad
 
 import math
 import numpy as np
@@ -39,6 +39,7 @@ class Trainer(BaseTrainer):
 
         # Markov chain Monte Carlo
         self.start_sample = 1
+        self.tau = None
         self.v_curr_state, self.sigma_scaled, self.u_scaled = None, None, None
 
         self.MCMC = config['trainer']['mcmc']
@@ -306,6 +307,8 @@ class Trainer(BaseTrainer):
             if self.sobolev_grad:
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                v_curr_state_noise_smoothed = MALAGrad.apply(v_curr_state_noise_smoothed,
+                                                             self.sigma_scaled, self.u_v_scaled, self.tau)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
                 reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=self.dof)
                 reg_term = reg.sum()
@@ -501,6 +504,7 @@ class Trainer(BaseTrainer):
                     tau = self.config['optimizer_mala']['args']['lr']
                     sqrt_tau_twice = np.sqrt(2.0 * tau)
 
+                    self.tau = tau
                     self.sigma_scaled = sqrt_tau_twice * transform_coordinates(torch.exp(0.5 * self.log_var_v))
                     self.u_v_scaled = sqrt_tau_twice * transform_coordinates(self.u_v)
 

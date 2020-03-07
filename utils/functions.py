@@ -82,6 +82,20 @@ class GaussianGrad(torch.autograd.Function):
         return grad_output, None
 
 
+class MALAGrad(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, v_curr_state, sigma_scaled, u_v_scaled, tau):
+        ctx.sigma_scaled = sigma_scaled
+        ctx.u_v_scaled = u_v_scaled
+        ctx.tau = tau
+
+        return v_curr_state
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return ctx.tau * (ctx.sigma_scaled + ctx.u_v_scaled) * grad_output, None, None, None
+
+
 class SobolevGrad(torch.autograd.Function):
     """
     autograd function for Sobolev gradients
