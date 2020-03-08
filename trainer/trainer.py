@@ -307,20 +307,19 @@ class Trainer(BaseTrainer):
                                            self.sqrt_tau_twice * self.u_v_scaled)
 
             if self.sobolev_grad:
+                v_curr_state_noise = \
+                    MALAGrad.apply(v_curr_state_noise, self.sigma_scaled, self.u_v_scaled)
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                v_curr_state_noise_smoothed = \
-                    MALAGrad.apply(v_curr_state_noise_smoothed, self.sigma_scaled, self.u_v_scaled, self.tau)
-
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
-                
+
                 reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=self.dof)
                 reg_term = reg.sum()
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
                 reg, log_y = self.reg_loss(v_curr_state_noise, dof=self.dof)
                 reg_term = reg.sum()
-            
+
             reg_term -= self.reg_loss_prior_loc(log_y).sum()
             reg_term -= self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
 
@@ -371,7 +370,6 @@ class Trainer(BaseTrainer):
             self.optimizer_mala.step()
             self.optimizer_w_reg.step()
 
-
             """
             metrics and prints
             """
@@ -414,7 +412,8 @@ class Trainer(BaseTrainer):
             outputs
             """
 
-            if sample_no % self.save_period_mcmc == 0 or sample_no == self.no_samples:
+            if sample_no > self.no_iters_burn_in and sample_no % self.save_period_mcmc == 0 \
+                    or sample_no == self.no_samples:
                 with torch.no_grad():
                     if self.sobolev_grad:
                         save_sample(self.data_loader, im_pair_idxs, sample_no,
