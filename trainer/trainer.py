@@ -507,7 +507,7 @@ class Trainer(BaseTrainer):
                     self.u_v_scaled = transform_coordinates(self.u_v)
 
                     if self.v_curr_state is None:
-                        self.v_curr_state = self.mu_v.clone()
+                        self.v_curr_state = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
 
                 self._step_MCMC(im_pair_idxs, im_moving, mask_moving)
 
@@ -646,7 +646,7 @@ class Trainer(BaseTrainer):
 
         # MCMC
         with torch.no_grad():
-            self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint else self.mu_v.clone()
+            self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint else sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
 
         if 'optimizer_mala' in checkpoint:
             self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])

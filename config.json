@@ -1,5 +1,5 @@
 {
-    "name": "spatial_temp",
+    "name": "spatial",
     "n_gpu": 1,
 
     "data_loss": {
