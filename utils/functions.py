@@ -1,5 +1,6 @@
 from utils import separable_conv_3d
 
+import math
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -71,6 +72,22 @@ def gaussian_kernel_3d(_s, sigma=1.0):
     return g / g.sum()
 
 
+def add_noise(v, sigma_scaled, tau):
+    eps = torch.randn(sigma_scaled.shape, device=sigma_scaled.device)
+    return v + math.sqrt(tau) * eps * sigma_scaled
+
+
+class MALA(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, v_curr_state, sigma_scaled, tau):
+        ctx.sigma_scaled = sigma_scaled
+        return add_noise(v_curr_state, sigma_scaled, tau)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return ctx.sigma_scaled ** 2 * grad_output, None, None
+
+
 class GaussianGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, _log_lambda, _gaussian_kernel_hat):
@@ -80,20 +97,6 @@ class GaussianGrad(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output, None
-
-
-class MALAGrad(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, v_curr_state, sigma_scaled, u_v_scaled):
-        ctx.sigma_scaled = sigma_scaled
-        ctx.u_v_scaled = u_v_scaled
-
-        return v_curr_state
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return ctx.sigma_scaled ** 2 * grad_output + ctx.u_v_scaled * (ctx.u_v_scaled * grad_output).sum(), \
-               None, None
 
 
 class SobolevGrad(torch.autograd.Function):

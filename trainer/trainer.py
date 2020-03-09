@@ -2,8 +2,8 @@ from base import BaseTrainer
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, save_fields, save_grids, save_images, \
     save_norms, save_sample
 from optimizers import Adam
-from utils import add_noise, add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, \
-    rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, MALAGrad, SobolevGrad
+from utils import add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, \
+    rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, MALA, SobolevGrad
 
 import math
 import numpy as np
@@ -302,13 +302,8 @@ class Trainer(BaseTrainer):
             stochastic gradient Langevin dynamics
             """
 
-            v_curr_state_noise = add_noise(self.v_curr_state,
-                                           self.sqrt_tau_twice * self.sigma_scaled,
-                                           self.sqrt_tau_twice * self.u_v_scaled)
-
             if self.sobolev_grad:
-                v_curr_state_noise = \
-                    MALAGrad.apply(v_curr_state_noise, self.sigma_scaled, self.u_v_scaled)
+                v_curr_state_noise = MALA.apply(self.v_curr_state, self.sigma_scaled, self.tau)
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
