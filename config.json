@@ -31,13 +31,13 @@
 	        "learnable": true,
             "loc_learnable": true,
 	        "scale_learnable": true,
-	        "w_reg": 0.2
+	        "w_reg": 0.1
         }
     },
     "reg_loss_prior_loc": {
     	"type": "LogEnergyExpGammaPrior",
 	    "args": {
-	        "w_reg": 0.2,
+	        "w_reg": 0.1,
 	        "dof": 2654208.0,
 	        "learnable": false
 	    }
@@ -73,7 +73,7 @@
     "optimizer_mala": {
         "type": "SGD",
         "args": {
-            "lr": 5e-2
+            "lr": 1e-2
         }
     },
 
@@ -111,6 +111,6 @@
 
         "save_dir": "saved/",
         "save_period": 64,
-        "save_period_mcmc": 1000
+        "save_period_mcmc": 50
     }
 }
