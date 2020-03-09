@@ -101,8 +101,8 @@
 
     "trainer": {
         "no_iters_vi": 1536,
-        "no_iters_burn_in": 500,
-	    "no_samples": 2000,
+        "no_iters_burn_in": 2000,
+	    "no_samples": 4000,
 
         "log_period": 32,
         "log_period_mcmc": 100,
