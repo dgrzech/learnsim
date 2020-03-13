@@ -256,7 +256,7 @@ class RegLoss_L2(RegLoss):
         v = fft(half_kernel_hat * alpha * 1 / sqrt(|omega|**2 + 1)) is the (Sobolev-smooth) velocity field
     """
     
-    def __init__(self, w_reg, diff_op=None, learnable=False):
+    def __init__(self, dims, w_reg, diff_op=None, learnable=False):
         super(RegLoss_L2, self).__init__(diff_op=diff_op)
 
         log_w_reg = math.log(w_reg)
@@ -275,7 +275,7 @@ class RegLoss_Student(RegLoss):
     See RegLossL2 for tips.
     """
     
-    def __init__(self, diff_op=None, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
+    def __init__(self, dims, diff_op=None, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
         """
          t_nu0(x | 0, lambda0) with  nu0 = 2 * a0 deg. of freedom and scale lambda0 = a0 / b0,
         following a canonical parameterisation of the multivariate student distribution t_nu(x | mu, Lambda)

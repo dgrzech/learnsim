@@ -102,9 +102,10 @@ class Trainer(BaseTrainer):
         if self.optimizer_v is None:
             self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
 
-        if self.optimizer_w_reg is None:
-            self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim,
-                                                        [self.reg_loss.loc, self.reg_loss.log_scale])
+        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+            if self.optimizer_w_reg is None:
+                self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}],
+                                            lr=1e-1, betas=(0.9, 0.95))
 
         for iter_no in range(self.start_iter, self.no_iters_vi + 1):
             self.train_metrics_vi.reset()
@@ -177,11 +178,15 @@ class Trainer(BaseTrainer):
             reg_term1, log_y1 = self.reg_loss(v_sample1, dof=self.dof)
             reg_term2, log_y2 = self.reg_loss(v_sample2, dof=self.dof)
 
-            reg_term_prior_loc = self.reg_loss_prior_loc(log_y1).sum() / 2.0
-            reg_term_prior_loc += self.reg_loss_prior_loc(log_y2).sum() / 2.0
-            reg_term_prior_scale = self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
+            reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
 
-            reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0 - reg_term_prior_loc - reg_term_prior_scale
+            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                reg_term_prior_loc = self.reg_loss_prior_loc(log_y1).sum() / 2.0 + \
+                                     self.reg_loss_prior_loc(log_y2).sum() / 2.0
+                reg_term_prior_scale = self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
+
+                reg_term -= reg_term_prior_loc
+                reg_term -= reg_term_prior_scale
 
             entropy_term = self.entropy_loss(v_sample=v_sample1_unsmoothed,
                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
@@ -192,12 +197,15 @@ class Trainer(BaseTrainer):
             loss_q_v = data_term + reg_term - entropy_term
 
             self.optimizer_v.zero_grad()
-            self.optimizer_w_reg.zero_grad()
+
+            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                self.optimizer_w_reg.zero_grad()
 
             loss_q_v.backward()  # backprop
-
             self.optimizer_v.step()
-            self.optimizer_w_reg.step()
+
+            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                self.optimizer_w_reg.step()
 
             """
             metrics and prints
@@ -218,8 +226,10 @@ class Trainer(BaseTrainer):
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-                    self.train_metrics_vi.update('other/VI/loc', self.reg_loss.loc.item())
-                    self.train_metrics_vi.update('other/VI/log_scale', self.reg_loss.log_scale.item())
+                    if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                        self.train_metrics_vi.update('other/VI/loc', self.reg_loss.loc.item())
+                        self.train_metrics_vi.update('other/VI/log_scale', self.reg_loss.log_scale.item())
+
                     self.train_metrics_vi.update('other/VI/y', log_y1.exp().item())
                     
                     sigmas = torch.exp(self.data_loss.log_scales())
@@ -528,12 +538,13 @@ class Trainer(BaseTrainer):
 
             'data_loss': self.data_loss.state_dict(),
             'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
-
             'reg_loss': self.reg_loss.state_dict(),
-            'reg_loss_prior_loc': self.reg_loss_prior_loc.state_dict(),
-            'reg_loss_prior_scale': self.reg_loss_prior_scale.state_dict(),
-            'optimizer_w_reg': self.optimizer_w_reg.state_dict()
         }
+
+        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+            state['reg_loss_prior_loc'] = self.reg_loss_prior_loc.state_dict()
+            state['reg_loss_prior_scale'] = self.reg_loss_prior_scale.state_dict()
+            state['optimizer_w_reg'] = self.optimizer_w_reg.state_dict()
 
         filename = str(self.checkpoint_dir / f'checkpoint_vi_{iter_no}.pth')
         self.logger.info("saving checkpoint: {}..".format(filename))
@@ -556,15 +567,16 @@ class Trainer(BaseTrainer):
 
             'data_loss': self.data_loss.state_dict(),
             'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
-            
             'reg_loss': self.reg_loss.state_dict(),
-            'reg_loss_prior_loc': self.reg_loss_prior_loc.state_dict(),
-            'reg_loss_prior_scale': self.reg_loss_prior_scale.state_dict(),
-            'optimizer_w_reg': self.optimizer_w_reg.state_dict(),
 
             'v_curr_state': self.v_curr_state,
             'optimizer_mala': self.optimizer_mala.state_dict()
         }
+
+        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+            state['reg_loss_prior_loc'] = self.reg_loss_prior_loc.state_dict()
+            state['reg_loss_prior_scale'] = self.reg_loss_prior_scale.state_dict()
+            state['optimizer_w_reg'] = self.optimizer_w_reg.state_dict()
 
         filename = str(self.checkpoint_dir / f'checkpoint_mcmc_{sample_no}.pth')
         self.logger.info("saving checkpoint: {}..".format(filename))
@@ -601,12 +613,14 @@ class Trainer(BaseTrainer):
 
         # regularisation loss
         self.reg_loss.load_state_dict(checkpoint['reg_loss'])
-        self.reg_loss_prior_loc.load_state_dict(checkpoint['reg_loss_prior_loc'])
-        self.reg_loss_prior_scale.load_state_dict(checkpoint['reg_loss_prior_scale'])
 
-        self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim,
-                                                    [self.reg_loss.loc, self.reg_loss.log_scale])
-        self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
+        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+            self.reg_loss_prior_loc.load_state_dict(checkpoint['reg_loss_prior_loc'])
+            self.reg_loss_prior_scale.load_state_dict(checkpoint['reg_loss_prior_scale'])
+
+            self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}],
+                                        lr=5e-1, betas=(0.9, 0.95))
+            self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
 
         self.logger.info("checkpoint loaded, resuming training..")
 
@@ -637,16 +651,19 @@ class Trainer(BaseTrainer):
 
         # regularisation loss
         self.reg_loss.load_state_dict(checkpoint['reg_loss'])
-        self.reg_loss_prior_loc.load_state_dict(checkpoint['reg_loss_prior_loc'])
-        self.reg_loss_prior_scale.load_state_dict(checkpoint['reg_loss_prior_scale'])
 
-        self.optimizer_w_reg = self.config.init_obj('optimizer_v', torch.optim,
-                                                    [self.reg_loss.loc, self.reg_loss.log_scale])
-        self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
+        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+            self.reg_loss_prior_loc.load_state_dict(checkpoint['reg_loss_prior_loc'])
+            self.reg_loss_prior_scale.load_state_dict(checkpoint['reg_loss_prior_scale'])
+
+            self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}],
+                                        lr=5e-1, betas=(0.9, 0.95))
+            self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
 
         # MCMC
         with torch.no_grad():
-            self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint else sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
+            self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint \
+                else sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
 
         if 'optimizer_mala' in checkpoint:
             self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
