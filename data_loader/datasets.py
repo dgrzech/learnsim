@@ -44,22 +44,32 @@ class BiobankDataset(Dataset):
                                      for f in listdir(mask_paths) if path.isfile(path.join(mask_paths, f))])
         else:
             mask_filenames = ['' for _ in range(len(im_filenames))]
+        
+        # segmentations filenames
+        seg_paths = path.join(im_paths, 'seg')
 
-        im_mask_pairs = list(zip(im_filenames, mask_filenames))
+        if listdir(seg_paths):
+            seg_filenames = sorted([path.join(seg_paths, f)
+                                    for f in listdir(seg_paths) if path.isfile(path.join(seg_paths, f))])
+        else:
+            seg_filenames = ['' for _ in range(len(im_filenames))]
+
+        im_mask_seg_triples = list(zip(im_filenames, mask_filenames, seg_filenames))
 
         # all-to-one
-        atlas = im_mask_pairs[0]
-        self.im_mask_pairs = []
+        atlas = im_mask_seg_triples[0]
+        self.im_mask_seg_triples = []
 
-        for other_im_mask_pair in im_mask_pairs:
-            if other_im_mask_pair == atlas:
+        for other_im_mask_seg_triple in im_mask_seg_triples:
+            if other_im_mask_seg_triple == atlas:
                 continue
 
-            self.im_mask_pairs.append((atlas, other_im_mask_pair))
+            self.im_mask_seg_triples.append((atlas, other_im_mask_seg_triple))
 
         # pre-load im_fixed and the segmentation
-        im_fixed_path = self.im_mask_pairs[0][0][0]
-        mask_fixed_path = self.im_mask_pairs[0][0][1]
+        im_fixed_path = self.im_mask_seg_triples[0][0][0]
+        mask_fixed_path = self.im_mask_seg_triples[0][0][1]
+        seg_fixed_path = self.im_mask_seg_triples[0][0][2]
 
         im_fixed = sitk.ReadImage(im_fixed_path, sitk.sitkFloat32)
         im_fixed_arr = np.transpose(sitk.GetArrayFromImage(im_fixed), (2, 1, 0))
@@ -92,23 +102,41 @@ class BiobankDataset(Dataset):
             mask_fixed = F.interpolate(mask_fixed, size=(self.dim_x, self.dim_y, self.dim_z), mode='nearest').bool()
         else:
             mask_fixed = torch.ones_like(im_fixed).bool()
+        
+        if seg_fixed_path is not '':
+            seg_fixed = sitk.ReadImage(seg_fixed_path, sitk.sitkFloat32)
+            seg_fixed_arr = np.transpose(sitk.GetArrayFromImage(seg_fixed), (2, 1, 0))
+
+            # pad
+            seg_fixed_arr_padded = np.pad(seg_fixed_arr,
+                                           ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='minimum')
+            # resize
+            seg_fixed = torch.from_numpy(seg_fixed_arr_padded)
+            seg_fixed.unsqueeze_(0).unsqueeze_(0)
+
+            seg_fixed = F.interpolate(seg_fixed, size=(self.dim_x, self.dim_y, self.dim_z), mode='nearest').short()
+        else:
+            seg_fixed = torch.ones_like(im_fixed).short()
 
         self.im_fixed = im_fixed.squeeze(0)
         self.mask_fixed = mask_fixed.squeeze(0)
+        self.seg_fixed = seg_fixed.squeeze(0)
+
         self.spacing = torch.tensor([longest_dim / self.dim_x, longest_dim / self.dim_y, longest_dim / self.dim_z],
                                     dtype=torch.float32)
 
     def __len__(self):
-        return len(self.im_mask_pairs)
+        return len(self.im_mask_seg_triples)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        im_mask_pair = self.im_mask_pairs[idx]
+        im_mask_seg_triple = self.im_mask_seg_triples[idx]
 
-        im_moving_path = im_mask_pair[1][0]
-        mask_moving_path = im_mask_pair[1][1]
+        im_moving_path = im_mask_seg_triple[1][0]
+        mask_moving_path = im_mask_seg_triple[1][1]
+        seg_moving_path = im_mask_seg_triple[1][2]
 
         im_moving = sitk.ReadImage(im_moving_path, sitk.sitkFloat32)
         im_moving_arr = np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0))
@@ -137,9 +165,25 @@ class BiobankDataset(Dataset):
             mask_moving = F.interpolate(mask_moving, size=(self.dim_x, self.dim_y, self.dim_z), mode='nearest').bool()
         else:
             mask_moving = torch.ones_like(im_moving).bool()
+        
+        if seg_moving_path is not None:
+            seg_moving = sitk.ReadImage(seg_moving_path, sitk.sitkFloat32)
+            seg_moving_arr = np.transpose(sitk.GetArrayFromImage(seg_moving), (2, 1, 0))
+
+            # pad
+            seg_moving_arr_padded = np.pad(seg_moving_arr,
+                                           ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='minimum')
+            # resize
+            seg_moving = torch.from_numpy(seg_moving_arr_padded)
+            seg_moving.unsqueeze_(0).unsqueeze_(0)
+
+            seg_moving = F.interpolate(seg_moving, size=(self.dim_x, self.dim_y, self.dim_z), mode='nearest').short()
+        else:
+            seg_moving = torch.ones_like(im_moving).short()
 
         im_moving.squeeze_(0)
         mask_moving.squeeze_(0)
+        seg_moving.squeeze_(0)
 
         assert self.im_fixed.shape == im_moving.shape, "images don't have the same dimensions"
 
@@ -147,4 +191,4 @@ class BiobankDataset(Dataset):
         log_var_v = init_log_var_v(self.dims_v)
         u_v = init_u_v(self.dims_v)
 
-        return idx, self.im_fixed, self.mask_fixed, im_moving, mask_moving, mu_v, log_var_v, u_v
+        return idx, self.im_fixed, self.mask_fixed, self.seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v, u_v

@@ -2,7 +2,7 @@ from base import BaseTrainer
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, save_fields, save_grids, save_images, \
     save_norms, save_sample
 from optimizers import Adam
-from utils import add_noise_uniform, calc_det_J, get_module_attr, inf_loop, max_field_update, \
+from utils import add_noise_uniform, calc_det_J, calc_dice, get_module_attr, inf_loop, max_field_update, \
     rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, MALA, SobolevGrad
 
 import math
@@ -23,7 +23,7 @@ class Trainer(BaseTrainer):
 
         self.config = config
         self.data_loader = data_loader
-        self.im_fixed, self.seg_fixed, self.mask_fixed = None, None, None
+        self.im_fixed, self.mask_fixed, self.seg_fixed = None, None, None
 
         self.dof = config['data_loader']['args']['dim_x'] \
                    * config['data_loader']['args']['dim_y'] \
@@ -94,7 +94,7 @@ class Trainer(BaseTrainer):
         data_term.backward()
         self.optimizer_mixture_model.step()  # backprop
 
-    def _step_VI(self, im_pair_idxs, im_moving, mask_moving):
+    def _step_VI(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
         self.mu_v.requires_grad_(True)
         self.log_var_v.requires_grad_(True)
         self.u_v.requires_grad_(True)
@@ -142,8 +142,8 @@ class Trainer(BaseTrainer):
                 # rescale the residuals by the estimated voxel-wise standard deviation
                 if self.use_moving_mask:
                     mask_moving_warped1, \
-                    mask_moving_warped2 = self.registration_module(mask_moving, transformation1, mode='nearest'), \
-                                          self.registration_module(mask_moving, transformation2, mode='nearest')
+                    mask_moving_warped2 = self.registration_module(mask_moving, transformation1), \
+                                          self.registration_module(mask_moving, transformation2)
 
                     mask1, mask2 = (self.mask_fixed * mask_moving_warped1), (self.mask_fixed * mask_moving_warped2)
 
@@ -174,9 +174,13 @@ class Trainer(BaseTrainer):
 
             data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
             data_term -= self.proportion_prior(self.data_loss.log_proportions()).sum()
-
-            reg_term1, log_y1 = self.reg_loss(v_sample1, dof=self.dof)
-            reg_term2, log_y2 = self.reg_loss(v_sample2, dof=self.dof)
+            
+            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                reg_term1, log_y1 = self.reg_loss(v_sample1, dof=self.dof)
+                reg_term2, log_y2 = self.reg_loss(v_sample2, dof=self.dof)
+            else:
+                reg_term1, log_y1 = self.reg_loss(v_sample1)
+                reg_term2, log_y2 = self.reg_loss(v_sample2)
 
             reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
 
@@ -242,6 +246,13 @@ class Trainer(BaseTrainer):
                 self.train_metrics_vi.update('other/max_updates/mu_v', max_update_mu_v.item())
                 self.train_metrics_vi.update('other/max_updates/log_var_v', max_update_log_var_v.item())
                 self.train_metrics_vi.update('other/max_updates/u_v', max_update_u_v.item())
+                
+                # dice scores
+                seg_moving_warped = self.registration_module(seg_moving, transformation1)
+                dsc = calc_dice(self.seg_fixed, seg_moving_warped)
+
+                for score_idx, score in enumerate(dsc):
+                    self.train_metrics_vi.update('DSC/VI/' + str(score_idx), score)
 
                 log = {'iter_no': iter_no}
                 log.update(self.train_metrics_vi.result())
@@ -290,7 +301,7 @@ class Trainer(BaseTrainer):
             if iter_no % self.save_period == 0 or iter_no == self.no_iters_vi:
                 self._save_checkpoint_vi(iter_no)
 
-    def _step_MCMC(self, im_pair_idxs, im_moving, mask_moving):
+    def _step_MCMC(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
         self.mu_v.requires_grad_(False)
         self.log_var_v.requires_grad_(False)
         self.u_v.requires_grad_(False)
@@ -317,12 +328,23 @@ class Trainer(BaseTrainer):
                 v_curr_state_noise_smoothed = \
                     SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
+                
+                if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                    dof = self.dof
+                else:
+                    dof = 0.0
 
-                reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=self.dof)
+                reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=dof)
                 reg_term = reg.sum()
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
-                reg, log_y = self.reg_loss(v_curr_state_noise, dof=self.dof)
+
+                if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                    dof = self.dof
+                else:
+                    dof = 0.0
+
+                reg, log_y = self.reg_loss(v_curr_state_noise, dof=dof)
                 reg_term = reg.sum()
 
             reg_term -= self.reg_loss_prior_loc(log_y).sum()
@@ -335,7 +357,7 @@ class Trainer(BaseTrainer):
             res = n_F - n_M
 
             if self.use_moving_mask:
-                mask_moving_warped = self.registration_module(mask_moving, transformation, mode='nearest')
+                mask_moving_warped = self.registration_module(mask_moving, transformation)
                 mask = (self.mask_fixed * mask_moving_warped)
 
             alpha = 1.0
@@ -406,6 +428,13 @@ class Trainer(BaseTrainer):
                         self.train_metrics_mcmc.update('GM/MCMC/sigma_' + str(idx), sigmas[idx])
                         self.train_metrics_mcmc.update('GM/MCMC/proportion_' + str(idx), proportions[idx])
 
+                    # dice scores
+                    seg_moving_warped = self.registration_module(seg_moving, transformation)
+                    dsc = calc_dice(self.seg_fixed, seg_moving_warped)
+
+                    for score_idx, score in enumerate(dsc):
+                        self.train_metrics_mcmc.update('DSC/MCMC/' + str(score_idx), score)
+                        
                     if self.sobolev_grad:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
                                    im_moving_warped, res_masked, v_curr_state_noise_smoothed, displacement)
@@ -429,17 +458,21 @@ class Trainer(BaseTrainer):
                     self._save_checkpoint_mcmc(sample_no)  # checkpoint
 
     def _train_epoch(self):
-        for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, im_moving, mask_moving, mu_v, log_var_v, u_v) \
+        for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v, u_v) \
                 in enumerate(self.data_loader):
             if self.im_fixed is None:
                 self.im_fixed = im_fixed.to(self.device, non_blocking=True)
             if self.mask_fixed is None:
                 self.mask_fixed = mask_fixed.to(self.device, non_blocking=True)
+            if self.seg_fixed is None:
+                self.seg_fixed = seg_fixed.to(self.device, non_blocking=True)
 
             im_moving = im_moving.to(self.device, non_blocking=True)
 
             if mask_moving is not None:
                 mask_moving = mask_moving.to(self.device, non_blocking=True)
+            if seg_moving is not None:
+                seg_moving = seg_moving.to(self.device, non_blocking=True)
 
             if self.mu_v is None:
                 self.mu_v = mu_v.to(self.device, non_blocking=True)
@@ -461,7 +494,7 @@ class Trainer(BaseTrainer):
                 res = n_F - n_M
 
                 if self.use_moving_mask:
-                    mask_moving_warped = self.registration_module(mask_moving, transformation, mode='nearest')
+                    mask_moving_warped = self.registration_module(mask_moving, transformation)
                     mask = (self.mask_fixed * mask_moving_warped)
                     res_masked = res[mask]
                 else:
@@ -494,14 +527,20 @@ class Trainer(BaseTrainer):
                 self.writer.set_step(iter_no)
                 
                 self.train_metrics_vi.update('VI/data_term', loss_unwarped.item())
-                log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)
+                log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)  # residual histogram
+                
+                # dice scores
+                dsc = calc_dice(self.seg_fixed, seg_moving)
+
+                for score_idx, score in enumerate(dsc):
+                    self.train_metrics_vi.update('DSC/VI/' + str(score_idx), score)
 
             """
             VI
             """
 
             if self.VI:
-                self._step_VI(im_pair_idxs, im_moving, mask_moving)
+                self._step_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)
 
             """
             MCMC
@@ -519,7 +558,7 @@ class Trainer(BaseTrainer):
                     if self.v_curr_state is None:
                         self.v_curr_state = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
 
-                self._step_MCMC(im_pair_idxs, im_moving, mask_moving)
+                self._step_MCMC(im_pair_idxs, im_moving, mask_moving, seg_moving)
 
     def _save_checkpoint_vi(self, iter_no):
         """

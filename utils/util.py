@@ -61,6 +61,20 @@ def calc_det_J(nabla_x, nabla_y, nabla_z):
     return det_J
 
 
+def calc_dice(seg_fixed, seg_moving):
+    no_segs = torch.max(seg_fixed)  # get the no. of segmentations
+    dsc = []  # list with dice scores for each segmentation
+    
+    for seg_idx in range(1, no_segs + 1):
+        numerator = 2.0 * ((seg_fixed == seg_idx) * (seg_moving == seg_idx)).sum().item()
+        denominator = (seg_fixed == seg_idx).sum().item() + (seg_moving == seg_idx).sum().item()
+    
+        score = numerator / denominator if denominator != 0.0 else 0.0
+        dsc.append(score)
+    
+    return dsc
+
+
 def calc_norm(v):
     """
     calculate the voxel-wise norm of vectors in a 3D field
