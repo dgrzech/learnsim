@@ -70,7 +70,7 @@ class BiobankDataset(Dataset):
 
         # pad
         im_fixed_arr_padded = np.pad(im_fixed_arr,
-                                     ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+                                     ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='minimum')
         # resize
         im_fixed = torch.from_numpy(im_fixed_arr_padded)
         im_fixed.unsqueeze_(0).unsqueeze_(0)
@@ -84,7 +84,7 @@ class BiobankDataset(Dataset):
 
             # pad
             mask_fixed_arr_padded = np.pad(mask_fixed_arr,
-                                           ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+                                           ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='minimum')
             # resize
             mask_fixed = torch.from_numpy(mask_fixed_arr_padded)
             mask_fixed.unsqueeze_(0).unsqueeze_(0)
@@ -115,7 +115,7 @@ class BiobankDataset(Dataset):
 
         # pad
         im_moving_arr_padded = np.pad(im_moving_arr,
-                                      ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+                                      ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='minimum')
         # resize
         im_moving = torch.from_numpy(im_moving_arr_padded)
         im_moving.unsqueeze_(0).unsqueeze_(0)
@@ -129,7 +129,7 @@ class BiobankDataset(Dataset):
 
             # pad
             mask_moving_arr_padded = np.pad(mask_moving_arr,
-                                            ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='edge')
+                                            ((self.pad_x, self.pad_x), (0, 0), (self.pad_z, self.pad_z)), mode='minimum')
             # resize
             mask_moving = torch.from_numpy(mask_moving_arr_padded)
             mask_moving.unsqueeze_(0).unsqueeze_(0)
