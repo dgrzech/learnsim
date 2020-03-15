@@ -378,7 +378,7 @@ class RegLoss_LogNormal(RegLoss_EnergyBased):
         loc_init = log_energy_exp_gamma_prior.expectation()
         self.loc = nn.Parameter(torch.Tensor([loc_init]), requires_grad=loc_learnable)
 
-        log_scale = math.log(0.1) + math.log(loc_init)
+        log_scale = math.log(4.0) + math.log(loc_init)
         self.log_scale = nn.Parameter(torch.Tensor([log_scale]), requires_grad=scale_learnable)
         
     def _mlog_energy_prior(self, y, *args, **kwargs):

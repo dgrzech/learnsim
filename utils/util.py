@@ -61,16 +61,17 @@ def calc_det_J(nabla_x, nabla_y, nabla_z):
     return det_J
 
 
-def calc_dice(seg_fixed, seg_moving):
-    no_segs = torch.max(seg_fixed)  # get the no. of segmentations
-    dsc = []  # list with dice scores for each segmentation
+def calc_dice(seg_fixed, seg_moving, structures_dict):
+    dsc = dict()  # dict. with dice scores for each segmentation
     
-    for seg_idx in range(1, no_segs + 1):
-        numerator = 2.0 * ((seg_fixed == seg_idx) * (seg_moving == seg_idx)).sum().item()
-        denominator = (seg_fixed == seg_idx).sum().item() + (seg_moving == seg_idx).sum().item()
+    for structure in structures_dict:
+        label = structures_dict[structure]
+
+        numerator = 2.0 * ((seg_fixed == label) * (seg_moving == label)).sum().item()
+        denominator = (seg_fixed == label).sum().item() + (seg_moving == label).sum().item()
     
-        score = numerator / denominator if denominator != 0.0 else 0.0
-        dsc.append(score)
+        score = numerator / denominator
+        dsc[structure] = score
     
     return dsc
 

@@ -7,6 +7,7 @@ from utils import add_noise_uniform, calc_det_J, calc_dice, get_module_attr, inf
 
 import math
 import numpy as np
+import pprint
 import torch
 
 
@@ -17,7 +18,7 @@ class Trainer(BaseTrainer):
 
     def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
                  entropy_loss, transformation_model, registration_module,
-                 metric_ftns_vi, metric_ftns_mcmc, config, data_loader):
+                 metric_ftns_vi, metric_ftns_mcmc, structures_dict, config, data_loader):
         super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
                          entropy_loss, transformation_model, registration_module, config)
 
@@ -67,6 +68,9 @@ class Trainer(BaseTrainer):
             self.S_x = S_x.to(self.device, non_blocking=True)
             self.S_y = S_y.to(self.device, non_blocking=True)
             self.S_z = S_z.to(self.device, non_blocking=True)
+
+        # segmentations
+        self.structures_dict = structures_dict
 
         # whether to use the moving mask
         self.use_moving_mask = config['use_moving_mask']  
@@ -249,10 +253,11 @@ class Trainer(BaseTrainer):
                 
                 # dice scores
                 seg_moving_warped = self.registration_module(seg_moving, transformation1)
-                dsc = calc_dice(self.seg_fixed, seg_moving_warped)
+                dsc = calc_dice(self.seg_fixed, seg_moving_warped, self.structures_dict)
 
-                for score_idx, score in enumerate(dsc):
-                    self.train_metrics_vi.update('DSC/VI/' + str(score_idx), score)
+                for structure in dsc:
+                    score = dsc[structure]
+                    self.train_metrics_vi.update('DSC/VI/' + structure, score)
 
                 log = {'iter_no': iter_no}
                 log.update(self.train_metrics_vi.result())
@@ -312,6 +317,10 @@ class Trainer(BaseTrainer):
             self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
 
         self.logger.info('\nBURNING IN THE MARKOV CHAIN\n')
+        
+        # mean transformation
+        no_samples = 0
+        mean_transformation = None
 
         for sample_no in range(self.start_sample, self.no_samples + 1):
             self.train_metrics_mcmc.reset()
@@ -430,10 +439,11 @@ class Trainer(BaseTrainer):
 
                     # dice scores
                     seg_moving_warped = self.registration_module(seg_moving, transformation)
-                    dsc = calc_dice(self.seg_fixed, seg_moving_warped)
+                    dsc = calc_dice(self.seg_fixed, seg_moving_warped, self.structures_dict)
 
-                    for score_idx, score in enumerate(dsc):
-                        self.train_metrics_mcmc.update('DSC/MCMC/' + str(score_idx), score)
+                    for structure in dsc:
+                        score = dsc[structure]
+                        self.train_metrics_mcmc.update('DSC/MCMC/' + structure, score)
                         
                     if self.sobolev_grad:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
@@ -449,13 +459,27 @@ class Trainer(BaseTrainer):
             if sample_no > self.no_iters_burn_in and sample_no % self.save_period_mcmc == 0 \
                     or sample_no == self.no_samples:
                 with torch.no_grad():
-                    if self.sobolev_grad:
-                        save_sample(self.data_loader, im_pair_idxs, sample_no,
-                                    im_moving_warped, v_curr_state_noise_smoothed)
-                    else:
-                        save_sample(self.data_loader, im_pair_idxs, sample_no, im_moving_warped, v_curr_state_noise)
-
+                    save_sample(self.data_loader, im_pair_idxs, sample_no, im_moving_warped, displacement)
                     self._save_checkpoint_mcmc(sample_no)  # checkpoint
+            
+            """
+            mean transformation
+            """
+
+            if sample_no > self.no_iters_burn_in:
+                no_samples += 1
+
+                if mean_transformation is None:
+                    mean_transformation = transformation
+                else:
+                    mean_transformation += transformation
+
+            if sample_no == self.no_samples:
+                mean_transformation /= no_samples
+
+                seg_moving_mean = self.registration_module(seg_moving, mean_transformation)
+                dsc = calc_dice(self.seg_fixed, seg_moving_mean, self.structures_dict)
+                pprint.pprint(dsc)
 
     def _train_epoch(self):
         for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v, u_v) \
@@ -530,10 +554,11 @@ class Trainer(BaseTrainer):
                 log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)  # residual histogram
                 
                 # dice scores
-                dsc = calc_dice(self.seg_fixed, seg_moving)
+                dsc = calc_dice(self.seg_fixed, seg_moving, self.structures_dict)
 
-                for score_idx, score in enumerate(dsc):
-                    self.train_metrics_vi.update('DSC/VI/' + str(score_idx), score)
+                for structure in dsc:
+                    score = dsc[structure]
+                    self.train_metrics_vi.update('DSC/VI/' + structure, score)
 
             """
             VI
