@@ -2,7 +2,7 @@ from base import BaseTrainer
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, save_fields, save_grids, save_images, \
     save_norms, save_sample
 from optimizers import Adam
-from utils import add_noise_uniform, calc_det_J, calc_dice, get_module_attr, inf_loop, max_field_update, \
+from utils import add_noise_uniform, calc_asd, calc_det_J, calc_dice, get_module_attr, inf_loop, max_field_update, \
     rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, MALA, SobolevGrad
 
 import math
@@ -258,6 +258,12 @@ class Trainer(BaseTrainer):
                 for structure in dsc:
                     score = dsc[structure]
                     self.train_metrics_vi.update('DSC/VI/' + structure, score)
+                
+                asd = calc_asd(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.dataset.spacing)
+
+                for structure in asd:
+                    dist = asd[structure]
+                    self.train_metrics_vi.update('ASD/VI/' + structure, dist)
 
                 log = {'iter_no': iter_no}
                 log.update(self.train_metrics_vi.result())
@@ -299,7 +305,7 @@ class Trainer(BaseTrainer):
                     # .nii.gz/.vtk
                     save_fields(self.data_loader, im_pair_idxs, var_params, displacement, log_det_J_transformation)
                     save_grids(self.data_loader, im_pair_idxs, transformation)
-                    save_images(self.data_loader, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
+                    save_images(self.data_loader, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped, self.mask_fixed)
                     save_norms(self.data_loader, im_pair_idxs, var_params, displacement)
 
             # checkpoint
@@ -444,6 +450,12 @@ class Trainer(BaseTrainer):
                     for structure in dsc:
                         score = dsc[structure]
                         self.train_metrics_mcmc.update('DSC/MCMC/' + structure, score)
+
+                    asd = calc_asd(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.dataset.spacing)
+
+                    for structure in asd:
+                        dist = asd[structure]
+                        self.train_metrics_mcmc.update('ASD/MCMC/' + structure, dist)
                         
                     if self.sobolev_grad:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
@@ -476,10 +488,13 @@ class Trainer(BaseTrainer):
 
             if sample_no == self.no_samples:
                 mean_transformation /= no_samples
-
                 seg_moving_mean = self.registration_module(seg_moving, mean_transformation)
+
                 dsc = calc_dice(self.seg_fixed, seg_moving_mean, self.structures_dict)
                 pprint.pprint(dsc)
+
+                asd = calc_asd(self.seg_fixed, seg_moving_mean, self.structures_dict, self.data_loader.dataset.spacing)
+                pprint.pprint(asd)
 
     def _train_epoch(self):
         for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v, u_v) \
@@ -559,6 +574,12 @@ class Trainer(BaseTrainer):
                 for structure in dsc:
                     score = dsc[structure]
                     self.train_metrics_vi.update('DSC/VI/' + structure, score)
+
+                asd = calc_asd(self.seg_fixed, seg_moving, self.structures_dict, self.data_loader.dataset.spacing)
+
+                for structure in asd:
+                    dist = asd[structure]
+                    self.train_metrics_vi.update('ASD/VI/' + structure, dist)
 
             """
             VI

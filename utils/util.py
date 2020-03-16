@@ -9,6 +9,7 @@ import math
 import nibabel as nib
 import numpy as np
 import pandas as pd
+import SimpleITK as sitk
 import torch
 import torch.nn.functional as F
 
@@ -59,6 +60,38 @@ def calc_det_J(nabla_x, nabla_y, nabla_z):
             nabla_z[:, 2] * nabla_x[:, 1] * nabla_y[:, 0]
 
     return det_J
+
+
+def calc_asd(seg_fixed, seg_moving, structures_dict, spacing):
+    """
+    calculate the symmetric average surface distance
+    """
+
+    asd = dict()  # dict. with the output for each segmentation
+    hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
+
+    seg_fixed_arr = seg_fixed.squeeze().cpu().numpy()
+    seg_moving_arr = seg_moving.squeeze().cpu().numpy()
+    spacing = spacing.numpy().tolist()
+    
+    for structure in structures_dict:
+        label = structures_dict[structure]
+
+        seg_fixed_structure, seg_moving_structure = np.where(seg_fixed_arr == label, 1, 0), \
+                                                    np.where(seg_moving_arr == label, 1, 0)
+        seg_fixed_im, seg_moving_im = sitk.GetImageFromArray(seg_fixed_structure), \
+                                      sitk.GetImageFromArray(seg_moving_structure)
+
+        seg_fixed_im.SetSpacing(spacing)
+        seg_moving_im.SetSpacing(spacing)
+
+        seg_fixed_contour, seg_moving_contour = sitk.LabelContour(seg_fixed_im), \
+                                                sitk.LabelContour(seg_moving_im)
+
+        hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
+        asd[structure] = hausdorff_distance_filter.GetAverageHausdorffDistance()
+
+    return asd
 
 
 def calc_dice(seg_fixed, seg_moving, structures_dict):

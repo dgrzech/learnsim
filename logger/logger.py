@@ -36,7 +36,7 @@ def print_log(logger, log):
     """
 
     for key, value in log.items():
-        if 'DSC' not in key and 'GM' not in key:
+        if 'DSC' not in key and 'ASD' not in key and 'GM' not in key:
             if isinstance(value, int):
                 logger.info(f'    {key:30s}: {value}')
             else:
@@ -56,6 +56,13 @@ def save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed, spacing):
     if not path.exists(im_fixed_path):
         save_im_to_disk(im_fixed, im_fixed_path, spacing)
 
+
+def save_mask_fixed(save_dirs_dict, im_pair_idx, mask_fixed, spacing):
+    mask_fixed_path = path.join(save_dirs_dict['images'], 'mask_fixed_' + str(im_pair_idx) + '.nii.gz')
+    
+    if not path.exists(mask_fixed_path):
+        save_im_to_disk(mask_fixed, mask_fixed_path, spacing)
+
         
 def save_im_moving(save_dirs_dict, im_pair_idx, im_moving, spacing):
     im_moving_path = path.join(save_dirs_dict['images'], 'im_moving_' + str(im_pair_idx) + '.nii.gz')
@@ -69,7 +76,7 @@ def save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped, spacing
     save_im_to_disk(im_moving_warped, im_moving_warped_path, spacing)
 
 
-def save_images(data_loader, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
+def save_images(data_loader, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch, mask_fixed_batch=None):
     """
     save input and output images to .nii.gz
     """
@@ -83,6 +90,9 @@ def save_images(data_loader, im_pair_idxs, im_fixed_batch, im_moving_batch, im_m
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
+    if mask_fixed_batch is not None:
+        mask_fixed_batch = mask_fixed_batch.float().cpu().numpy()
+
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_fixed = im_fixed_batch[loop_idx, 0]
         save_im_fixed(save_dirs_dict, im_pair_idx, im_fixed, spacing)
@@ -92,6 +102,10 @@ def save_images(data_loader, im_pair_idxs, im_fixed_batch, im_moving_batch, im_m
 
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
         save_im_moving_warped(save_dirs_dict, im_pair_idx, im_moving_warped, spacing)
+
+        if mask_fixed_batch is not None:
+            mask_fixed = mask_fixed_batch[loop_idx, 0]
+            save_mask_fixed(save_dirs_dict, im_pair_idx, mask_fixed, spacing)
 
 
 """
