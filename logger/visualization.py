@@ -116,11 +116,10 @@ def log_hist_res(writer, im_pair_idxs, residuals_batch, data_loss):
     plot of the resiudal histogram to log in tensorboard
     """
 
-    batch_size = im_pair_idxs.numel()
     im_pair_idxs = im_pair_idxs.tolist()
-
     device_temp = residuals_batch.device
-    residuals_batch = residuals_batch.view(batch_size, -1).cpu().numpy()
+
+    residuals_batch = residuals_batch.view(1, -1).cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         residuals = residuals_batch[loop_idx]

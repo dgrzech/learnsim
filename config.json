@@ -1,5 +1,5 @@
 {
-    "name": "spatial",
+    "name": "sg_mcmc",
     "n_gpu": 1,
 
     "data_loss": {
@@ -31,13 +31,13 @@
 	        "learnable": true,
             "loc_learnable": true,
 	        "scale_learnable": true,
-	        "w_reg": 0.1
+	        "w_reg": 0.2
         }
     },
     "reg_loss_prior_loc": {
     	"type": "LogEnergyExpGammaPrior",
 	    "args": {
-	        "w_reg": 0.1,
+	        "w_reg": 0.2,
 	        "dof": 2654208.0,
 	        "learnable": false
 	    }
@@ -73,20 +73,17 @@
     "optimizer_mala": {
         "type": "SGD",
         "args": {
-            "lr": 1e-2
+            "lr": 1e-1
         }
     },
 
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
-            "data_dir": "/vol/bitbucket/dig15/learnsim_biobank_train/biobank_1/",
+            "data_dir": "/vol/bitbucket/dig15/datasets/mine/miccai_2020/biobank_1/",
             "dim_x": 96,
 	        "dim_y": 96,
-	        "dim_z": 96,
-            "batch_size": 1,
-            "num_workers": 1,
-            "shuffle": false
+	        "dim_z": 96
         }
     },
 
@@ -104,13 +101,13 @@
         "no_iters_burn_in": 2000,
 	    "no_samples": 4000,
 
-        "log_period": 32,
-        "log_period_mcmc": 100,
+        "log_period": 64,
+        "log_period_mcmc": 40,
         "tensorboard": true,
         "verbosity": 2,
 
         "save_dir": "saved/",
-        "save_period": 64,
-        "save_period_mcmc": 50
+        "save_period": 128,
+        "save_period_mcmc": 40
     }
 }

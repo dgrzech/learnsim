@@ -100,7 +100,6 @@ class SSD(DataLoss):
         return 0.5 * torch.sum(torch.pow(z, 2) * mask)
 
 
-# © Loic Le Folgoc, l.le-folgoc@imperial.ac.uk
 class GaussianMixtureLoss(DataLoss):
     """
     Gaussian mixture loss

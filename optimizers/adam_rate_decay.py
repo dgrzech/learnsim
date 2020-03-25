@@ -1,5 +1,3 @@
-# © Loic Le Folgoc, l.le-folgoc@imperial.ac.uk
-
 # Simple modification of the Adam optimizer from the pytorch library
 # to enable lr decay and reinits of the moving averages.
 
