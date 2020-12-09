@@ -38,9 +38,9 @@ def print_log(logger, log):
     for key, value in log.items():
         if 'DSC' not in key and 'ASD' not in key and 'GM' not in key:
             if isinstance(value, int):
-                logger.info(f'    {key:30s}: {value}')
+                logger.info(f'    {key:50s}: {value}')
             else:
-                logger.info(f'    {key:30s}: {value:.5f}')
+                logger.info(f'    {key:50s}: {value:.5f}')
 
     print()
 
@@ -259,7 +259,7 @@ samples
 """
 
 
-def save_sample(data_loader, im_pair_idxs, sample_no, im_moving_warped_batch, v_batch):
+def save_sample(data_loader, im_pair_idxs, sample_no, im_moving_warped_batch, field_batch, model='MCMC'):
     """
     save output images and vector fields related to a sample from MCMC
     """
@@ -269,16 +269,17 @@ def save_sample(data_loader, im_pair_idxs, sample_no, im_moving_warped_batch, v_
 
     im_pair_idxs = im_pair_idxs.tolist()
 
-    v_batch_voxel_units = transform_coordinates_inv(v_batch)
+    field_batch_voxel_units = transform_coordinates_inv(field_batch)
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
         im_moving_warped_path = \
             path.join(save_dirs_dict['samples'],
-                      'sample_' + str(sample_no) + '_im_moving_warped_' + str(im_pair_idx) + '.nii.gz')
+                      'sample_' + model + '_' +  str(sample_no) + '_im_moving_warped_' + str(im_pair_idx) + '.nii.gz')
         save_im_to_disk(im_moving_warped, im_moving_warped_path, spacing)
 
-        v = v_batch_voxel_units[loop_idx] * spacing[0]
-        v_path = path.join(save_dirs_dict['samples'], 'sample_' + str(sample_no) + '_v_' + str(im_pair_idx) + '.vtk')
-        save_field_to_disk(v, v_path, spacing)
+        field = field_batch_voxel_units[loop_idx] * spacing[0]
+        field_path = path.join(save_dirs_dict['samples'], 'sample_' + model + '_' + str(sample_no) + '_' + str(im_pair_idx) + '.vtk')
+
+        save_field_to_disk(field, field_path, spacing)
