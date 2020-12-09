@@ -50,33 +50,35 @@ def main(config):
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
     # metrics
+    sigmas_VI = ['VI/train/GMM/sigma_' + str(idx) for idx in range(num_components)]
+    proportions_VI = ['VI/train/GMM/proportion_' + str(idx) for idx in range(num_components)]
+    
+    sigmas_MCMC = ['MCMC/GMM/sigma_' + str(idx) for idx in range(num_components)]
+    proportions_MCMC = ['MCMC/GMM/proportion_' + str(idx) for idx in range(num_components)]
+
     structures_dict = {'left_thalamus': 10, 'left_caudate': 11, 'left_putamen': 12, 
                        'left_pallidum': 13, 'brain_stem': 16, 'left_hippocampus': 17, 
                        'left_amygdala': 18, 'left_accumbens': 26, 'right_thalamus': 49, 
                        'right_caudate': 50, 'right_putamen': 51, 'right_pallidum': 52, 
                        'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
     
-    asd_vi = ['ASD/VI_train/' + structure for structure in structures_dict] + ['ASD/VI_test/' + structure for structure in structures_dict]
-    dsc_vi = ['DSC/VI_train/' + structure for structure in structures_dict] + ['DSC/VI_test/' + structure for structure in structures_dict]
-    sigmas_vi = ['GM/VI/sigma_' + str(idx) for idx in range(num_components)]
-    proportions_vi = ['GM/VI/proportion_' + str(idx) for idx in range(num_components)]
+    ASD_VI = ['VI/train/ASD/' + structure for structure in structures_dict] + ['VI/test/ASD/' + structure for structure in structures_dict]
+    DSC_VI = ['VI/train/DSC/' + structure for structure in structures_dict] + ['VI/test/DSC/' + structure for structure in structures_dict]
 
-    metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss', 'other/VI/no_non_diffeomorphic_voxels',
-                  'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
-                  'other/VI/alpha', 'other/VI/loc', 'other/VI/log_scale', 'other/VI/y'] + sigmas_vi + proportions_vi + asd_vi + dsc_vi
+    ASD_MCMC = ['MCMC/ASD/' + structure for structure in structures_dict]
+    DSC_MCMC = ['MCMC/DSC/' + structure for structure in structures_dict]
 
-    asd_mcmc = ['ASD/MCMC/' + structure for structure in structures_dict]
-    dsc_mcmc = ['DSC/MCMC/' + structure for structure in structures_dict]
-    sigmas_mcmc = ['GM/MCMC/sigma_' + str(idx) for idx in range(num_components)]
-    proportions_mcmc = ['GM/MCMC/proportion_' + str(idx) for idx in range(num_components)]
+    metrics_VI = ['VI/train/data_term', 'VI/train/reg_term', 'VI/train/entropy_term', 'VI/train/total_loss', 
+                  'VI/train/no_non_diffeomorphic_voxels', 'VI/test/no_non_diffeomorphic_voxels',
+                  'VI/train/max_updates/mu_v', 'VI/train/max_updates/log_var_v', 'VI/train/max_updates/u_v',
+                  'VI/train/alpha', 'VI/train/loc', 'VI/train/log_scale', 'VI/train/y'] + sigmas_VI + proportions_VI + ASD_VI + DSC_VI
 
-    metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'other/MCMC/no_non_diffeomorphic_voxels',
-                    'other/MCMC/alpha', 'other/MCMC/loc', 'other/MCMC/log_scale', 'other/MCMC/y'] \
-                   + sigmas_mcmc + proportions_mcmc + asd_mcmc + dsc_mcmc
+    metrics_MCMC = ['MCMC/data_term', 'MCMC/reg_term', 'MCMC/no_non_diffeomorphic_voxels',
+                    'MCMC/alpha', 'MCMC/loc', 'MCMC/log_scale', 'MCMC/y'] + sigmas_MCMC + proportions_MCMC + ASD_MCMC + DSC_MCMC
 
     # run the model
     trainer = Trainer(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
-                      entropy_loss, transformation_model, registration_module, metrics_vi, metrics_mcmc, structures_dict,
+                      entropy_loss, transformation_model, registration_module, metrics_VI, metrics_MCMC, structures_dict,
                       config=config, data_loader=data_loader)
     trainer.train()
 
@@ -94,8 +96,8 @@ if __name__ == '__main__':
     # custom cli options to modify configuration from default values given in the .json file
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
     options = [
-        CustomArgs(['-vi', '--variational_inference'], type=int, target='trainer;vi'),
-        CustomArgs(['-mcmc', '--markov_chain_monte_carlo'], type=int, target='trainer;mcmc')
+        CustomArgs(['-VI', '--variational_inference'], type=int, target='trainer;VI'),
+        CustomArgs(['-MCMC', '--markov_chain_monte_carlo'], type=int, target='trainer;MCMC')
     ]
 
     config = ConfigParser.from_args(args, options)

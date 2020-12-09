@@ -41,16 +41,17 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def calc_det_J(nabla_x, nabla_y, nabla_z):
+def calc_det_J(nabla):
     """
     calculate the Jacobian determinant of a vector field
 
-    :param nabla_x: field gradients in the x direction
-    :param nabla_y: field gradients in the y direction
-    :param nabla_z: field gradients in the z direction
-
+    :param nabla: field gradients
     :return: Jacobian determinant
     """
+
+    nabla_x = nabla[..., 0]
+    nabla_y = nabla[..., 1]
+    nabla_z = nabla[..., 2]
 
     det_J = nabla_x[:, 0] * nabla_y[:, 1] * nabla_z[:, 2] + \
             nabla_y[:, 0] * nabla_z[:, 1] * nabla_x[:, 2] + \
@@ -62,12 +63,12 @@ def calc_det_J(nabla_x, nabla_y, nabla_z):
     return det_J
 
 
-def calc_asd(seg_fixed, seg_moving, structures_dict, spacing):
+def calc_ASD(seg_fixed, seg_moving, structures_dict, spacing):
     """
     calculate the symmetric average surface distance
     """
 
-    asd = dict()  # dict. with the output for each segmentation
+    ASD = dict()  # dict. with the output for each segmentation
     hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
 
     seg_fixed_arr = seg_fixed.squeeze().cpu().numpy()
@@ -89,13 +90,13 @@ def calc_asd(seg_fixed, seg_moving, structures_dict, spacing):
                                                 sitk.LabelContour(seg_moving_im)
 
         hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
-        asd[structure] = hausdorff_distance_filter.GetAverageHausdorffDistance()
+        ASD[structure] = hausdorff_distance_filter.GetAverageHausdorffDistance()
 
-    return asd
+    return ASD
 
 
-def calc_dice(seg_fixed, seg_moving, structures_dict):
-    dsc = dict()  # dict. with dice scores for each segmentation
+def calc_DSC(seg_fixed, seg_moving, structures_dict):
+    DSC = dict()  # dict. with dice scores for each segmentation
     
     for structure in structures_dict:
         label = structures_dict[structure]
@@ -104,9 +105,9 @@ def calc_dice(seg_fixed, seg_moving, structures_dict):
         denominator = (seg_fixed == label).sum().item() + (seg_moving == label).sum().item()
     
         score = numerator / denominator
-        dsc[structure] = score
+        DSC[structure] = score
     
-    return dsc
+    return DSC
 
 
 def calc_norm(v):
@@ -328,7 +329,7 @@ def save_optimiser_to_disk(optimiser, file_path):
     torch.save(state_dict, file_path)
 
 
-def separable_conv_3d(field, *args):
+def separable_conv_3D(field, *args):
     """
     implements separable convolution over a three-dimensional vector field either as three 1D convolutions
     with a 1D kernel, or as three 3D convolutions with three 3D kernels of sizes kx1x1, 1xkx1, and 1x1xk

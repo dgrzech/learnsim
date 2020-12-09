@@ -36,7 +36,7 @@ def print_log(logger, log):
     """
 
     for key, value in log.items():
-        if 'DSC' not in key and 'ASD' not in key and 'GM' not in key:
+        if 'DSC' not in key and 'ASD' not in key and 'GMM' not in key and 'test' not in key:
             if isinstance(value, int):
                 logger.info(f'    {key:50s}: {value}')
             else:

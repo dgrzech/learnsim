@@ -49,15 +49,14 @@ class BaseTrainer:
         # training logic
         cfg_trainer = config['trainer']
 
-        self.no_iters_vi = int(cfg_trainer['no_iters_vi'])
+        self.no_iters_VI = int(cfg_trainer['no_iters_VI'])
+        self.no_samples_VI_test = int(cfg_trainer['no_samples_VI_test'])
+
         self.no_iters_burn_in = int(cfg_trainer['no_iters_burn_in'])
-        self.no_samples = int(cfg_trainer['no_samples'])
+        self.no_samples_MCMC = int(cfg_trainer['no_samples_MCMC'])
 
-        self.log_period = cfg_trainer['log_period']
-        self.save_period = cfg_trainer['save_period']
-
-        self.log_period_mcmc = cfg_trainer['log_period_mcmc']
-        self.save_period_mcmc = cfg_trainer['save_period_mcmc']
+        self.log_period_VI = cfg_trainer['log_period_VI']
+        self.log_period_MCMC = cfg_trainer['log_period_MCMC']
 
         # setup visualization writer instance
         self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])

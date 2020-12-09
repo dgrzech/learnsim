@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
 
-from utils import gaussian_kernel_3d, transform_coordinates_inv, vd_reg, GaussianGrad, DifferentialOperator
+from utils import gaussian_kernel_3D, transform_coordinates_inv, vd_reg, GaussianGrad, DifferentialOperator
 
 import model.distributions as model_distr
 

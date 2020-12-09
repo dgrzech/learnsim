@@ -1,4 +1,4 @@
-from utils import separable_conv_3d
+from utils import separable_conv_3D
 
 import math
 import numpy as np
@@ -6,7 +6,7 @@ import scipy.sparse as sp
 import torch
 
 
-def laplacian_1d(N):
+def Laplacian_1D(N):
     """
     calculate the Laplacian matrix of size N
     """
@@ -15,14 +15,14 @@ def laplacian_1d(N):
     return sp.spdiags([diag, -2.0 * diag, diag], [-1, 0, 1], N, N)
 
 
-def laplacian_3d(N):
-    L_1D = laplacian_1d(N)
+def Laplacian_3D(N):
+    L_1D = Laplacian_1D(N)
     I = sp.eye(N)
 
     return sp.kron(L_1D, sp.kron(I, I)) + sp.kron(I, sp.kron(L_1D, I)) + sp.kron(I, sp.kron(I, L_1D))
 
 
-def sobolev_kernel_1d(_s, _lambda):
+def Sobolev_kernel_1D(_s, _lambda):
     """
     approximate the Sobolev kernel
 
@@ -32,7 +32,7 @@ def sobolev_kernel_1d(_s, _lambda):
     """
 
     # we do the eigendecomposition anyway for the sqrt, so might as well compute the smoothing kernel while at it
-    L = np.asarray(laplacian_1d(_s).todense())
+    L = np.asarray(Laplacian_1D(_s).todense())
     w, v = np.linalg.eigh(L)
     w = 1.0 - _lambda * w
 
@@ -48,9 +48,9 @@ def sobolev_kernel_1d(_s, _lambda):
     return smoothing_kernel / np.sum(smoothing_kernel), smoothing_kernel_sqrt / np.sum(smoothing_kernel_sqrt)
 
 
-def sobolev_kernel_3d(_s, _lambda):
+def Sobolev_kernel_3D(_s, _lambda):
     I = np.eye(_s ** 3)  # identity matrix
-    L = laplacian_3d(_s).todense()  # Laplacian matrix discretised via a 7-point finite-difference stencil
+    L = Laplacian_3D(_s).todense()  # Laplacian matrix discretised via a 7-point finite-difference stencil
 
     v = np.zeros(_s ** 3)  # one-hot vector that corresponds to a discretised Dirac impulse of size s ** 3 voxels
     v[(_s ** 3) // 2] = 1.0
@@ -61,7 +61,7 @@ def sobolev_kernel_3d(_s, _lambda):
     return S.reshape((_s, _s, _s))  # 3D Sobolev filter
 
 
-def gaussian_kernel_3d(_s, sigma=1.0):
+def gaussian_kernel_3D(_s, sigma=1.0):
     """
     approximate the Gaussian kernel
     """
@@ -77,7 +77,7 @@ def add_noise(v, sigma_scaled, tau):
     return v + math.sqrt(tau) * eps * sigma_scaled
 
 
-class MALA(torch.autograd.Function):
+class SGLD(torch.autograd.Function):
     @staticmethod
     def forward(ctx, v_curr_state, sigma_scaled, tau):
         ctx.sigma_scaled = sigma_scaled
@@ -105,8 +105,8 @@ class SobolevGrad(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, input, S_x, S_y, S_z, padding):
-        return separable_conv_3d(input, S_x, S_y, S_z, padding)
+    def forward(ctx, input, S, padding):
+        return separable_conv_3D(input, S['x'], S['y'], S['z'], padding)
 
     @staticmethod
     def backward(ctx, grad_output):

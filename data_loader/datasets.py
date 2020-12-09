@@ -46,7 +46,7 @@ class BiobankDataset(Dataset):
             mask_filenames = ['' for _ in range(len(im_filenames))]
         
         # segmentations filenames
-        seg_paths = path.join(im_paths, 'seg')
+        seg_paths = path.join(im_paths, 'segs')
 
         if listdir(seg_paths):
             seg_filenames = sorted([path.join(seg_paths, f)
