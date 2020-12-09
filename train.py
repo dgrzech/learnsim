@@ -56,12 +56,12 @@ def main(config):
                        'right_caudate': 50, 'right_putamen': 51, 'right_pallidum': 52, 
                        'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
     
-    asd_vi = ['ASD/VI/' + structure for structure in structures_dict]
-    dsc_vi = ['DSC/VI/' + structure for structure in structures_dict]
+    asd_vi = ['ASD/VI_train/' + structure for structure in structures_dict] + ['ASD/VI_test/' + structure for structure in structures_dict]
+    dsc_vi = ['DSC/VI_train/' + structure for structure in structures_dict] + ['DSC/VI_test/' + structure for structure in structures_dict]
     sigmas_vi = ['GM/VI/sigma_' + str(idx) for idx in range(num_components)]
     proportions_vi = ['GM/VI/proportion_' + str(idx) for idx in range(num_components)]
 
-    metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss',
+    metrics_vi = ['VI/data_term', 'VI/reg_term', 'VI/entropy_term', 'VI/total_loss', 'other/VI/no_non_diffeomorphic_voxels',
                   'other/max_updates/mu_v', 'other/max_updates/log_var_v', 'other/max_updates/u_v',
                   'other/VI/alpha', 'other/VI/loc', 'other/VI/log_scale', 'other/VI/y'] + sigmas_vi + proportions_vi + asd_vi + dsc_vi
 
@@ -70,7 +70,7 @@ def main(config):
     sigmas_mcmc = ['GM/MCMC/sigma_' + str(idx) for idx in range(num_components)]
     proportions_mcmc = ['GM/MCMC/proportion_' + str(idx) for idx in range(num_components)]
 
-    metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term',
+    metrics_mcmc = ['MCMC/data_term', 'MCMC/reg_term', 'other/MCMC/no_non_diffeomorphic_voxels',
                     'other/MCMC/alpha', 'other/MCMC/loc', 'other/MCMC/log_scale', 'other/MCMC/y'] \
                    + sigmas_mcmc + proportions_mcmc + asd_mcmc + dsc_mcmc
 
