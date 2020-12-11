@@ -1,9 +1,10 @@
 from base import BaseTrainer
+from datetime import datetime
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, save_fields, save_grids, save_images, \
     save_norms, save_sample
 from optimizers import Adam
-from utils import add_noise_uniform, calc_asd, calc_det_J, calc_dice, get_module_attr, inf_loop, max_field_update, \
-    rescale_residuals, sample_q_v, sobolev_kernel_1d, transform_coordinates, vd, MetricTracker, MALA, SobolevGrad
+from utils import add_noise_uniform, calc_ASD, calc_det_J, calc_DSC, get_module_attr, inf_loop, max_field_update, \
+    rescale_residuals, sample_q_v, Sobolev_kernel_1D, transform_coordinates, vd, MetricTracker, SGLD, SobolevGrad
 
 import math
 import numpy as np
@@ -18,77 +19,70 @@ class Trainer(BaseTrainer):
 
     def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
                  entropy_loss, transformation_model, registration_module,
-                 metric_ftns_vi, metric_ftns_mcmc, structures_dict, config, data_loader):
+                 metric_ftns_VI, metric_ftns_MCMC, structures_dict, config, data_loader):
         super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
                          entropy_loss, transformation_model, registration_module, config)
 
         self.config = config
         self.data_loader = data_loader
         self.im_fixed, self.mask_fixed, self.seg_fixed = None, None, None
+        self.structures_dict = structures_dict  # segmentations
 
-        self.dof = config['data_loader']['args']['dim_x'] \
-                   * config['data_loader']['args']['dim_y'] \
-                   * config['data_loader']['args']['dim_z'] * 3.0
+        self.N = config['data_loader']['args']['dim_x'] \
+                 * config['data_loader']['args']['dim_y'] \
+                 * config['data_loader']['args']['dim_z']
+        self.dof = self.N * 3.0
 
         # variational inference
         self.start_iter = 1
         self.mu_v, self.log_var_v, self.u_v = None, None, None
 
-        self.VI = config['trainer']['vi']
+        self.VI = config['trainer']['VI']
         self.optimizer_mixture_model, self.optimizer_w_reg, self.optimizer_v = None, None, None
-        self.train_metrics_vi = MetricTracker(*[m for m in metric_ftns_vi], writer=self.writer)
+        self.metrics_VI = MetricTracker(*[m for m in metric_ftns_VI], writer=self.writer)
 
-        # Markov chain Monte Carlo
+        # stochastic gradient Markov chain Monte Carlo
         self.start_sample = 1
         self.tau = None
         self.v_curr_state, self.sigma_scaled, self.u_scaled = None, None, None
 
-        self.MCMC = config['trainer']['mcmc']
-        self.optimizer_mala = None
-        self.train_metrics_mcmc = MetricTracker(*[m for m in metric_ftns_mcmc], writer=self.writer)
+        self.MCMC = config['trainer']['MCMC']
+        self.optimizer_SG_MCMC = None
+        self.metrics_MCMC = MetricTracker(*[m for m in metric_ftns_MCMC], writer=self.writer)
 
         # Sobolev gradients
-        self.sobolev_grad = config['sobolev_grad']['enabled']
+        self.Sobolev_grad = config['Sobolev_grad']['enabled']
 
-        if self.sobolev_grad:
-            _s = config['sobolev_grad']['s']
-            _lambda = config['sobolev_grad']['lambda']
+        if self.Sobolev_grad:
+            _s = config['Sobolev_grad']['s']
+            _lambda = config['Sobolev_grad']['lambda']
             self.padding_sz = _s // 2
 
-            S, S_sqrt = sobolev_kernel_1d(_s, _lambda)
+            S, S_sqrt = Sobolev_kernel_1D(_s, _lambda)
 
-            S = torch.from_numpy(S).float()
-            S.unsqueeze_(0)
+            S = torch.from_numpy(S).float().unsqueeze(0)
             S = torch.stack((S, S, S), 0)
 
-            S_x = S.unsqueeze(2).unsqueeze(2)
-            S_y = S.unsqueeze(2).unsqueeze(4)
-            S_z = S.unsqueeze(3).unsqueeze(4)
+            S_x = S.unsqueeze(2).unsqueeze(2).to(self.device, non_blocking=True)
+            S_y = S.unsqueeze(2).unsqueeze(4).to(self.device, non_blocking=True)
+            S_z = S.unsqueeze(3).unsqueeze(4).to(self.device, non_blocking=True)
 
-            self.S_x = S_x.to(self.device, non_blocking=True)
-            self.S_y = S_y.to(self.device, non_blocking=True)
-            self.S_z = S_z.to(self.device, non_blocking=True)
-
-        # segmentations
-        self.structures_dict = structures_dict
-
-        # whether to use the moving mask
-        self.use_moving_mask = config['use_moving_mask']  
+            self.S = {'x': S_x, 'y': S_y, 'z': S_z}
 
         # virtual decimation
-        self.vd = config['vd']
+        self.virutal_decimation = config['virtual_decimation']
 
         # resuming
         if config.resume is not None and self.VI:
-            self._resume_checkpoint_vi(config.resume)
+            self._resume_checkpoint_VI(config.resume)
         elif config.resume is not None and self.MCMC:
-            self._resume_checkpoint_mcmc(config.resume)
+            self._resume_checkpoint_MCMC(config.resume)
 
     def _step_GMM(self, res, alpha=1.0):
         if self.optimizer_mixture_model is None:  # initialise the optimiser
             self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
-                                                 {'params': [self.data_loss.logits], 'lr': 1e-2}],
-                                                lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
+                                                 {'params': [self.data_loss.logits], 'lr': 1e-2}], 
+                                                 lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
 
         data_term = self.data_loss(res.detach()).sum() * alpha
         data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
@@ -98,7 +92,7 @@ class Trainer(BaseTrainer):
         data_term.backward()
         self.optimizer_mixture_model.step()  # backprop
 
-    def _step_VI(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
+    def _run_VI(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
         self.mu_v.requires_grad_(True)
         self.log_var_v.requires_grad_(True)
         self.u_v.requires_grad_(True)
@@ -111,21 +105,27 @@ class Trainer(BaseTrainer):
                 self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}],
                                             lr=1e-1, betas=(0.9, 0.95))
 
-        for iter_no in range(self.start_iter, self.no_iters_vi + 1):
-            self.train_metrics_vi.reset()
+        for iter_no in range(self.start_iter, self.no_iters_VI + 1):
+            self.metrics_VI.reset()
 
-            if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
-                mu_v_old = self.mu_v.detach().clone()  # needed to calculate the maximum update in terms of the L2 norm
+            if iter_no % self.log_period_VI == 0 or iter_no == self.no_iters_VI:
+                # needed to calculate the maximum update in terms of the L2 norm
+                mu_v_old = self.mu_v.detach().clone()
                 log_var_v_old = self.log_var_v.detach().clone()
                 u_v_old = self.u_v.detach().clone()
 
             v_sample1_unsmoothed, v_sample2_unsmoothed = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=2)
-            if self.sobolev_grad:
-                v_sample1 = SobolevGrad.apply(v_sample1_unsmoothed, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                v_sample2 = SobolevGrad.apply(v_sample2_unsmoothed, self.S_x, self.S_y, self.S_z, self.padding_sz)
+            if self.Sobolev_grad:
+                v_sample1 = SobolevGrad.apply(v_sample1_unsmoothed, self.S, self.padding_sz)
+                v_sample2 = SobolevGrad.apply(v_sample2_unsmoothed, self.S, self.padding_sz)
 
             transformation1, displacement1 = self.transformation_model(v_sample1)
             transformation2, displacement2 = self.transformation_model(v_sample2)
+            
+            with torch.no_grad():
+                nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation1)
+                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
+                no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
             # add noise to account for interpolation uncertainty
             transformation1 = add_noise_uniform(transformation1)
@@ -142,32 +142,16 @@ class Trainer(BaseTrainer):
             alpha1, alpha2 = 1.0, 1.0
             alpha_mean = 1.0
 
-            if self.vd:  # virtual decimation
+            if self.virutal_decimation:
                 # rescale the residuals by the estimated voxel-wise standard deviation
-                if self.use_moving_mask:
-                    mask_moving_warped1, \
-                    mask_moving_warped2 = self.registration_module(mask_moving, transformation1), \
-                                          self.registration_module(mask_moving, transformation2)
+                res1_rescaled = rescale_residuals(res1.detach(), self.mask_fixed, self.data_loss)
+                res2_rescaled = rescale_residuals(res2.detach(), self.mask_fixed, self.data_loss)
 
-                    mask1, mask2 = (self.mask_fixed * mask_moving_warped1), (self.mask_fixed * mask_moving_warped2)
-
-                    res1_rescaled = rescale_residuals(res1.detach(), mask1, self.data_loss)
-                    res2_rescaled = rescale_residuals(res2.detach(), mask2, self.data_loss)
-
-                    with torch.no_grad():
-                        alpha1, alpha2 = vd(res1_rescaled, mask1), vd(res2_rescaled, mask2)
-                        alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
-                    
-                    res1_masked, res2_masked = res1[mask1], res2[mask2]
-                else:
-                    res1_rescaled = rescale_residuals(res1.detach(), self.mask_fixed, self.data_loss)
-                    res2_rescaled = rescale_residuals(res2.detach(), self.mask_fixed, self.data_loss)
-
-                    with torch.no_grad():
-                        alpha1, alpha2 = vd(res1_rescaled, self.mask_fixed), vd(res2_rescaled, self.mask_fixed)
-                        alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
-                    
-                    res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
+                with torch.no_grad():
+                    alpha1, alpha2 = vd(res1_rescaled, self.mask_fixed), vd(res2_rescaled, self.mask_fixed)
+                    alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
+                
+                res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
 
             # Gaussian mixture
             self._step_GMM(res1_masked, alpha1)
@@ -216,132 +200,198 @@ class Trainer(BaseTrainer):
                 self.optimizer_w_reg.step()
 
             """
-            metrics and prints
+            outputs
             """
 
             self.writer.set_step(iter_no)
 
-            self.train_metrics_vi.update('VI/data_term', data_term.item())
-            self.train_metrics_vi.update('VI/reg_term', reg_term.item())
-            self.train_metrics_vi.update('VI/entropy_term', entropy_term.item())
-            self.train_metrics_vi.update('VI/total_loss', loss_q_v.item())
+            self.metrics_VI.update('VI/train/data_term', data_term.item())
+            self.metrics_VI.update('VI/train/reg_term', reg_term.item())
+            self.metrics_VI.update('VI/train/entropy_term', entropy_term.item())
+            self.metrics_VI.update('VI/train/total_loss', loss_q_v.item())
             
-            self.train_metrics_vi.update('other/VI/alpha', alpha_mean)
+            self.metrics_VI.update('VI/train/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
+            self.metrics_VI.update('VI/train/alpha', alpha_mean)
 
-            if iter_no % self.log_period == 0 or iter_no == self.no_iters_vi:
+            if iter_no % self.log_period_VI == 0 or iter_no == self.no_iters_VI:
                 with torch.no_grad():
+                    """
+                    metrics and prints
+                    """
+
                     max_update_mu_v, max_update_mu_v_idx = max_field_update(mu_v_old, self.mu_v)
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
                     if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-                        self.train_metrics_vi.update('other/VI/loc', self.reg_loss.loc.item())
-                        self.train_metrics_vi.update('other/VI/log_scale', self.reg_loss.log_scale.item())
+                        self.metrics_VI.update('VI/train/loc', self.reg_loss.loc.item())
+                        self.metrics_VI.update('VI/train/log_scale', self.reg_loss.log_scale.item())
 
-                    self.train_metrics_vi.update('other/VI/y', log_y1.exp().item())
+                    self.metrics_VI.update('VI/train/y', log_y1.exp().item())
                     
                     sigmas = torch.exp(self.data_loss.log_scales())
                     proportions = torch.exp(self.data_loss.log_proportions())
 
-                for idx in range(self.data_loss.num_components):
-                    self.train_metrics_vi.update('GM/VI/sigma_' + str(idx), sigmas[idx])
-                    self.train_metrics_vi.update('GM/VI/proportion_' + str(idx), proportions[idx])
+                    for idx in range(self.data_loss.num_components):
+                        self.metrics_VI.update('VI/train/GMM/sigma_' + str(idx), sigmas[idx])
+                        self.metrics_VI.update('VI/train/GMM/proportion_' + str(idx), proportions[idx])
 
-                self.train_metrics_vi.update('other/max_updates/mu_v', max_update_mu_v.item())
-                self.train_metrics_vi.update('other/max_updates/log_var_v', max_update_log_var_v.item())
-                self.train_metrics_vi.update('other/max_updates/u_v', max_update_u_v.item())
-                
-                # dice scores
-                seg_moving_warped = self.registration_module(seg_moving, transformation1)
-                dsc = calc_dice(self.seg_fixed, seg_moving_warped, self.structures_dict)
+                    self.metrics_VI.update('VI/train/max_updates/mu_v', max_update_mu_v.item())
+                    self.metrics_VI.update('VI/train/max_updates/log_var_v', max_update_log_var_v.item())
+                    self.metrics_VI.update('VI/train/max_updates/u_v', max_update_u_v.item())
+                    
+                    # Dice scores
+                    seg_moving_warped = self.registration_module(seg_moving, transformation1)
+                    DSC = calc_DSC(self.seg_fixed, seg_moving_warped, self.structures_dict)
 
-                for structure in dsc:
-                    score = dsc[structure]
-                    self.train_metrics_vi.update('DSC/VI/' + structure, score)
-                
-                asd = calc_asd(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.dataset.spacing)
+                    for structure in DSC:
+                        score = DSC[structure]
+                        self.metrics_VI.update('VI/train/DSC/' + structure, score)
+                    
+                    # average surface distances
+                    ASD = calc_ASD(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.dataset.spacing)
 
-                for structure in asd:
-                    dist = asd[structure]
-                    self.train_metrics_vi.update('ASD/VI/' + structure, dist)
+                    for structure in ASD:
+                        dist = ASD[structure]
+                        self.metrics_VI.update('VI/train/ASD/' + structure, dist)
 
-                log = {'iter_no': iter_no}
-                log.update(self.train_metrics_vi.result())
-                print_log(self.logger, log)
+                    log = {'iter_no': iter_no}
+                    log.update(self.metrics_VI.result())
+                    print_log(self.logger, log)
 
-            """
-            outputs
-            """
+                    """
+                    logging
+                    """
 
-            if math.log2(iter_no).is_integer() or iter_no == self.no_iters_vi:
-                with torch.no_grad():
-                    if self.sobolev_grad:
-                        mu_v_smoothed = \
-                            SobolevGrad.apply(self.mu_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                        log_var_v_smoothed = \
-                            SobolevGrad.apply(self.log_var_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
-                        u_v_smoothed = \
-                            SobolevGrad.apply(self.u_v, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                    if self.Sobolev_grad:
+                        mu_v_smoothed = SobolevGrad.apply(self.mu_v, self.S, self.padding_sz)
+                        log_var_v_smoothed = SobolevGrad.apply(self.log_var_v, self.S, self.padding_sz)
+                        u_v_smoothed = SobolevGrad.apply(self.u_v, self.S, self.padding_sz)
 
                         var_params = {'mu_v': mu_v_smoothed, 'log_var_v': log_var_v_smoothed, 'u_v': u_v_smoothed}
-                        transformation, displacement = self.transformation_model(mu_v_smoothed)
                     else:
                         var_params = {'mu_v': self.mu_v, 'log_var_v': self.log_var_v, 'u_v': self.u_v}
-                        transformation, displacement = self.transformation_model(self.mu_v)
-
-                    im_moving_warped = self.registration_module(im_moving, transformation)
-
-                    nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation)
-                    nabla_x, nabla_y, nabla_z = nabla_v[:, :, :, :, :, 0], \
-                                                nabla_v[:, :, :, :, :, 1], \
-                                                nabla_v[:, :, :, :, :, 2]
-                    log_det_J_transformation = torch.log(calc_det_J(nabla_x, nabla_y, nabla_z))
 
                     # tensorboard
-                    log_fields(self.writer, im_pair_idxs, var_params, displacement, log_det_J_transformation)
-                    log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped)
+                    log_fields(self.writer, im_pair_idxs, var_params, displacement1, log_det_J_transformation)
+                    log_images(self.writer, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped1)
                     log_hist_res(self.writer, im_pair_idxs, res1_masked, self.data_loss)
+                    
+                    if iter_no == self.no_iters_VI:
+                        if self.Sobolev_grad:
+                            transformation, displacement = self.transformation_model(mu_v_smoothed)
+                        else:
+                            transformation, displacement = self.transformation_model(self.mu_v)
+
+                        im_moving_warped = self.registration_module(im_moving, transformation)
+                    else:
+                        transformation = transformation1.detach().clone()
+                        displacement = displacement1.detach().clone()
+                        im_moving_warped = im_moving_warped1.detach().clone()
 
                     # .nii.gz/.vtk
                     save_fields(self.data_loader, im_pair_idxs, var_params, displacement, log_det_J_transformation)
                     save_grids(self.data_loader, im_pair_idxs, transformation)
                     save_images(self.data_loader, im_pair_idxs, self.im_fixed, im_moving, im_moving_warped, self.mask_fixed)
                     save_norms(self.data_loader, im_pair_idxs, var_params, displacement)
+                    
+                    # checkpoint
+                    self._save_checkpoint_VI(iter_no)
+                
+            if no_non_diffeomorphic_voxels > 0.001 * self.N:
+                self.logger.info("detected " + str(no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic, exiting..")
+                exit()
 
-            # checkpoint
-            if iter_no % self.save_period == 0 or iter_no == self.no_iters_vi:
-                self._save_checkpoint_vi(iter_no)
+    def _test_VI(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
+        """
+        metrics
+        """
 
-    def _step_MCMC(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
+        with torch.no_grad():
+            for test_sample_no in range(1, self.no_samples_VI_test + 1):
+                self.writer.set_step(test_sample_no)
+
+                v_sample_unsmoothed = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1)
+                v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding_sz)
+                transformation, displacement = self.transformation_model(v_sample)
+
+                # add noise to account for interpolation uncertainty
+                transformation = add_noise_uniform(transformation)
+                
+                nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation)
+                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
+                no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
+                self.metrics_VI.update('VI/test/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
+
+                im_moving_warped = self.registration_module(im_moving, transformation)
+                seg_moving_warped = self.registration_module(seg_moving, transformation)
+
+                # Dice scores
+                DSC = calc_DSC(self.seg_fixed, seg_moving_warped, self.structures_dict)
+                # average surface distances
+                ASD = calc_ASD(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.dataset.spacing)
+
+                for structure in DSC:
+                    score = DSC[structure]
+                    self.metrics_VI.update('VI/test/DSC/' + structure, score)
+
+                for structure in ASD:
+                    score = ASD[structure]
+                    self.metrics_VI.update('VI/test/ASD/' + structure, score)
+                
+                with torch.no_grad():
+                    save_sample(self.data_loader, im_pair_idxs, test_sample_no, im_moving_warped, displacement, model='VI')
+
+        """
+        speed
+        """
+        
+        with torch.no_grad():
+            start = datetime.now()
+
+            for VI_test_sample_no in range(1, self.no_samples_VI_test * 10 + 1) :
+                v_sample_unsmoothed = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1)
+                v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding_sz)
+                
+                transformation, displacement = self.transformation_model(v_sample)
+                transformation = add_noise_uniform(transformation)
+                
+                im_moving_warped = self.registration_module(im_moving, transformation)
+                seg_moving_warped = self.registration_module(seg_moving, transformation)
+
+
+        stop = datetime.now()
+        VI_sampling_speed = (self.no_samples_VI_test * 10 + 1) / (stop - start).total_seconds()
+
+        self.logger.info(f'VI sampling speed: {VI_sampling_speed:.2f} samples/sec')
+
+
+    def _run_MCMC(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
         self.mu_v.requires_grad_(False)
         self.log_var_v.requires_grad_(False)
         self.u_v.requires_grad_(False)
 
         self.v_curr_state.requires_grad_(True)
 
-        if self.optimizer_mala is None:
-            self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
+        if self.optimizer_SG_MCMC is None:
+            self.optimizer_SG_MCMC = self.config.init_obj('optimizer_SG_MCMC', torch.optim, [self.v_curr_state])
 
         self.logger.info('\nBURNING IN THE MARKOV CHAIN\n')
+        start = datetime.now()
         
-        # mean transformation
-        no_samples = 0
-        mean_transformation = None
+        for sample_no in range(self.start_sample, self.no_samples_MCMC + 1):
+            self.metrics_MCMC.reset()
 
-        for sample_no in range(self.start_sample, self.no_samples + 1):
-            self.train_metrics_mcmc.reset()
-
-            if sample_no < self.no_iters_burn_in and sample_no % self.log_period_mcmc == 0:
+            if sample_no < self.no_iters_burn_in and sample_no % self.log_period_MCMC == 0:
                 self.logger.info('burn-in sample no. ' + str(sample_no) + '/' + str(self.no_iters_burn_in))
             
             """
             stochastic gradient Langevin dynamics
             """
 
-            if self.sobolev_grad:
-                v_curr_state_noise = MALA.apply(self.v_curr_state, self.sigma_scaled, self.tau)
-                v_curr_state_noise_smoothed = \
-                    SobolevGrad.apply(v_curr_state_noise, self.S_x, self.S_y, self.S_z, self.padding_sz)
+            if self.Sobolev_grad:
+                v_curr_state_noise = SGLD.apply(self.v_curr_state, self.sigma_scaled, self.tau)
+                v_curr_state_noise_smoothed = SobolevGrad.apply(v_curr_state_noise, self.S, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
                 
                 if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
@@ -361,6 +411,11 @@ class Trainer(BaseTrainer):
 
                 reg, log_y = self.reg_loss(v_curr_state_noise, dof=dof)
                 reg_term = reg.sum()
+            
+            with torch.no_grad():
+                nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation)
+                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
+                no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
             reg_term -= self.reg_loss_prior_loc(log_y).sum()
             reg_term -= self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
@@ -371,28 +426,16 @@ class Trainer(BaseTrainer):
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
             res = n_F - n_M
 
-            if self.use_moving_mask:
-                mask_moving_warped = self.registration_module(mask_moving, transformation)
-                mask = (self.mask_fixed * mask_moving_warped)
-
             alpha = 1.0
             alpha_mean = alpha
 
-            if self.vd:  # virtual decimation
-                if self.use_moving_mask:
-                    res_rescaled = rescale_residuals(res.detach(), mask, self.data_loss)
-                    res_masked = res[mask]
-
-                    with torch.no_grad():
-                        alpha = vd(res_rescaled, mask)
-                        alpha_mean = alpha.item()
-                else:
-                    res_rescaled = rescale_residuals(res.detach(), self.mask_fixed, self.data_loss)
-                    res_masked = res[self.mask_fixed]
-                    
-                    with torch.no_grad():
-                        alpha = vd(res_rescaled, self.mask_fixed)
-                        alpha_mean = alpha.item()
+            if self.virutal_decimation:
+                res_rescaled = rescale_residuals(res.detach(), self.mask_fixed, self.data_loss)
+                res_masked = res[self.mask_fixed]
+                
+                with torch.no_grad():
+                    alpha = vd(res_rescaled, self.mask_fixed)
+                    alpha_mean = alpha.item()
 
             # Gaussian mixture
             self._step_GMM(res_masked, alpha)
@@ -404,98 +447,90 @@ class Trainer(BaseTrainer):
 
             loss = data_term + reg_term
 
-            self.optimizer_mala.zero_grad()
+            self.optimizer_SG_MCMC.zero_grad()
             self.optimizer_w_reg.zero_grad()
 
             loss.backward()  # backprop
 
-            self.optimizer_mala.step()
+            self.optimizer_SG_MCMC.step()
             self.optimizer_w_reg.step()
 
             """
-            metrics and prints
+            outputs
             """
 
             self.writer.set_step(sample_no)
 
-            self.train_metrics_mcmc.update('MCMC/data_term', data_term.item())
-            self.train_metrics_mcmc.update('MCMC/reg_term', reg_term.item())
-            self.train_metrics_mcmc.update('other/MCMC/alpha', alpha_mean)
-            self.train_metrics_mcmc.update('other/MCMC/loc', self.reg_loss.loc.item())
-            self.train_metrics_mcmc.update('other/MCMC/log_scale', self.reg_loss.log_scale.item())
+            self.metrics_MCMC.update('MCMC/data_term', data_term.item())
+            self.metrics_MCMC.update('MCMC/reg_term', reg_term.item())
+            self.metrics_MCMC.update('MCMC/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
+            self.metrics_MCMC.update('MCMC/alpha', alpha_mean)
+            self.metrics_MCMC.update('MCMC/loc', self.reg_loss.loc.item())
+            self.metrics_MCMC.update('MCMC/log_scale', self.reg_loss.log_scale.item())
 
             if sample_no == self.no_iters_burn_in:
-                self.logger.info('\nENDED BURNING IN\n')
+                self.logger.info('\nENDED BURNING IN')
 
-            # tensorboard
-            if sample_no > self.no_iters_burn_in and sample_no % self.log_period_mcmc == 0:
+                stop = datetime.now()
+                MCMC_sampling_speed = self.no_iters_burn_in / (stop - start).total_seconds()
+                self.logger.info(f'SG-MCMC sampling speed: {MCMC_sampling_speed:.2f} samples/sec\n')
+
+            if sample_no > self.no_iters_burn_in and sample_no % self.log_period_MCMC == 0 or sample_no == self.no_samples_MCMC:
                 with torch.no_grad():
+                    """
+                    metrics and prints
+                    """
+
                     log = {'sample_no': sample_no}
-                    log.update(self.train_metrics_mcmc.result())
+                    log.update(self.metrics_MCMC.result())
                     print_log(self.logger, log)
 
-                    self.train_metrics_mcmc.update('other/MCMC/y', log_y.exp().item())
+                    self.metrics_MCMC.update('MCMC/y', log_y.exp().item())
 
                     sigmas = torch.exp(self.data_loss.log_scales())
                     proportions = torch.exp(self.data_loss.log_proportions())
 
                     for idx in range(self.data_loss.num_components):
-                        self.train_metrics_mcmc.update('GM/MCMC/sigma_' + str(idx), sigmas[idx])
-                        self.train_metrics_mcmc.update('GM/MCMC/proportion_' + str(idx), proportions[idx])
+                        self.metrics_MCMC.update('MCMC/GMM/sigma_' + str(idx), sigmas[idx])
+                        self.metrics_MCMC.update('MCMC/GMM/proportion_' + str(idx), proportions[idx])
 
-                    # dice scores
+                    # Dice scores
                     seg_moving_warped = self.registration_module(seg_moving, transformation)
-                    dsc = calc_dice(self.seg_fixed, seg_moving_warped, self.structures_dict)
+                    DSC = calc_DSC(self.seg_fixed, seg_moving_warped, self.structures_dict)
 
-                    for structure in dsc:
-                        score = dsc[structure]
-                        self.train_metrics_mcmc.update('DSC/MCMC/' + structure, score)
+                    for structure in DSC:
+                        score = DSC[structure]
+                        self.metrics_MCMC.update('MCMC/DSC/' + structure, score)
+                    
+                    # average surface distances
+                    ASD = calc_ASD(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.dataset.spacing)
 
-                    asd = calc_asd(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.dataset.spacing)
-
-                    for structure in asd:
-                        dist = asd[structure]
-                        self.train_metrics_mcmc.update('ASD/MCMC/' + structure, dist)
-                        
-                    if self.sobolev_grad:
+                    for structure in ASD:
+                        dist = ASD[structure]
+                        self.metrics_MCMC.update('MCMC/ASD/' + structure, dist)
+                    
+                    """
+                    logging
+                    """
+                    
+                    # tensorboard
+                    if self.Sobolev_grad:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
-                                   im_moving_warped, res_masked, v_curr_state_noise_smoothed, displacement)
+                                   im_moving_warped, res_masked, v_curr_state_noise_smoothed, displacement, log_det_J_transformation)
                     else:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
-                                   im_moving_warped, res_masked, self.v_curr_state, displacement)
-            
-            """
-            outputs
-            """
+                                   im_moving_warped, res_masked, self.v_curr_state, displacement, log_det_J_transformation)
+                    
+                    # .nii.gz/.vtk
+                    save_sample(self.data_loader, im_pair_idxs, sample_no, im_moving_warped, displacement, model='MCMC')
 
-            if sample_no > self.no_iters_burn_in and sample_no % self.save_period_mcmc == 0 \
-                    or sample_no == self.no_samples:
-                with torch.no_grad():
-                    save_sample(self.data_loader, im_pair_idxs, sample_no, im_moving_warped, displacement)
-                    self._save_checkpoint_mcmc(sample_no)  # checkpoint
-            
-            """
-            mean transformation
-            """
-
-            if sample_no > self.no_iters_burn_in:
-                no_samples += 1
-
-                if mean_transformation is None:
-                    mean_transformation = transformation
-                else:
-                    mean_transformation += transformation
-
-            if sample_no == self.no_samples:
-                mean_transformation /= no_samples
-                seg_moving_mean = self.registration_module(seg_moving, mean_transformation)
-
-                dsc = calc_dice(self.seg_fixed, seg_moving_mean, self.structures_dict)
-                pprint.pprint(dsc)
-
-                asd = calc_asd(self.seg_fixed, seg_moving_mean, self.structures_dict, self.data_loader.dataset.spacing)
-                pprint.pprint(asd)
-
+                    # checkpoint
+                    self._save_checkpoint_MCMC(sample_no)
+                    
+            if no_non_diffeomorphic_voxels > 0.001 * self.N:
+                self.logger.info("sample " + str(sample_no) + ", detected " + str(no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic; exiting..")
+                exit()
+                    
     def _train_epoch(self):
         for batch_idx, (im_pair_idxs, im_fixed, mask_fixed, seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v, u_v) \
                 in enumerate(self.data_loader):
@@ -522,22 +557,17 @@ class Trainer(BaseTrainer):
             
             with torch.no_grad():
                 v_sample = sample_q_v(self.mu_v, self.log_var_v, self.u_v)
-                if self.sobolev_grad:
-                    v_sample = SobolevGrad.apply(v_sample, self.S_x, self.S_y, self.S_z, self.padding_sz)
+                if self.Sobolev_grad:
+                    v_sample = SobolevGrad.apply(v_sample, self.S, self.padding_sz)
 
                 transformation, displacement = self.transformation_model(v_sample)
                 transformation = add_noise_uniform(transformation)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
-                res = n_F - n_M
 
-                if self.use_moving_mask:
-                    mask_moving_warped = self.registration_module(mask_moving, transformation)
-                    mask = (self.mask_fixed * mask_moving_warped)
-                    res_masked = res[mask]
-                else:
-                    res_masked = res[self.mask_fixed]
+                res = n_F - n_M
+                res_masked = res[self.mask_fixed]
 
                 res_mean = torch.mean(res_masked)
                 res_var = torch.mean(torch.pow(res_masked - res_mean, 2))
@@ -546,18 +576,14 @@ class Trainer(BaseTrainer):
                 self.data_loss.init_parameters(res_std)
                 alpha = 1.0
 
-            if self.vd:  # virtual decimation
-                if self.use_moving_mask:
-                    res_rescaled = rescale_residuals(res, mask, self.data_loss)
-                    alpha = vd(res_rescaled, mask)  # virtual decimation
-                else:
-                    res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)
-                    alpha = vd(res_rescaled, self.mask_fixed)
+            if self.virutal_decimation:
+                res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)
+                alpha = vd(res_rescaled, self.mask_fixed)
 
             # Gaussian mixture
             self._step_GMM(res_masked, alpha)
 
-            # print value of the data term before registration
+            # losses and metrics before registration
             with torch.no_grad():
                 loss_unwarped = self.data_loss(res_masked) * alpha
                 self.logger.info(f'PRE-REGISTRATION: {loss_unwarped.item():.5f}\n')
@@ -565,36 +591,38 @@ class Trainer(BaseTrainer):
                 iter_no = 0
                 self.writer.set_step(iter_no)
                 
-                self.train_metrics_vi.update('VI/data_term', loss_unwarped.item())
+                self.metrics_VI.update('VI/train/data_term', loss_unwarped.item())
                 log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)  # residual histogram
                 
-                # dice scores
-                dsc = calc_dice(self.seg_fixed, seg_moving, self.structures_dict)
+                # Dice scores
+                DSC = calc_DSC(self.seg_fixed, seg_moving, self.structures_dict)
 
-                for structure in dsc:
-                    score = dsc[structure]
-                    self.train_metrics_vi.update('DSC/VI/' + structure, score)
+                for structure in DSC:
+                    score = DSC[structure]
+                    self.metrics_VI.update('VI/train/DSC/' + structure, score)
+                
+                # average surface distances
+                ASD = calc_ASD(self.seg_fixed, seg_moving, self.structures_dict, self.data_loader.dataset.spacing)
 
-                asd = calc_asd(self.seg_fixed, seg_moving, self.structures_dict, self.data_loader.dataset.spacing)
-
-                for structure in asd:
-                    dist = asd[structure]
-                    self.train_metrics_vi.update('ASD/VI/' + structure, dist)
+                for structure in ASD:
+                    dist = ASD[structure]
+                    self.metrics_VI.update('VI/train/ASD/' + structure, dist)
 
             """
             VI
             """
 
             if self.VI:
-                self._step_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)
-
+                self._run_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)  # train
+                self._test_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)  # test
+            
             """
             MCMC
             """
 
             if self.MCMC:
                 with torch.no_grad():
-                    tau = self.config['optimizer_mala']['args']['lr']
+                    tau = self.config['optimizer_SG_MCMC']['args']['lr']
 
                     self.tau = tau
                     self.sqrt_tau_twice = np.sqrt(2.0 * tau)
@@ -604,9 +632,9 @@ class Trainer(BaseTrainer):
                     if self.v_curr_state is None:
                         self.v_curr_state = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
 
-                self._step_MCMC(im_pair_idxs, im_moving, mask_moving, seg_moving)
+                self._run_MCMC(im_pair_idxs, im_moving, mask_moving, seg_moving)
 
-    def _save_checkpoint_vi(self, iter_no):
+    def _save_checkpoint_VI(self, iter_no):
         """
         save a checkpoint (variational inference)
         """
@@ -631,19 +659,19 @@ class Trainer(BaseTrainer):
             state['reg_loss_prior_scale'] = self.reg_loss_prior_scale.state_dict()
             state['optimizer_w_reg'] = self.optimizer_w_reg.state_dict()
 
-        filename = str(self.checkpoint_dir / f'checkpoint_vi_{iter_no}.pth')
+        filename = str(self.checkpoint_dir / f'checkpoint_VI_{iter_no}.pth')
         self.logger.info("saving checkpoint: {}..".format(filename))
         torch.save(state, filename)
         self.logger.info("checkpoint saved\n")
 
-    def _save_checkpoint_mcmc(self, sample_no):
+    def _save_checkpoint_MCMC(self, sample_no):
         """
         save a checkpoint (Markov chain Monte Carlo)
         """
 
         state = {
             'config': self.config,
-            'iter_no': self.no_iters_vi,
+            'iter_no': self.no_iters_VI,
             'sample_no': sample_no,
 
             'mu_v': self.mu_v,
@@ -655,7 +683,7 @@ class Trainer(BaseTrainer):
             'reg_loss': self.reg_loss.state_dict(),
 
             'v_curr_state': self.v_curr_state,
-            'optimizer_mala': self.optimizer_mala.state_dict()
+            'optimizer_SG_MCMC': self.optimizer_SG_MCMC.state_dict()
         }
 
         if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
@@ -663,12 +691,12 @@ class Trainer(BaseTrainer):
             state['reg_loss_prior_scale'] = self.reg_loss_prior_scale.state_dict()
             state['optimizer_w_reg'] = self.optimizer_w_reg.state_dict()
 
-        filename = str(self.checkpoint_dir / f'checkpoint_mcmc_{sample_no}.pth')
+        filename = str(self.checkpoint_dir / f'checkpoint_MCMC_{sample_no}.pth')
         self.logger.info("saving checkpoint: {}..".format(filename))
         torch.save(state, filename)
         self.logger.info("checkpoint saved\n")
 
-    def _resume_checkpoint_vi(self, resume_path):
+    def _resume_checkpoint_VI(self, resume_path):
         """
         resume from saved checkpoints (VI)
         """
@@ -709,7 +737,7 @@ class Trainer(BaseTrainer):
 
         self.logger.info("checkpoint loaded, resuming training..")
 
-    def _resume_checkpoint_mcmc(self, resume_path):
+    def _resume_checkpoint_MCMC(self, resume_path):
         """
         resume from saved checkpoints (MCMC)
         """
@@ -750,8 +778,8 @@ class Trainer(BaseTrainer):
             self.v_curr_state = checkpoint['v_curr_state'] if 'v_curr_state' in checkpoint \
                 else sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
 
-        if 'optimizer_mala' in checkpoint:
-            self.optimizer_mala = self.config.init_obj('optimizer_mala', torch.optim, [self.v_curr_state])
-            self.optimizer_mala.load_state_dict(checkpoint['optimizer_mala'])
+        if 'optimizer_SG_MCMC' in checkpoint:
+            self.optimizer_SG_MCMC = self.config.init_obj('optimizer_SG_MCMC', torch.optim, [self.v_curr_state])
+            self.optimizer_SG_MCMC.load_state_dict(checkpoint['optimizer_SG_MCMC'])
 
         self.logger.info("checkpoint loaded, resuming training..")
