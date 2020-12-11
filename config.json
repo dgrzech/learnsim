@@ -1,5 +1,5 @@
 {
-    "name": "sg_mcmc",
+    "name": "SG_MCMC",
     "n_gpu": 1,
 
     "data_loss": {
@@ -20,7 +20,7 @@
 	    "type": "DirichletPrior",
 	    "args": {
 	        "num_classes": 4,
-	        "alpha": 0.5
+	        "alpha": 5e-1
 	    }
     },
 
@@ -31,13 +31,13 @@
 	        "learnable": true,
             "loc_learnable": true,
 	        "scale_learnable": true,
-	        "w_reg": 0.2
+	        "w_reg": 7e-1
         }
     },
     "reg_loss_prior_loc": {
     	"type": "LogEnergyExpGammaPrior",
 	    "args": {
-	        "w_reg": 0.2,
+	        "w_reg": 7e-1,
 	        "dof": 2654208.0,
 	        "learnable": false
 	    }
@@ -70,44 +70,46 @@
             "lr": 5e-3
         }
     },
-    "optimizer_mala": {
+    "optimizer_SG_MCMC": {
         "type": "SGD",
         "args": {
-            "lr": 1e-1
+            "lr": 4e-1
         }
     },
 
     "data_loader": {
         "type": "LearnSimDataLoader",
         "args":{
-            "data_dir": "/vol/bitbucket/dig15/datasets/mine/miccai_2020/biobank_1/",
+            "data_dir": "/vol/bitbucket/dig15/datasets/mine/miccai_2020/experiments1_and_3/",
             "dim_x": 96,
 	        "dim_y": 96,
 	        "dim_z": 96
         }
     },
 
-    "sobolev_grad": {
+    "Sobolev_grad": {
         "enabled": true,
 	    "s": 7,
-	    "lambda": 0.5
+	    "lambda": 5e-1
     },
 
-    "use_moving_mask": false,
-    "vd": true,
+    "virtual_decimation": true,
 
     "trainer": {
-        "no_iters_vi": 1536,
-        "no_iters_burn_in": 2000,
-	    "no_samples": 4000,
+	"VI": true,
+	"MCMC": true, 
 
-        "log_period": 64,
-        "log_period_mcmc": 40,
+        "no_iters_VI": 1536,
+
+	"no_samples_VI_test": 50,
+        "no_iters_burn_in": 10000,
+	    "no_samples_MCMC": 100000,
+
+        "log_period_VI": 512,
+        "log_period_MCMC": 1800,
+
         "tensorboard": true,
         "verbosity": 2,
-
-        "save_dir": "saved/",
-        "save_period": 128,
-        "save_period_mcmc": 40
+        "save_dir": "saved/"
     }
 }
