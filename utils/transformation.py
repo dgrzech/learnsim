@@ -1,4 +1,4 @@
-from utils import init_identity_grid_2d, init_identity_grid_3d
+from utils import init_identity_grid_2D, init_identity_grid_3D
 
 from abc import ABC, abstractmethod
 from torch import nn
@@ -28,7 +28,7 @@ class SVF_2D(TransformationModel):
         super(SVF_2D, self).__init__()
         self.no_steps = 32
 
-        identity_grid = init_identity_grid_2d(dim_x, dim_y)
+        identity_grid = init_identity_grid_2D(dim_x, dim_y)
         self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
 
     def forward(self, v):
@@ -56,7 +56,7 @@ class SVF_3D(TransformationModel):
         super(SVF_3D, self).__init__()
         self.no_steps = 32
 
-        identity_grid = init_identity_grid_3d(dim_x, dim_y, dim_z)
+        identity_grid = init_identity_grid_3D(dim_x, dim_y, dim_z)
         self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
 
     def forward(self, v):

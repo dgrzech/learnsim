@@ -3,8 +3,8 @@ from datetime import datetime
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, save_fields, save_grids, save_images, \
     save_norms, save_sample
 from optimizers import Adam
-from utils import add_noise_uniform, calc_ASD, calc_det_J, calc_DSC, get_module_attr, inf_loop, max_field_update, \
-    rescale_residuals, sample_q_v, Sobolev_kernel_1D, transform_coordinates, vd, MetricTracker, SGLD, SobolevGrad
+from utils import add_noise_uniform, calc_ASD, calc_det_J, calc_DSC, inf_loop, max_field_update, \
+    rescale_residuals, sample_q_v, Sobolev_kernel_1D, transform_coordinates, VD, MetricTracker, SGLD, SobolevGrad
 
 import math
 import numpy as np
@@ -17,10 +17,10 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
+    def __init__(self, data_loss, data_loss_scale_prior, data_loss_proportion_prior, reg_loss, reg_loss_loc_prior, reg_loss_scale_prior,
                  entropy_loss, transformation_model, registration_module,
                  metric_ftns_VI, metric_ftns_MCMC, structures_dict, config, data_loader):
-        super().__init__(data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
+        super().__init__(data_loss, data_loss_scale_prior, data_loss_proportion_prior, reg_loss, reg_loss_loc_prior, reg_loss_scale_prior,
                          entropy_loss, transformation_model, registration_module, config)
 
         self.config = config
@@ -28,9 +28,7 @@ class Trainer(BaseTrainer):
         self.im_fixed, self.mask_fixed, self.seg_fixed = None, None, None
         self.structures_dict = structures_dict  # segmentations
 
-        self.N = config['data_loader']['args']['dim_x'] \
-                 * config['data_loader']['args']['dim_y'] \
-                 * config['data_loader']['args']['dim_z']
+        self.N = config['data_loader']['args']['dim_x'] * config['data_loader']['args']['dim_y'] * config['data_loader']['args']['dim_z']
         self.dof = self.N * 3.0
 
         # variational inference
@@ -38,13 +36,13 @@ class Trainer(BaseTrainer):
         self.mu_v, self.log_var_v, self.u_v = None, None, None
 
         self.VI = config['trainer']['VI']
-        self.optimizer_mixture_model, self.optimizer_w_reg, self.optimizer_v = None, None, None
+        self.optimizer_GMM, self.optimizer_w_reg, self.optimizer_v = None, None, None
         self.metrics_VI = MetricTracker(*[m for m in metric_ftns_VI], writer=self.writer)
 
         # stochastic gradient Markov chain Monte Carlo
         self.start_sample = 1
-        self.tau = None
-        self.v_curr_state, self.sigma_scaled, self.u_scaled = None, None, None
+        self.v_curr_state = None
+        self.SGLD_params = {'tau': None, 'sigma': None, 'u': None}
 
         self.MCMC = config['trainer']['MCMC']
         self.optimizer_SG_MCMC = None
@@ -78,19 +76,24 @@ class Trainer(BaseTrainer):
         elif config.resume is not None and self.MCMC:
             self._resume_checkpoint_MCMC(config.resume)
 
+    def __init_optimizer_w_reg(self):
+        self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}], lr=1e-1, betas=(0.9, 0.95))
+        
+    def __init_optimizer_GMM(self):
+        self.optimizer_GMM = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1}, {'params': [self.data_loss.logits], 'lr': 1e-2}], 
+                                  lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
+
     def _step_GMM(self, res, alpha=1.0):
-        if self.optimizer_mixture_model is None:  # initialise the optimiser
-            self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
-                                                 {'params': [self.data_loss.logits], 'lr': 1e-2}], 
-                                                 lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
+        if self.optimizer_GMM is None:  # initialise the optimiser
+            self.__init_optimizer_GMM()
 
         data_term = self.data_loss(res.detach()).sum() * alpha
-        data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
-        data_term -= self.proportion_prior(self.data_loss.log_proportions()).sum()
+        data_term -= self.data_loss_scale_prior(self.data_loss.log_scales()).sum()
+        data_term -= self.data_loss_proportion_prior(self.data_loss.log_proportions()).sum()
 
-        self.optimizer_mixture_model.zero_grad()
+        self.optimizer_GMM.zero_grad()
         data_term.backward()
-        self.optimizer_mixture_model.step()  # backprop
+        self.optimizer_GMM.step()  # backprop
 
     def _run_VI(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
         self.mu_v.requires_grad_(True)
@@ -100,10 +103,8 @@ class Trainer(BaseTrainer):
         if self.optimizer_v is None:
             self.optimizer_v = self.config.init_obj('optimizer_v', torch.optim, [self.mu_v, self.log_var_v, self.u_v])
 
-        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-            if self.optimizer_w_reg is None:
-                self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}],
-                                            lr=1e-1, betas=(0.9, 0.95))
+        if self.reg_loss_type is not 'RegLoss_L2' and self.optimizer_w_reg is None:
+            self.__init_optimizer_w_reg()
 
         for iter_no in range(self.start_iter, self.no_iters_VI + 1):
             self.metrics_VI.reset()
@@ -123,7 +124,7 @@ class Trainer(BaseTrainer):
             transformation2, displacement2 = self.transformation_model(v_sample2)
             
             with torch.no_grad():
-                nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation1)
+                nabla_v = self.diff_op(transformation1)
                 log_det_J_transformation = torch.log(calc_det_J(nabla_v))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
@@ -148,7 +149,7 @@ class Trainer(BaseTrainer):
                 res2_rescaled = rescale_residuals(res2.detach(), self.mask_fixed, self.data_loss)
 
                 with torch.no_grad():
-                    alpha1, alpha2 = vd(res1_rescaled, self.mask_fixed), vd(res2_rescaled, self.mask_fixed)
+                    alpha1, alpha2 = VD(res1_rescaled, self.mask_fixed), VD(res2_rescaled, self.mask_fixed)
                     alpha_mean = (alpha1.item() + alpha2.item()) / 2.0
                 
                 res1_masked, res2_masked = res1[self.mask_fixed], res2[self.mask_fixed]
@@ -160,22 +161,17 @@ class Trainer(BaseTrainer):
             data_term = self.data_loss(res1_masked).sum() / 2.0 * alpha1
             data_term += self.data_loss(res2_masked).sum() / 2.0 * alpha2
 
-            data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
-            data_term -= self.proportion_prior(self.data_loss.log_proportions()).sum()
+            data_term -= self.data_loss_scale_prior(self.data_loss.log_scales()).sum()
+            data_term -= self.data_loss_proportion_prior(self.data_loss.log_proportions()).sum()
             
-            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-                reg_term1, log_y1 = self.reg_loss(v_sample1, dof=self.dof)
-                reg_term2, log_y2 = self.reg_loss(v_sample2, dof=self.dof)
-            else:
-                reg_term1, log_y1 = self.reg_loss(v_sample1)
-                reg_term2, log_y2 = self.reg_loss(v_sample2)
+            reg_term1, log_y1 = self.reg_loss(v_sample1, dof=self.dof) if self.reg_loss_type is not 'RegLoss_L2' else self.reg_loss(v_sample1)
+            reg_term2, log_y2 = self.reg_loss(v_sample2, dof=self.dof) if self.reg_loss_type is not 'RegLoss_L2' else self.reg_loss(v_sample2)
 
             reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
 
-            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-                reg_term_prior_loc = self.reg_loss_prior_loc(log_y1).sum() / 2.0 + \
-                                     self.reg_loss_prior_loc(log_y2).sum() / 2.0
-                reg_term_prior_scale = self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
+            if self.reg_loss_type is not 'RegLoss_L2':
+                reg_term_prior_loc = self.reg_loss_loc_prior(log_y1).sum() / 2.0 + self.reg_loss_loc_prior(log_y2).sum() / 2.0
+                reg_term_prior_scale = self.reg_loss_scale_prior(self.reg_loss.log_scale).sum()
 
                 reg_term -= reg_term_prior_loc
                 reg_term -= reg_term_prior_scale
@@ -190,13 +186,13 @@ class Trainer(BaseTrainer):
 
             self.optimizer_v.zero_grad()
 
-            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+            if self.reg_loss_type is not 'RegLoss_L2':
                 self.optimizer_w_reg.zero_grad()
 
             loss_q_v.backward()  # backprop
             self.optimizer_v.step()
 
-            if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+            if self.reg_loss_type is not 'RegLoss_L2':
                 self.optimizer_w_reg.step()
 
             """
@@ -223,7 +219,7 @@ class Trainer(BaseTrainer):
                     max_update_log_var_v, max_update_log_var_v_idx = max_field_update(log_var_v_old, self.log_var_v)
                     max_update_u_v, max_update_u_v_idx = max_field_update(u_v_old, self.u_v)
 
-                    if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
+                    if self.reg_loss_type is not 'RegLoss_L2':
                         self.metrics_VI.update('VI/train/loc', self.reg_loss.loc.item())
                         self.metrics_VI.update('VI/train/log_scale', self.reg_loss.log_scale.item())
 
@@ -318,7 +314,7 @@ class Trainer(BaseTrainer):
                 # add noise to account for interpolation uncertainty
                 transformation = add_noise_uniform(transformation)
                 
-                nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation)
+                nabla_v = self.diff_op(transformation)
                 log_det_J_transformation = torch.log(calc_det_J(nabla_v))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
                 self.metrics_VI.update('VI/test/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
@@ -339,8 +335,7 @@ class Trainer(BaseTrainer):
                     score = ASD[structure]
                     self.metrics_VI.update('VI/test/ASD/' + structure, score)
                 
-                with torch.no_grad():
-                    save_sample(self.data_loader, im_pair_idxs, test_sample_no, im_moving_warped, displacement, model='VI')
+                save_sample(self.data_loader, im_pair_idxs, test_sample_no, im_moving_warped, displacement, model='VI')
 
         """
         speed
@@ -359,7 +354,6 @@ class Trainer(BaseTrainer):
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 seg_moving_warped = self.registration_module(seg_moving, transformation)
 
-
         stop = datetime.now()
         VI_sampling_speed = (self.no_samples_VI_test * 10 + 1) / (stop - start).total_seconds()
 
@@ -367,10 +361,11 @@ class Trainer(BaseTrainer):
 
 
     def _run_MCMC(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
+        dof = self.dof if self.reg_loss_type is not 'RegLoss_L2' else 0.0
+
         self.mu_v.requires_grad_(False)
         self.log_var_v.requires_grad_(False)
         self.u_v.requires_grad_(False)
-
         self.v_curr_state.requires_grad_(True)
 
         if self.optimizer_SG_MCMC is None:
@@ -389,36 +384,27 @@ class Trainer(BaseTrainer):
             stochastic gradient Langevin dynamics
             """
 
+            v_curr_state_noise = SGLD.apply(self.v_curr_state, self.SGLD_params['sigma'], self.SGLD_params['tau'])
+
             if self.Sobolev_grad:
-                v_curr_state_noise = SGLD.apply(self.v_curr_state, self.sigma_scaled, self.tau)
                 v_curr_state_noise_smoothed = SobolevGrad.apply(v_curr_state_noise, self.S, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
                 
-                if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-                    dof = self.dof
-                else:
-                    dof = 0.0
-
                 reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=dof)
                 reg_term = reg.sum()
             else:
                 transformation, displacement = self.transformation_model(v_curr_state_noise)
 
-                if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-                    dof = self.dof
-                else:
-                    dof = 0.0
-
                 reg, log_y = self.reg_loss(v_curr_state_noise, dof=dof)
                 reg_term = reg.sum()
             
             with torch.no_grad():
-                nabla_v = get_module_attr(self.reg_loss, 'diff_op')(transformation)
+                nabla_v = self.diff_op(transformation)
                 log_det_J_transformation = torch.log(calc_det_J(nabla_v))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
-            reg_term -= self.reg_loss_prior_loc(log_y).sum()
-            reg_term -= self.reg_loss_prior_scale(self.reg_loss.log_scale).sum()
+            reg_term -= self.reg_loss_loc_prior(log_y).sum()
+            reg_term -= self.reg_loss_scale_prior(self.reg_loss.log_scale).sum()
 
             transformation = add_noise_uniform(transformation)
             im_moving_warped = self.registration_module(im_moving, transformation)
@@ -434,7 +420,7 @@ class Trainer(BaseTrainer):
                 res_masked = res[self.mask_fixed]
                 
                 with torch.no_grad():
-                    alpha = vd(res_rescaled, self.mask_fixed)
+                    alpha = VD(res_rescaled, self.mask_fixed)
                     alpha_mean = alpha.item()
 
             # Gaussian mixture
@@ -442,8 +428,8 @@ class Trainer(BaseTrainer):
 
             # MCMC
             data_term = self.data_loss(res_masked).sum() * alpha
-            data_term -= self.scale_prior(self.data_loss.log_scales()).sum()
-            data_term -= self.proportion_prior(self.data_loss.log_proportions()).sum()
+            data_term -= self.data_loss_scale_prior(self.data_loss.log_scales()).sum()
+            data_term -= self.data_loss_proportion_prior(self.data_loss.log_proportions()).sum()
 
             loss = data_term + reg_term
 
@@ -578,7 +564,7 @@ class Trainer(BaseTrainer):
 
             if self.virutal_decimation:
                 res_rescaled = rescale_residuals(res, self.mask_fixed, self.data_loss)
-                alpha = vd(res_rescaled, self.mask_fixed)
+                alpha = VD(res_rescaled, self.mask_fixed)
 
             # Gaussian mixture
             self._step_GMM(res_masked, alpha)
@@ -630,12 +616,9 @@ class Trainer(BaseTrainer):
 
             if self.MCMC:
                 with torch.no_grad():
-                    tau = self.config['optimizer_SG_MCMC']['args']['lr']
-
-                    self.tau = tau
-                    self.sqrt_tau_twice = np.sqrt(2.0 * tau)
-                    self.sigma_scaled = transform_coordinates(torch.exp(0.5 * self.log_var_v))
-                    self.u_v_scaled = transform_coordinates(self.u_v)
+                    self.SGLD_params['tau'] = self.config['optimizer_SG_MCMC']['args']['lr']
+                    self.SGLD_params['sigma'] = transform_coordinates(torch.exp(0.5 * self.log_var_v))
+                    self.SGLD_params['u'] = transform_coordinates(self.u_v)
 
                     if self.v_curr_state is None:
                         self.v_curr_state = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()
@@ -658,13 +641,13 @@ class Trainer(BaseTrainer):
             'optimizer_v': self.optimizer_v.state_dict(),
 
             'data_loss': self.data_loss.state_dict(),
-            'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
+            'optimizer_GMM': self.optimizer_GMM.state_dict(),
             'reg_loss': self.reg_loss.state_dict(),
         }
 
-        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-            state['reg_loss_prior_loc'] = self.reg_loss_prior_loc.state_dict()
-            state['reg_loss_prior_scale'] = self.reg_loss_prior_scale.state_dict()
+        if self.reg_loss_type is not 'RegLoss_L2':
+            state['reg_loss_loc_prior'] = self.reg_loss_loc_prior.state_dict()
+            state['reg_loss_scale_prior'] = self.reg_loss_scale_prior.state_dict()
             state['optimizer_w_reg'] = self.optimizer_w_reg.state_dict()
 
         filename = str(self.checkpoint_dir / f'checkpoint_VI_{iter_no}.pth')
@@ -687,16 +670,16 @@ class Trainer(BaseTrainer):
             'u_v': self.u_v,
 
             'data_loss': self.data_loss.state_dict(),
-            'optimizer_mixture_model': self.optimizer_mixture_model.state_dict(),
+            'optimizer_GMM': self.optimizer_GMM.state_dict(),
             'reg_loss': self.reg_loss.state_dict(),
 
             'v_curr_state': self.v_curr_state,
             'optimizer_SG_MCMC': self.optimizer_SG_MCMC.state_dict()
         }
 
-        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-            state['reg_loss_prior_loc'] = self.reg_loss_prior_loc.state_dict()
-            state['reg_loss_prior_scale'] = self.reg_loss_prior_scale.state_dict()
+        if self.reg_loss_type is not 'RegLoss_L2':
+            state['reg_loss_loc_prior'] = self.reg_loss_loc_prior.state_dict()
+            state['reg_loss_scale_prior'] = self.reg_loss_scale_prior.state_dict()
             state['optimizer_w_reg'] = self.optimizer_w_reg.state_dict()
 
         filename = str(self.checkpoint_dir / f'checkpoint_MCMC_{sample_no}.pth')
@@ -727,20 +710,17 @@ class Trainer(BaseTrainer):
         # GMM
         self.data_loss.load_state_dict(checkpoint['data_loss'])
 
-        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
-                                             {'params': [self.data_loss.logits], 'lr': 1e-2}],
-                                            lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
-        self.optimizer_mixture_model.load_state_dict(checkpoint['optimizer_mixture_model'])
+        self.optimizer_GMM = self.__init_optimizer_GMM()
+        self.optimizer_GMM.load_state_dict(checkpoint['optimizer_GMM'])
 
         # regularisation loss
         self.reg_loss.load_state_dict(checkpoint['reg_loss'])
 
-        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-            self.reg_loss_prior_loc.load_state_dict(checkpoint['reg_loss_prior_loc'])
-            self.reg_loss_prior_scale.load_state_dict(checkpoint['reg_loss_prior_scale'])
-
-            self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}],
-                                        lr=5e-1, betas=(0.9, 0.95))
+        if self.reg_loss_type is not 'RegLoss_L2':
+            self.reg_loss_loc_prior.load_state_dict(checkpoint['reg_loss_loc_prior'])
+            self.reg_loss_scale_prior.load_state_dict(checkpoint['reg_loss_scale_prior'])
+            
+            self.__init_optimizer_w_reg()
             self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
 
         self.logger.info("checkpoint loaded, resuming training..")
@@ -764,21 +744,18 @@ class Trainer(BaseTrainer):
 
         # GMM
         self.data_loss.load_state_dict(checkpoint['data_loss'])
-
-        self.optimizer_mixture_model = Adam([{'params': [self.data_loss.log_std], 'lr': 1e-1},
-                                             {'params': [self.data_loss.logits], 'lr': 1e-2}],
-                                            lr=1e-2, betas=(0.9, 0.95), lr_decay=1e-3)
-        self.optimizer_mixture_model.load_state_dict(checkpoint['optimizer_mixture_model'])
+        
+        self.init__optimizer_GMM()
+        self.optimizer_GMM.load_state_dict(checkpoint['optimizer_GMM'])
 
         # regularisation loss
         self.reg_loss.load_state_dict(checkpoint['reg_loss'])
 
-        if self.reg_loss.__class__.__name__ is not 'RegLoss_L2':
-            self.reg_loss_prior_loc.load_state_dict(checkpoint['reg_loss_prior_loc'])
-            self.reg_loss_prior_scale.load_state_dict(checkpoint['reg_loss_prior_scale'])
+        if self.reg_loss_type is not 'RegLoss_L2':
+            self.reg_loss_loc_prior.load_state_dict(checkpoint['reg_loss_loc_prior'])
+            self.reg_loss_scale_prior.load_state_dict(checkpoint['reg_loss_scale_prior'])
 
-            self.optimizer_w_reg = Adam([{'params': [self.reg_loss.loc, self.reg_loss.log_scale]}],
-                                        lr=5e-1, betas=(0.9, 0.95))
+            self.__init_optimizer_w_reg()
             self.optimizer_w_reg.load_state_dict(checkpoint['optimizer_w_reg'])
 
         # MCMC

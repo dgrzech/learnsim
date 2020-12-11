@@ -1,6 +1,6 @@
-from logger import TensorboardWriter
-
 from abc import abstractmethod
+from logger import TensorboardWriter
+from utils import get_module_attr
 
 import torch
 
@@ -10,7 +10,7 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, scale_prior, proportion_prior, reg_loss, reg_loss_prior_loc, reg_loss_prior_scale,
+    def __init__(self, data_loss, data_loss_scale_prior, data_loss_proportion_prior, reg_loss, reg_loss_loc_prior, reg_loss_scale_prior,
                  entropy_loss, transformation_model, registration_module, config):
         self.config = config
         self.checkpoint_dir = config.save_dir
@@ -23,12 +23,12 @@ class BaseTrainer:
         self.registration_module = registration_module.to(self.device)
 
         self.data_loss = data_loss.to(self.device)
-        self.scale_prior = scale_prior.to(self.device)
-        self.proportion_prior = proportion_prior.to(self.device)
+        self.data_loss_scale_prior = data_loss_scale_prior.to(self.device)
+        self.data_loss_proportion_prior = data_loss_proportion_prior.to(self.device)
 
         self.reg_loss = reg_loss.to(self.device)
-        self.reg_loss_prior_loc = reg_loss_prior_loc.to(self.device)
-        self.reg_loss_prior_scale = reg_loss_prior_scale.to(self.device)
+        self.reg_loss_loc_prior = reg_loss_loc_prior.to(self.device)
+        self.reg_loss_scale_prior = reg_loss_scale_prior.to(self.device)
 
         self.entropy_loss = entropy_loss.to(self.device)
 
@@ -37,14 +37,17 @@ class BaseTrainer:
             self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
 
             self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
-            self.scale_prior = torch.nn.DataParallel(scale_prior, device_ids=device_ids)
-            self.proportion_prior = torch.nn.DataParallel(proportion_prior, device_ids=device_ids)
+            self.data_loss_scale_prior = torch.nn.DataParallel(data_loss_scale_prior, device_ids=device_ids)
+            self.data_loss_proportion_prior = torch.nn.DataParallel(data_loss_proportion_prior, device_ids=device_ids)
 
             self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
-            self.reg_loss_prior_loc = torch.nn.DataParallel(reg_loss_prior_loc, device_ids=device_ids)
-            self.reg_loss_prior_scale = torch.nn.DataParallel(reg_loss_prior_scale, device_ids=device_ids)
+            self.reg_loss_loc_prior = torch.nn.DataParallel(reg_loss_loc_prior, device_ids=device_ids)
+            self.reg_loss_scale_prior = torch.nn.DataParallel(reg_loss_scale_prior, device_ids=device_ids)
 
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
+        
+        self.reg_loss_type = self.reg_loss.__class__.__name__
+        self.diff_op = get_module_attr(self.reg_loss, 'diff_op')  # for use with the transformation Jacobian
 
         # training logic
         cfg_trainer = config['trainer']

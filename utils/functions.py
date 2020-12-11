@@ -72,20 +72,20 @@ def gaussian_kernel_3D(_s, sigma=1.0):
     return g / g.sum()
 
 
-def add_noise(v, sigma_scaled, tau):
-    eps = torch.randn(sigma_scaled.shape, device=sigma_scaled.device)
-    return v + math.sqrt(tau) * eps * sigma_scaled
+def add_noise(v, sigma, tau):
+    eps = torch.randn(sigma.shape, device=sigma.device)
+    return v + math.sqrt(tau) * eps * sigma
 
 
 class SGLD(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, v_curr_state, sigma_scaled, tau):
-        ctx.sigma_scaled = sigma_scaled
-        return add_noise(v_curr_state, sigma_scaled, tau)
+    def forward(ctx, v_curr_state, sigma, tau):
+        ctx.sigma = sigma
+        return add_noise(v_curr_state, sigma, tau)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return ctx.sigma_scaled ** 2 * grad_output, None, None
+        return ctx.sigma ** 2 * grad_output, None, None
 
 
 class GaussianGrad(torch.autograd.Function):

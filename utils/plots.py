@@ -1,11 +1,11 @@
 from mpl_toolkits.mplot3d import Axes3D
-from utils import init_identity_grid_2d, init_identity_grid_3d
+from utils import init_identity_grid_2D, init_identity_grid_3D
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_2d(v, transformation):
+def plot_2D(v, transformation):
     # initialise the grid
     nx = transformation.shape[3]
     ny = transformation.shape[2]
@@ -31,7 +31,7 @@ def plot_2d(v, transformation):
     ax_v.set_ylabel('y')
 
     # get the displacement vectors
-    identity_grid = init_identity_grid_2d(nx, ny)
+    identity_grid = init_identity_grid_2D(nx, ny)
     displacement_field = transformation - identity_grid.permute([0, 3, 1, 2])
 
     u = displacement_field[0, 0]
@@ -49,7 +49,7 @@ def plot_2d(v, transformation):
     plt.show()
 
 
-def plot_3d(v, transformation):
+def plot_3D(v, transformation):
     # initialise the grid
     nx = transformation.shape[4]
     ny = transformation.shape[3]
@@ -81,7 +81,7 @@ def plot_3d(v, transformation):
     ax_v.set_zlabel('z')
 
     # get the displacement vectors
-    identity_grid = init_identity_grid_3d(nx, ny, nz)
+    identity_grid = init_identity_grid_3D(nx, ny, nz)
     displacement_field = transformation - identity_grid.permute([0, 4, 1, 2, 3])
 
     u = displacement_field[0, 0]

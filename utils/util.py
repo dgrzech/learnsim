@@ -124,7 +124,7 @@ def get_module_attr(module, name):
     return getattr(module, name)
 
 
-def init_identity_grid_2d(nx, ny):
+def init_identity_grid_2D(nx, ny):
     """
     initialise a 2D identity grid
 
@@ -144,7 +144,7 @@ def init_identity_grid_2d(nx, ny):
     return torch.cat((x, y), 3)
 
 
-def init_identity_grid_3d(nx, ny, nz):
+def init_identity_grid_3D(nx, ny, nz):
     """
     initialise a 3D identity grid
 
@@ -186,7 +186,7 @@ def max_field_update(field_old, field_new):
     return max_update, max_update_idx
 
 
-def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
+def pixel_to_normalised_2D(px_idx_x, px_idx_y, dim_x, dim_y):
     """
     transform the coordinates of a pixel to range (-1, 1)
     """
@@ -197,7 +197,7 @@ def pixel_to_normalised_2d(px_idx_x, px_idx_y, dim_x, dim_y):
     return x, y
 
 
-def pixel_to_normalised_3d(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
+def pixel_to_normalised_3D(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     """
     transform the coordinates of a voxel to range (-1, 1)
     """
@@ -230,8 +230,8 @@ def rescale_residuals(res, mask, data_loss):
     scaled_res.requires_grad_(True)
     scaled_res.retain_grad()
 
-    loss_vd = -1.0 * torch.sum(data_loss.log_pdf_vd(scaled_res))
-    loss_vd.backward()
+    loss_VD = -1.0 * torch.sum(data_loss.log_pdf_VD(scaled_res))
+    loss_VD.backward()
 
     return torch.sum(scaled_res * scaled_res.grad, dim=-1).view(res.shape)
 
@@ -347,9 +347,9 @@ def separable_conv_3D(field, *args):
 
         N, C, D, H, W = field_out.shape
 
-        padding_3d = (padding_sz, padding_sz, 0, 0, 0, 0)
+        padding_3D = (padding_sz, padding_sz, 0, 0, 0, 0)
 
-        field_out = F.pad(field_out, padding_3d, mode='replicate')
+        field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
         field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # depth
         field_out = field_out.reshape(N, C, D, H, -1)
@@ -357,7 +357,7 @@ def separable_conv_3D(field, *args):
 
         field_out = field_out.permute((0, 1, 3, 4, 2))  # permute depth, height, and width
 
-        field_out = F.pad(field_out, padding_3d, mode='replicate')
+        field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
         field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # height
         field_out = field_out.reshape(N, C, D, H, -1)
@@ -365,7 +365,7 @@ def separable_conv_3D(field, *args):
 
         field_out = field_out.permute((0, 1, 3, 4, 2))
 
-        field_out = F.pad(field_out, padding_3d, mode='replicate')
+        field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
         field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # width
         field_out = field_out.reshape(N, C, D, H, -1)
@@ -431,7 +431,7 @@ def transform_coordinates_inv(field):
     return field_out
 
 
-def vd(residual, mask):
+def VD(residual, mask):
     """
     virtual decimation
 
@@ -466,14 +466,14 @@ def vd(residual, mask):
         corr_y = cov_y / var_res
         corr_z = cov_z / var_res
 
-        sq_vd_x = torch.clamp(-2.0 / math.pi * torch.log(corr_x), max=1.0)
-        sq_vd_y = torch.clamp(-2.0 / math.pi * torch.log(corr_y), max=1.0)
-        sq_vd_z = torch.clamp(-2.0 / math.pi * torch.log(corr_z), max=1.0)
+        sq_VD_x = torch.clamp(-2.0 / math.pi * torch.log(corr_x), max=1.0)
+        sq_VD_y = torch.clamp(-2.0 / math.pi * torch.log(corr_y), max=1.0)
+        sq_VD_z = torch.clamp(-2.0 / math.pi * torch.log(corr_z), max=1.0)
 
-        return torch.sqrt(sq_vd_x * sq_vd_y * sq_vd_z)
+        return torch.sqrt(sq_VD_x * sq_VD_y * sq_VD_z)
 
 
-def vd_reg(nabla_vx, nabla_vy, nabla_vz, mask):
+def VD_reg(nabla_vx, nabla_vy, nabla_vz, mask):
     with torch.no_grad():
         mask_stacked = torch.cat((mask, mask, mask), dim=1)
 
@@ -520,23 +520,23 @@ def vd_reg(nabla_vx, nabla_vy, nabla_vz, mask):
         corr_vz_y = cov_nabla_vz_y / var_nabla_vz
         corr_vz_z = cov_nabla_vz_z / var_nabla_vz
 
-        sq_vd_nabla_vx_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_x), max=1.0)
-        sq_vd_nabla_vx_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_y), max=1.0)
-        sq_vd_nabla_vx_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_z), max=1.0)
+        sq_VD_nabla_vx_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_x), max=1.0)
+        sq_VD_nabla_vx_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_y), max=1.0)
+        sq_VD_nabla_vx_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_z), max=1.0)
 
-        sq_vd_nabla_vy_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_x), max=1.0)
-        sq_vd_nabla_vy_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_y), max=1.0)
-        sq_vd_nabla_vy_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_z), max=1.0)
+        sq_VD_nabla_vy_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_x), max=1.0)
+        sq_VD_nabla_vy_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_y), max=1.0)
+        sq_VD_nabla_vy_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_z), max=1.0)
 
-        sq_vd_nabla_vz_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_x), max=1.0)
-        sq_vd_nabla_vz_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_y), max=1.0)
-        sq_vd_nabla_vz_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_z), max=1.0)
+        sq_VD_nabla_vz_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_x), max=1.0)
+        sq_VD_nabla_vz_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_y), max=1.0)
+        sq_VD_nabla_vz_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_z), max=1.0)
 
-        vd_nabla_vx = torch.sqrt(sq_vd_nabla_vx_x * sq_vd_nabla_vx_y * sq_vd_nabla_vx_z)
-        vd_nabla_vy = torch.sqrt(sq_vd_nabla_vy_x * sq_vd_nabla_vy_y * sq_vd_nabla_vy_z)
-        vd_nabla_vz = torch.sqrt(sq_vd_nabla_vz_x * sq_vd_nabla_vz_y * sq_vd_nabla_vz_z)
+        VD_nabla_vx = torch.sqrt(sq_VD_nabla_vx_x * sq_VD_nabla_vx_y * sq_VD_nabla_vx_z)
+        VD_nabla_vy = torch.sqrt(sq_VD_nabla_vy_x * sq_VD_nabla_vy_y * sq_VD_nabla_vy_z)
+        VD_nabla_vz = torch.sqrt(sq_VD_nabla_vz_x * sq_VD_nabla_vz_y * sq_VD_nabla_vz_z)
 
-        return (vd_nabla_vx + vd_nabla_vy + vd_nabla_vz) / 3.0
+        return (VD_nabla_vx + VD_nabla_vy + VD_nabla_vz) / 3.0
 
 
 class MetricTracker:

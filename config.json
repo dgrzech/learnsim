@@ -9,14 +9,14 @@
             "s": 3
 	    }
     },
-    "scale_prior": {
+    "data_loss_scale_prior": {
         "type": "LogScaleNormalPrior",
         "args": {
             "loc": 0.0,
 		    "scale": 2.30
 	    }
     },
-    "proportion_prior": {
+    "data_loss_proportion_prior": {
 	    "type": "DirichletPrior",
 	    "args": {
 	        "num_classes": 4,
@@ -34,7 +34,7 @@
 	        "w_reg": 7e-1
         }
     },
-    "reg_loss_prior_loc": {
+    "reg_loss_loc_prior": {
     	"type": "LogEnergyExpGammaPrior",
 	    "args": {
 	        "w_reg": 7e-1,
@@ -42,7 +42,7 @@
 	        "learnable": false
 	    }
     },
-    "reg_loss_prior_scale": {
+    "reg_loss_scale_prior": {
     	"type": "LogScaleNormalPrior",
 	    "args": {
 	        "loc": 2.7973,

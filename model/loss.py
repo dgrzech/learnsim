@@ -1,12 +1,10 @@
 from abc import abstractmethod, ABC
 from torch import nn
 from torch.nn.functional import log_softmax
-
-from utils import gaussian_kernel_3D, transform_coordinates_inv, vd_reg, GaussianGrad, DifferentialOperator
-
-import model.distributions as model_distr
+from utils import gaussian_kernel_3D, transform_coordinates_inv, GaussianGrad, DifferentialOperator
 
 import math
+import model.distributions as model_distr
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -148,7 +146,7 @@ class GaussianMixtureLoss(DataLoss):
 
         return torch.logsumexp((log_proportions - log_Z) - E, dim=-1)
 
-    def log_pdf_vd(self, z_scaled):
+    def log_pdf_VD(self, z_scaled):
         E = (z_scaled ** 2) / 2.0
         log_proportions = self.log_proportions()
         log_Z = self.log_std + self._log_sqrt_2pi
