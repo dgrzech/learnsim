@@ -613,8 +613,16 @@ class Trainer(BaseTrainer):
             """
 
             if self.VI:
-                self._run_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)  # train
-                self._test_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)  # test
+                # train
+                start = datetime.now()
+                self._run_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)
+                stop = datetime.now()
+                
+                VI_time = (stop - start).total_seconds()
+                self.logger.info(f'VI took {VI_time:.2f} seconds')
+                
+                # test
+                self._test_VI(im_pair_idxs, im_moving, mask_moving, seg_moving)
             
             """
             MCMC
