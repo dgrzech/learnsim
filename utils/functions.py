@@ -1,4 +1,4 @@
-from utils import separable_conv_3D
+from utils import add_noise_SGLD, separable_conv_3D
 
 import math
 import numpy as np
@@ -72,16 +72,11 @@ def gaussian_kernel_3D(_s, sigma=1.0):
     return g / g.sum()
 
 
-def add_noise(v, sigma, tau):
-    eps = torch.randn(sigma.shape, device=sigma.device)
-    return v + math.sqrt(tau) * eps * sigma
-
-
 class SGLD(torch.autograd.Function):
     @staticmethod
     def forward(ctx, v_curr_state, sigma, tau):
         ctx.sigma = sigma
-        return add_noise(v_curr_state, sigma, tau)
+        return add_noise_SGLD(v_curr_state, sigma, tau)
 
     @staticmethod
     def backward(ctx, grad_output):

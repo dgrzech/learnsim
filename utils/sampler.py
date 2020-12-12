@@ -1,11 +1,5 @@
 from utils import transform_coordinates
-
 import torch
-
-
-def add_noise_uniform(field, alpha=0.25):
-    epsilon = -2.0 * alpha * torch.rand(field.shape, device=field.device) + alpha
-    return field + transform_coordinates(epsilon)
 
 
 def sample_q_v(mu_v, log_var_v, u_v, no_samples=1):
