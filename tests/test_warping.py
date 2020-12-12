@@ -1,5 +1,5 @@
 from model.loss import SSD
-from utils import init_identity_grid_3d, pixel_to_normalised_3d, rescale_im, save_im_to_disk, standardise_im, \
+from utils import init_identity_grid_3D, pixel_to_normalised_3D, rescale_im, save_im_to_disk, standardise_im, \
     RegistrationModule
 
 from skimage import transform
@@ -31,7 +31,7 @@ class WarpingTestMethods(unittest.TestCase):
         self.dims_im = (1, 1, self.dim_x, self.dim_y, self.dim_z)
         self.dims_v = (1, 3, self.dim_x, self.dim_y, self.dim_z)
 
-        self.identity_grid = init_identity_grid_3d(self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
+        self.identity_grid = init_identity_grid_3D(self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
 
         """
         losses
@@ -73,7 +73,7 @@ class WarpingTestMethods(unittest.TestCase):
         for idx_z in range(im_moving.shape[2]):
             for idx_y in range(im_moving.shape[3]):
                 for idx_x in range(im_moving.shape[4]):
-                    x, y, z = pixel_to_normalised_3d(idx_x, idx_y, idx_z, self.dim_x, self.dim_y, self.dim_z)
+                    x, y, z = pixel_to_normalised_3D(idx_x, idx_y, idx_z, self.dim_x, self.dim_y, self.dim_z)
 
                     if x ** 2 + y ** 2 + z ** 2 <= r:
                         im_moving[0, 0, idx_x, idx_y, idx_z] = 1.0
@@ -107,7 +107,7 @@ class WarpingTestMethods(unittest.TestCase):
         for idx_z in range(im_moving.shape[2]):
             for idx_y in range(im_moving.shape[3]):
                 for idx_x in range(im_moving.shape[4]):
-                    x, y, z = pixel_to_normalised_3d(idx_x, idx_y, idx_z, self.dim_x, self.dim_y, self.dim_z)
+                    x, y, z = pixel_to_normalised_3D(idx_x, idx_y, idx_z, self.dim_x, self.dim_y, self.dim_z)
 
                     if x ** 2 + y ** 2 + z ** 2 <= r:
                         im_moving[0, 0, idx_x, idx_y, idx_z] = 1.0
@@ -150,7 +150,7 @@ class WarpingTestMethods(unittest.TestCase):
         dim_y = 128
         dim_z = 128
 
-        identity_grid = init_identity_grid_3d(dim_x, dim_y, dim_z).to('cuda:0')
+        identity_grid = init_identity_grid_3D(dim_x, dim_y, dim_z).to('cuda:0')
         transformation = identity_grid.permute([0, 4, 1, 2, 3])
 
         for idx_z in range(transformation.shape[2]):
@@ -164,7 +164,7 @@ class WarpingTestMethods(unittest.TestCase):
         """
 
         im_path = \
-            '/vol/bitbucket/dig15/learnsim_biobank_train/biobank_8/1034854_T2_FLAIR_unbiased_brain_affine_to_mni.nii.gz'
+            '/vol/bitbucket/dig15/datasets/mine/biobank/biobank_08/1034854_T2_FLAIR_unbiased_brain_affine_to_mni.nii.gz'
         im_moving = sitk.ReadImage(im_path, sitk.sitkFloat32)
 
         im_moving = torch.from_numpy(transform.resize(
