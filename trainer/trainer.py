@@ -310,15 +310,7 @@ class Trainer(BaseTrainer):
                 v_sample_unsmoothed = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1)
                 v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_sample)
-                
-                nabla_v = self.diff_op(transformation)
-                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
-                no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
-                self.metrics_VI.update('VI/test/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
 
-                # add noise to account for interpolation uncertainty
-                transformation = add_noise_uniform(transformation)
-                
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 seg_moving_warped = self.registration_module(seg_moving, transformation)
 
@@ -335,6 +327,11 @@ class Trainer(BaseTrainer):
                     score = ASD[structure]
                     self.metrics_VI.update('VI/test/ASD/' + structure, score)
                 
+                nabla_v = self.diff_op(transformation)
+                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
+                no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
+
+                self.metrics_VI.update('VI/test/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
                 save_sample(self.data_loader, im_pair_idxs, test_sample_no, im_moving_warped, displacement, model='VI')
 
         """
@@ -349,7 +346,6 @@ class Trainer(BaseTrainer):
                 v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding_sz)
                 
                 transformation, displacement = self.transformation_model(v_sample)
-                transformation = add_noise_uniform(transformation)
                 
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 seg_moving_warped = self.registration_module(seg_moving, transformation)
@@ -479,6 +475,12 @@ class Trainer(BaseTrainer):
                     for idx in range(self.data_loss.num_components):
                         self.metrics_MCMC.update('MCMC/GMM/sigma_' + str(idx), sigmas[idx])
                         self.metrics_MCMC.update('MCMC/GMM/proportion_' + str(idx), proportions[idx])
+                    
+                    if self.Sobolev_grad:
+                        v_curr_state_smoothed = SobolevGrad.apply(self.v_curr_state, self.S, self.padding_sz)
+                        transformation, displacement = self.transformation_model(v_curr_state_smoothed)
+                    else:
+                        transformation, displacement = self.transformation_model(self.v_curr_state)
 
                     # Dice scores
                     seg_moving_warped = self.registration_module(seg_moving, transformation)
@@ -502,7 +504,7 @@ class Trainer(BaseTrainer):
                     # tensorboard
                     if self.Sobolev_grad:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
-                                   im_moving_warped, res_masked, v_curr_state_noise_smoothed, displacement, log_det_J_transformation)
+                                   im_moving_warped, res_masked, v_curr_state_smoothed, displacement, log_det_J_transformation)
                     else:
                         log_sample(self.writer, im_pair_idxs, self.data_loss,
                                    im_moving_warped, res_masked, self.v_curr_state, displacement, log_det_J_transformation)
