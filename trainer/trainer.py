@@ -310,15 +310,15 @@ class Trainer(BaseTrainer):
                 v_sample_unsmoothed = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1)
                 v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding_sz)
                 transformation, displacement = self.transformation_model(v_sample)
-
-                # add noise to account for interpolation uncertainty
-                transformation = add_noise_uniform(transformation)
                 
                 nabla_v = self.diff_op(transformation)
                 log_det_J_transformation = torch.log(calc_det_J(nabla_v))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
                 self.metrics_VI.update('VI/test/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
 
+                # add noise to account for interpolation uncertainty
+                transformation = add_noise_uniform(transformation)
+                
                 im_moving_warped = self.registration_module(im_moving, transformation)
                 seg_moving_warped = self.registration_module(seg_moving, transformation)
 
