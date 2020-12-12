@@ -260,7 +260,7 @@ samples
 """
 
 
-def sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_slices, log_det_J_slices):
+def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices, log_det_J_slices):
     """
     plot of output images and vector fields related to a sample from MCMC to log in tensorboard
     """
@@ -268,7 +268,7 @@ def sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_sli
     fig, axs = plt.subplots(nrows=4, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['axial', 'coronal', 'sagittal']
-    rows = ['im_moving_warped', 'mu_v_norm', 'displacement_norm', 'log_det_J']
+    rows = ['im_moving_warped', 'v_curr_state_norm', 'displacement_norm', 'log_det_J']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -281,7 +281,7 @@ def sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_sli
 
     for i in range(3):
         axs[0, i].imshow(im_flip(im_moving_warped_slices[i]))
-        axs[1, i].imshow(im_flip(mu_v_norm_slices[i]))
+        axs[1, i].imshow(im_flip(v_norm_slices[i]))
         axs[2, i].imshow(im_flip(displacement_norm_slices[i]))
         axs[3, i].imshow(im_flip(log_det_J_slices[i]))
 
@@ -309,8 +309,8 @@ def log_sample(writer, im_pair_idxs, data_loss, im_moving_warped_batch, res_batc
                                    im_moving_warped[mid_z, :, :]]
 
         temp = calc_norm(v_batch_voxel_units[loop_idx])
-        mu_v_norm = temp[0].cpu().numpy()
-        mu_v_norm_slices = [mu_v_norm[:, :, mid_x], mu_v_norm[:, mid_y, :], mu_v_norm[mid_z, :, :]]
+        v_norm = temp[0].cpu().numpy()
+        v_norm_slices = [v_norm[:, :, mid_x], v_norm[:, mid_y, :], v_norm[mid_z, :, :]]
 
         temp = calc_norm(displacement_batch_voxel_units[loop_idx])
         displacement_norm = temp[0].cpu().numpy()
@@ -324,4 +324,4 @@ def log_sample(writer, im_pair_idxs, data_loss, im_moving_warped_batch, res_batc
                             log_det_J[mid_z, :, :]]
 
         writer.add_figure('samples/' + str(im_pair_idx),
-                          sample_grid(im_moving_warped_slices, mu_v_norm_slices, displacement_norm_slices, log_det_J_slices))
+                          sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices, log_det_J_slices))
