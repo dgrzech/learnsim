@@ -1,5 +1,6 @@
 from abc import ABC
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -70,18 +71,23 @@ class GradientOperator(DifferentialOperator):
         # F.grid_sample(..) takes values in range (-1, 1), so needed for det(J) = 1 when the transformation is identity
         self.pixel_spacing = None
 
-    def forward(self, v):
-        if self.pixel_spacing is None:
-            dim_x = v.shape[4]
-            dim_y = v.shape[3]
-            dim_z = v.shape[2]
+    def _set_spacing(self, field):
+        dims = np.asarray(field.shape[2:])
+        self.pixel_spacing = 2.0 / (dims - 1)
 
-            self.pixel_spacing = (2.0 / float(dim_x - 1), 2.0 / float(dim_y - 1), 2.0 / float(dim_z - 1))
+    def forward(self, v, transformation=False):
+        if transformation and self.pixel_spacing is None:
+            self._set_spacing(v)
 
         # forward differences
-        dv_dx = F.pad(v[:, :, :, :, 1:] - v[:, :, :, :, :-1], self.px, mode='replicate') / self.pixel_spacing[0]
-        dv_dy = F.pad(v[:, :, :, 1:] - v[:, :, :, :-1], self.py, mode='replicate') / self.pixel_spacing[1]
-        dv_dz = F.pad(v[:, :, 1:] - v[:, :, :-1], self.pz, mode='replicate') / self.pixel_spacing[2]
+        dv_dx = F.pad(v[:, :, :, :, 1:] - v[:, :, :, :, :-1], self.px, mode='replicate')
+        dv_dy = F.pad(v[:, :, :, 1:] - v[:, :, :, :-1], self.py, mode='replicate')
+        dv_dz = F.pad(v[:, :, 1:] - v[:, :, :-1], self.pz, mode='replicate')
+
+        if transformation:
+            dv_dx /= self.pixel_spacing[2]
+            dv_dy /= self.pixel_spacing[1]
+            dv_dz /= self.pixel_spacing[0]
 
         nabla_vx = torch.stack((dv_dx[:, 0], dv_dy[:, 0], dv_dz[:, 0]), 1)
         nabla_vy = torch.stack((dv_dx[:, 1], dv_dy[:, 1], dv_dz[:, 1]), 1)

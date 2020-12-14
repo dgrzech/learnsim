@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from utils import calc_det_J, init_identity_grid_3D, pixel_to_normalised_3D, GradientOperator
+from utils import GradientOperator, calc_det_J, init_identity_grid_3D
 
 # fix random seeds for reproducibility
 SEED = 123
@@ -99,10 +99,8 @@ class DiffTestMethods(unittest.TestCase):
         for idx_z in range(v.shape[2]):
             for idx_y in range(v.shape[3]):
                 for idx_x in range(v.shape[4]):
-                    x, y, z = pixel_to_normalised_3D(idx_x, idx_y, idx_z, v.shape[4], v.shape[3], v.shape[2])
-
-                    v[0, 0, idx_z, idx_y, idx_x] = x
-                    v[0, 1, idx_z, idx_y, idx_x] = 1.5 * y + 3.0 * z + 1.0
+                    v[0, 0, idx_z, idx_y, idx_x] = idx_x
+                    v[0, 1, idx_z, idx_y, idx_x] = 1.5 * idx_y + 3.0 * idx_z + 1.0
                     v[0, 2, idx_z, idx_y, idx_x] = 0.0
 
         """
@@ -216,7 +214,7 @@ class DiffTestMethods(unittest.TestCase):
         calculate its Jacobian
         """
 
-        nabla = self.diff_op(identity_transformation)
+        nabla = self.diff_op(identity_transformation, transformation=True)
 
         """
         calculate the log determinant of the Jacobian
@@ -261,7 +259,7 @@ class DiffTestMethods(unittest.TestCase):
         calculate its Jacobian
         """
 
-        nabla = self.diff_op(transformation)
+        nabla = self.diff_op(transformation, transformation=True)
 
         log_det_J = torch.log(calc_det_J(nabla))
         log_det_J_true = torch.log(8.0 * torch.ones_like(log_det_J))
