@@ -1,115 +1,102 @@
 {
-    "name": "SG_MCMC",
-    "n_gpu": 1,
-
-    "data_loss": {
-        "type": "GaussianMixtureLoss",
-        "args": {
-            "num_components": 4,
-            "s": 3
-	    }
-    },
-    "data_loss_scale_prior": {
-        "type": "LogScaleNormalPrior",
-        "args": {
-            "loc": 0.0,
-		    "scale": 2.30
-	    }
-    },
-    "data_loss_proportion_prior": {
-	    "type": "DirichletPrior",
-	    "args": {
-	        "num_classes": 4,
-	        "alpha": 5e-1
-	    }
-    },
-
-    "reg_loss": {
-        "type": "RegLoss_LogNormal",
-        "args": {
-            "diff_op": "GradientOperator",
-	        "learnable": true,
-            "loc_learnable": true,
-	        "scale_learnable": true,
-	        "w_reg": 7e-1
-        }
-    },
-    "reg_loss_loc_prior": {
-    	"type": "LogEnergyExpGammaPrior",
-	    "args": {
-	        "w_reg": 7e-1,
-	        "dof": 2654208.0,
-	        "learnable": false
-	    }
-    },
-    "reg_loss_scale_prior": {
-    	"type": "LogScaleNormalPrior",
-	    "args": {
-	        "loc": 2.7973,
-	        "scale": 5.0
-	    }
-    },
-
-    "entropy_loss": {
-        "type": "EntropyMultivariateNormal",
-        "args": {}
-    },
-
-    "transformation_model": {
-        "type": "SVF_3D",
-        "args": {}
-    },
-    "registration_module": {
-        "type": "RegistrationModule",
-        "args": {}
-    },
-
-    "optimizer_v": {
-        "type": "Adam",
-        "args": {
-            "lr": 5e-3
-        }
-    },
-    "optimizer_SG_MCMC": {
-        "type": "SGD",
-        "args": {
-            "lr": 4e-1
-        }
-    },
-
-    "data_loader": {
-        "type": "LearnSimDataLoader",
-        "args":{
-            "data_dir": "/vol/bitbucket/dig15/datasets/mine/miccai_2020/experiments1_and_3/",
-            "dim_x": 96,
-	        "dim_y": 96,
-	        "dim_z": 96
-        }
-    },
-
-    "Sobolev_grad": {
-        "enabled": true,
-	    "s": 7,
-	    "lambda": 5e-1
-    },
-
-    "virtual_decimation": true,
-
-    "trainer": {
-	"VI": true,
-	"MCMC": true, 
-
-        "no_iters_VI": 1536,
-
-	"no_samples_VI_test": 50,
-        "no_iters_burn_in": 10000,
-	    "no_samples_MCMC": 100000,
-
-        "log_period_VI": 512,
-        "log_period_MCMC": 1800,
-
-        "tensorboard": true,
-        "verbosity": 2,
-        "save_dir": "saved/"
+  "name": "SG_MCMC",
+  "n_gpu": 1,
+  "data_loss": {
+    "type": "GaussianMixtureLoss",
+    "args": {
+      "num_components": 4,
+      "s": 3
     }
+  },
+  "data_loss_scale_prior": {
+    "type": "LogScaleNormalPrior",
+    "args": {
+      "loc": 0.0,
+      "scale": 2.30
+    }
+  },
+  "data_loss_proportion_prior": {
+    "type": "DirichletPrior",
+    "args": {
+      "num_classes": 4,
+      "alpha": 5e-1
+    }
+  },
+  "reg_loss": {
+    "type": "RegLoss_LogNormal",
+    "args": {
+      "diff_op": "GradientOperator",
+      "learnable": true,
+      "loc_learnable": true,
+      "scale_learnable": true,
+      "w_reg": 7e-1
+    }
+  },
+  "reg_loss_loc_prior": {
+    "type": "LogEnergyExpGammaPrior",
+    "args": {
+      "w_reg": 7e-1,
+      "dof": 2654208.0,
+      "learnable": false
+    }
+  },
+  "reg_loss_scale_prior": {
+    "type": "LogScaleNormalPrior",
+    "args": {
+      "loc": 2.7973,
+      "scale": 5.0
+    }
+  },
+  "entropy_loss": {
+    "type": "EntropyMultivariateNormal",
+    "args": {}
+  },
+  "transformation_model": {
+    "type": "SVF_3D",
+    "args": {}
+  },
+  "registration_module": {
+    "type": "RegistrationModule",
+    "args": {}
+  },
+  "optimizer_v": {
+    "type": "Adam",
+    "args": {
+      "lr": 5e-3
+    }
+  },
+  "optimizer_SG_MCMC": {
+    "type": "SGD",
+    "args": {
+      "lr": 4e-1
+    }
+  },
+  "data_loader": {
+    "type": "LearnSimDataLoader",
+    "args": {
+      "data_dir": "/vol/bitbucket/dig15/datasets/mine/miccai_2020/experiments1_and_3/",
+      "dim_x": 96,
+      "dim_y": 96,
+      "dim_z": 96
+    }
+  },
+  "Sobolev_grad": {
+    "enabled": true,
+    "s": 7,
+    "lambda": 5e-1
+  },
+  "virtual_decimation": true,
+  "trainer": {
+    "VI": true,
+    "MCMC": true,
+    "no_iters_VI": 1536,
+    "no_samples_VI_test": 50,
+    "no_iters_burn_in": 10000,
+    "no_samples_MCMC": 100000,
+    "log_period_VI": 512,
+    "log_period_MCMC": 1800,
+    "tensorboard": true,
+    "verbosity": 2,
+    "save_dir": "saved/"
+  }
 }

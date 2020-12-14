@@ -1,17 +1,15 @@
+import json
+import math
 from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
-from torch import nn
-from tvtk.api import tvtk, write_data
 
-import json
-import math
-import nibabel as nib
+import SimpleITK as sitk
 import numpy as np
 import pandas as pd
-import SimpleITK as sitk
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 
 def ensure_dir(dirname):
@@ -84,7 +82,7 @@ def calc_ASD(seg_fixed, seg_moving, structures_dict, spacing):
     seg_fixed_arr = seg_fixed.squeeze().cpu().numpy()
     seg_moving_arr = seg_moving.squeeze().cpu().numpy()
     spacing = spacing.numpy().tolist()
-    
+
     for structure in structures_dict:
         label = structures_dict[structure]
 
@@ -107,16 +105,16 @@ def calc_ASD(seg_fixed, seg_moving, structures_dict, spacing):
 
 def calc_DSC(seg_fixed, seg_moving, structures_dict):
     DSC = dict()  # dict. with dice scores for each segmentation
-    
+
     for structure in structures_dict:
         label = structures_dict[structure]
 
         numerator = 2.0 * ((seg_fixed == label) * (seg_moving == label)).sum().item()
         denominator = (seg_fixed == label).sum().item() + (seg_moving == label).sum().item()
-    
+
         score = numerator / denominator
         DSC[structure] = score
-    
+
     return DSC
 
 
@@ -132,6 +130,10 @@ def get_module_attr(module, name):
         return getattr(module.module, name)
 
     return getattr(module, name)
+
+
+def im_flip(array):
+    return np.fliplr(np.flipud(np.transpose(array, (1, 0))))
 
 
 def init_identity_grid_2D(nx, ny):
@@ -191,9 +193,8 @@ def max_field_update(field_old, field_new):
     norm_old = calc_norm(field_old)
     norm_new = calc_norm(field_new)
 
-    max_update = torch.max(torch.abs(norm_new - norm_old))
-    max_update_idx = torch.argmax(torch.abs(norm_new - norm_old))
-    return max_update, max_update_idx
+    diff = torch.abs(norm_new - norm_old)
+    return torch.max(diff), torch.argmax(diff)
 
 
 def pixel_to_normalised_2D(px_idx_x, px_idx_y, dim_x, dim_y):
@@ -244,99 +245,6 @@ def rescale_residuals(res, mask, data_loss):
     loss_VD.backward()
 
     return torch.sum(scaled_res * scaled_res.grad, dim=-1).view(res.shape)
-
-
-def save_field_to_disk(field, file_path, spacing=(1, 1, 1)):
-    """
-    save a vector field to a .vtk file
-
-    :param field: field to save
-    :param file_path: path to use
-    :param spacing: voxel spacing
-    """
-
-    field = field.cpu().numpy()
-    spacing = spacing.numpy()
-
-    field_x = field[0]
-    field_y = field[1]
-    field_z = field[2]
-
-    dim = field.shape[1:]  # FIXME: why is the no. cells < no. points?
-
-    vectors = np.empty(field_x.shape + (3,), dtype=float)
-    vectors[..., 0] = field_x
-    vectors[..., 1] = field_y
-    vectors[..., 2] = field_z
-
-    vectors = vectors.transpose(2, 1, 0, 3).copy()
-    vectors.shape = vectors.size // 3, 3
-
-    im_vtk = tvtk.ImageData(spacing=spacing, origin=(0, 0, 0), dimensions=dim)
-    im_vtk.point_data.vectors = vectors
-    im_vtk.point_data.vectors.name = 'field'
-
-    write_data(im_vtk, file_path)
-
-
-def save_grid_to_disk(grid, file_path):
-    """
-    save a VTK structured grid to a .vtk file
-
-    :param grid: grid to save
-    :param file_path: path to use
-    """
-
-    grid = grid.cpu().numpy()
-
-    x = grid[0, :, :, :]
-    y = grid[1, :, :, :]
-    z = grid[2, :, :, :]
-
-    pts = np.empty(x.shape + (3,), dtype=float)
-
-    pts[..., 0] = x
-    pts[..., 1] = y
-    pts[..., 2] = z
-
-    pts = pts.transpose(2, 1, 0, 3).copy()
-    pts.shape = pts.size // 3, 3
-
-    sg = tvtk.StructuredGrid(dimensions=x.shape, points=pts)
-    write_data(sg, file_path)
-
-
-def save_im_to_disk(im, file_path, spacing=(1, 1, 1)):
-    """
-    save an image stored in a numpy array to a .nii.gz file
-
-    :param im: 3D image
-    :param file_path: path to use
-    :param spacing: voxel spacing
-    """
-
-    im = nib.Nifti1Image(im, np.eye(4))
-    im.header.set_xyzt_units(2)
-
-    try:
-        spacing = spacing.numpy()
-        im.header.set_zooms(spacing)
-    except:
-        im.header.set_zooms(spacing)
-
-    im.to_filename(file_path)
-
-
-def save_optimiser_to_disk(optimiser, file_path):
-    """
-    save an optimiser state to a .pth file
-
-    :param optimiser: optimiser
-    :param file_path: path to use
-    """
-
-    state_dict = optimiser.state_dict()
-    torch.save(state_dict, file_path)
 
 
 def separable_conv_3D(field, *args):
@@ -419,9 +327,15 @@ def transform_coordinates(field):
     """
 
     field_out = field.clone()
+
+    if len(field.shape) == 4:
+        no_dims = 2
+    elif len(field.shape) == 5:
+        no_dims = 3
+
     dims = field.shape[2:]
 
-    for idx in range(3):
+    for idx in range(no_dims):
         field_out[:, idx] = field_out[:, idx] * 2.0 / float(dims[idx] - 1)
 
     return field_out
@@ -433,9 +347,15 @@ def transform_coordinates_inv(field):
     """
 
     field_out = field.clone()
+
+    if len(field.shape) == 4:
+        no_dims = 2
+    elif len(field.shape) == 5:
+        no_dims = 3
+
     dims = field.shape[2:]
 
-    for idx in range(3):
+    for idx in range(no_dims):
         field_out[:, idx] = field_out[:, idx] * float(dims[idx] - 1) / 2.0
 
     return field_out

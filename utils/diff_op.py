@@ -1,13 +1,8 @@
 from abc import ABC
-from torch import nn
 
 import torch
 import torch.nn.functional as F
-
-
-"""
-differential operator
-"""    
+from torch import nn
 
 
 def _get_all_subclasses(cls):
@@ -22,9 +17,10 @@ class DifferentialOperator(nn.Module, ABC):
     from_string is just a convenience method to create an instance of subclass s from string s.
     e.g. DifferentialOperator.from_string('GradientOperator')
     """
+
     def __init__(self):
         super(DifferentialOperator, self).__init__()
-        
+
     @staticmethod
     def from_string(s, *args, **kwargs):
         for cls in _get_all_subclasses(DifferentialOperator):
@@ -32,7 +28,7 @@ class DifferentialOperator(nn.Module, ABC):
             if cls.__name__ in s:
                 return cls(*args, **kwargs)
         raise ValueError('Unknown differential operator: {}'.format(s))
-        
+
     def forward(self, input):
         """
         Override in children classes, default behaviour is identity map.
@@ -40,7 +36,7 @@ class DifferentialOperator(nn.Module, ABC):
         """
         return input
 
-    
+
 class Fourier1stDerivativeOperator(DifferentialOperator):
     """
     Square root of the Laplacian operator computed in frequency domain:
@@ -49,19 +45,19 @@ class Fourier1stDerivativeOperator(DifferentialOperator):
     
     image_size (int): number of voxels along x, y, or z (assumed to be the same)
     """
-    
+
     def __init__(self, image_size):
         super(DifferentialOperator, self).__init__()
         omega_sq = get_omega_norm_sq((image_size, image_size, image_size)).transpose(1, 4)
-        self.omega_abs = nn.Parameter(omega_sq.sqrt_().unsqueeze(-1)).requires_grad_(False)
+        self.omega_abs = nn.Parameter(omega_sq.sqrt_().unsqueeze(-1), requires_grad=False)
 
     def forward(self, input):
         """
         input: a field in frequency domain ('z_hat'), with its real and imaginary parts along dim=-1
         """
         return input * self.omega_abs
-    
-    
+
+
 class GradientOperator(DifferentialOperator):
     def __init__(self):
         super(GradientOperator, self).__init__()

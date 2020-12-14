@@ -1,9 +1,10 @@
-from utils import calc_det_J, init_identity_grid_3D, pixel_to_normalised_3D, GradientOperator
+import unittest
 
 import numpy as np
 import pytest
 import torch
-import unittest
+
+from utils import calc_det_J, init_identity_grid_3D, pixel_to_normalised_3D, GradientOperator
 
 # fix random seeds for reproducibility
 SEED = 123
@@ -152,7 +153,8 @@ class DiffTestMethods(unittest.TestCase):
         initialise a transformation
         """
 
-        nabla_x, nabla_y, nabla_z = torch.zeros(self.dims_v).to('cuda:0'), torch.zeros(self.dims_v).to('cuda:0'), torch.zeros(self.dims_v).to('cuda:0')
+        nabla_x, nabla_y, nabla_z = torch.zeros(self.dims_v).to('cuda:0'), torch.zeros(self.dims_v).to(
+            'cuda:0'), torch.zeros(self.dims_v).to('cuda:0')
         det_J_true = torch.zeros((1, 1, self.dim_z, self.dim_y, self.dim_x)).to('cuda:0')
 
         for idx_z in range(nabla_x.shape[2]):

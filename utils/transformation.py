@@ -1,9 +1,9 @@
-from utils import init_identity_grid_2D, init_identity_grid_3D
-
 from abc import ABC, abstractmethod
-from torch import nn
 
 import torch.nn.functional as F
+from torch import nn
+
+from utils import init_identity_grid_2D, init_identity_grid_3D, transform_coordinates_inv
 
 
 class TransformationModel(nn.Module, ABC):
@@ -44,7 +44,7 @@ class SVF_2D(TransformationModel):
                                                         padding_mode='border', align_corners=True)
 
         transformation = self.identity_grid.permute([0, 3, 1, 2]) + displacement
-        return transformation, displacement
+        return transformation, transform_coordinates_inv(displacement)
 
 
 class SVF_3D(TransformationModel):
@@ -72,4 +72,4 @@ class SVF_3D(TransformationModel):
                                                         padding_mode='border', align_corners=True)
 
         transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + displacement
-        return transformation, displacement
+        return transformation, transform_coordinates_inv(displacement)

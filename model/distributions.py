@@ -1,13 +1,12 @@
-from torch import nn
-
 import math
-import torch
 
+import torch
+from torch import nn
 
 """
 Useful distributions
 """
- 
+
 
 class NormalDistribution(nn.Module):
     """
@@ -69,12 +68,12 @@ class _GammaDistribution(nn.Module):
     """
 
     def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
-        super(_GammaDistribution, self).__init__() 
-        
+        super(_GammaDistribution, self).__init__()
+
         if not learnable:
             shape_learnable = False
             rate_learnable = False
-            
+
         shape_is_float = True
         try:
             val = float(shape)
@@ -86,8 +85,8 @@ class _GammaDistribution(nn.Module):
         else:
             if len(shape) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(shape)))
-            self.shape = nn.Parameter(shape.clone().squeeze().detach()).requires_grad_(shape_learnable)
-            
+            self.shape = nn.Parameter(shape.clone().squeeze().detach(), requires_grad=shape_learnable)
+
         rate_is_float = True
 
         try:
@@ -100,19 +99,19 @@ class _GammaDistribution(nn.Module):
         else:
             if len(rate) != 1:
                 raise ValueError("Invalid tensor size. Expected 1, got: {}".format(len(rate)))
-            self.rate = nn.Parameter(rate.clone().squeeze().detach()).requires_grad_(rate_learnable)
-            
+            self.rate = nn.Parameter(rate.clone().squeeze().detach(), requires_grad=rate_learnable)
+
     def expectation(self):
         return self.shape / self.rate
-    
+
     def forward(self, log_x):
         return gamma_log_pdf(log_x, self.shape, self.rate)
-    
+
 
 def gamma_log_pdf(log_x, shape, rate):
     return shape * torch.log(rate) + (shape - 1) * log_x - rate * torch.exp(log_x) - torch.lgamma(shape)
 
-    
+
 class _InverseGammaDistribution(nn.Module):
     """
     Distribution of x = 1/z if z~Gamma(shape, rate).
@@ -123,39 +122,41 @@ class _InverseGammaDistribution(nn.Module):
     """
 
     def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
-        super(_InverseGammaDistribution, self).__init__() 
+        super(_InverseGammaDistribution, self).__init__()
         self.gamma_distribution = _GammaDistribution(shape, rate, shape_learnable, rate_learnable, learnable)
-        
+
     def expectation(self):
         """
         For shape > 1.
         """
-        return self.gamma_distribution.rate / (self.gamma_distribution.shape-1)
+        return self.gamma_distribution.rate / (self.gamma_distribution.shape - 1)
 
     def forward(self, log_x):
-        return self.gamma_distribution(-log_x) - 2*log_x
-    
-    
+        return self.gamma_distribution(-log_x) - 2 * log_x
+
+
 class ExpInverseGammaDistribution(nn.Module):
     """
     This is the distribution of X = log(Z) if Z is InverseGamma(shape, rate) distributed.
     """
+
     def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
-        super(ExpInverseGammaDistribution, self).__init__() 
+        super(ExpInverseGammaDistribution, self).__init__()
         self.igamma_distribution = _InverseGammaDistribution(shape, rate, shape_learnable, rate_learnable, learnable)
 
     def forward(self, x):
         return self.igamma_distribution(x) + x
 
-    
+
 class ExpGammaDistribution(nn.Module):
     """
     This is the distribution of X = log(Z) if Z is Gamma(shape, rate) distributed.
     """
+
     def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
-        super(ExpGammaDistribution, self).__init__() 
+        super(ExpGammaDistribution, self).__init__()
         self.gamma_distribution = _GammaDistribution(shape, rate, shape_learnable, rate_learnable, learnable)
-        
+
     def expectation(self):
         return expgamma_expectation(self.gamma_distribution.shape, self.gamma_distribution.rate)
 
@@ -185,11 +186,11 @@ class DirichletPrior(nn.Module):
     """
 
     def __init__(self, num_classes, alpha=None):
-        super(DirichletPrior, self).__init__() 
-        
+        super(DirichletPrior, self).__init__()
+
         if alpha is None:
             alpha = .5
-            
+
         is_float = True
 
         try:
@@ -204,7 +205,7 @@ class DirichletPrior(nn.Module):
                 raise ValueError("Invalid tensor size. Expected {}".format(num_classes) +
                                  ", got: {}".format(len(alpha)))
             self.concentration = nn.Parameter(alpha.clone().squeeze().detach(), requires_grad=False)
-        
+
     def forward(self, log_proportions):
         return (log_proportions * (self.concentration - 1.0)).sum(-1) + \
                torch.lgamma(self.concentration.sum(-1)) - torch.lgamma(self.concentration).sum(-1)
@@ -215,42 +216,43 @@ class LogPrecisionExpGammaPrior(nn.Module):
     Hyperprior over wreg is Gamma <-> hyperprior over log_wreg is expGamma
     Parametrized by shape and rate.
     """
-    
+
     def __init__(self, shape=1e-3, rate=1e-3, shape_learnable=False, rate_learnable=False, learnable=False):
-        super(LogPrecisionExpGammaPrior, self).__init__() 
+        super(LogPrecisionExpGammaPrior, self).__init__()
         self.expgamma_distribution = ExpGammaDistribution(shape, rate, shape_learnable, rate_learnable, learnable)
 
     def forward(self, x):
         return self.expgamma_distribution(x)
-    
+
 
 class LogEnergyExpGammaPrior(nn.Module):
     """
     Suitable as a prior over the location parameter (loc) for a Log-Normal distribution on the energy y. 
     """
+
     def __init__(self, w_reg, dof, nu=1.0, learnable=False):
         super(LogEnergyExpGammaPrior, self).__init__()
 
         self.register_buffer('w_reg', torch.Tensor([w_reg]))  # never learnable
         self.register_buffer('dof', torch.Tensor([dof]))  # never learnable
 
-        self.nu = nn.Parameter(torch.Tensor([nu])).requires_grad_(learnable)
+        self.nu = nn.Parameter(torch.Tensor([nu]), requires_grad=learnable)
 
     def expectation(self):
         return expgamma_expectation(0.5 * self.nu * self.dof, 0.5 * self.nu * self.w_reg)
-        
+
     def forward(self, log_energy):
-        return expgamma_log_pdf(log_energy, 0.5 * self.nu * self.dof, 0.5 * self.nu * self.w_reg)  
-    
-    
+        return expgamma_log_pdf(log_energy, 0.5 * self.nu * self.dof, 0.5 * self.nu * self.w_reg)
+
+
 class LogScaleNormalPrior(nn.Module):
     """
     Suitable as a prior on log(scale) parameters, such as a log standard deviation.
     """
-    
+
     def __init__(self, loc, scale, learnable=False):
         super(LogScaleNormalPrior, self).__init__()
         self.normal = NormalDistribution(loc, scale, learnable)
-        
+
     def forward(self, log_scale):
         return self.normal(log_scale)

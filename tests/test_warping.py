@@ -1,15 +1,15 @@
-from model.loss import SSD
-from utils import init_identity_grid_3D, pixel_to_normalised_3D, rescale_im, save_im_to_disk, standardise_im, \
-    RegistrationModule
-
-from skimage import transform
-
 import math
+import unittest
+
+import SimpleITK as sitk
 import numpy as np
 import pytest
-import SimpleITK as sitk
 import torch
-import unittest
+from skimage import transform
+
+from logger import save_im_to_disk
+from model.loss import SSD
+from utils import init_identity_grid_3D, pixel_to_normalised_3D, rescale_im, standardise_im, RegistrationModule
 
 # fix random seeds for reproducibility
 SEED = 123

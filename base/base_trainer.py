@@ -1,8 +1,9 @@
 from abc import abstractmethod
-from logger import TensorboardWriter
-from utils import get_module_attr
 
 import torch
+
+from logger import TensorboardWriter
+from utils import get_module_attr
 
 
 class BaseTrainer:
@@ -10,7 +11,8 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, data_loss, data_loss_scale_prior, data_loss_proportion_prior, reg_loss, reg_loss_loc_prior, reg_loss_scale_prior,
+    def __init__(self, data_loss, data_loss_scale_prior, data_loss_proportion_prior,
+                 reg_loss, reg_loss_loc_prior, reg_loss_scale_prior,
                  entropy_loss, transformation_model, registration_module, config):
         self.config = config
         self.checkpoint_dir = config.save_dir
@@ -45,7 +47,7 @@ class BaseTrainer:
             self.reg_loss_scale_prior = torch.nn.DataParallel(reg_loss_scale_prior, device_ids=device_ids)
 
             self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
-        
+
         self.reg_loss_type = self.reg_loss.__class__.__name__
         self.diff_op = get_module_attr(self.reg_loss, 'diff_op')  # for use with the transformation Jacobian
 

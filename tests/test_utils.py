@@ -1,11 +1,12 @@
-from utils import calc_norm, pixel_to_normalised_3D, pixel_to_normalised_2D, plot_2D, plot_3D,\
-    Sobolev_kernel_1D, separable_conv_3D, SVF_2D, SVF_3D
-
 import math
+import unittest
+
 import numpy as np
 import pytest
 import torch
-import unittest
+
+from utils import calc_norm, pixel_to_normalised_3D, pixel_to_normalised_2D, plot_2D, plot_3D, \
+    separable_conv_3D, SVF_2D, SVF_3D
 
 # fix random seeds for reproducibility
 SEED = 123

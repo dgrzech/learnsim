@@ -1,26 +1,20 @@
-from mpl_toolkits.mplot3d import Axes3D
-from utils import init_identity_grid_2D, init_identity_grid_3D
-
 import matplotlib.pyplot as plt
 import numpy as np
+
+from mpl_toolkits.mplot3d import Axes3D
+from utils import init_identity_grid_2D, init_identity_grid_3D
 
 
 def plot_2D(v, transformation):
     # initialise the grid
-    nx = transformation.shape[3]
-    ny = transformation.shape[2]
-
-    x = np.linspace(-1.0, 1.0, nx)
-    y = np.linspace(-1.0, 1.0, ny)
+    nx, ny = transformation.shape[3], transformation.shape[2]
+    x, y = np.linspace(-1.0, 1.0, nx), np.linspace(-1.0, 1.0, ny)
 
     xv, yv = np.meshgrid(x, y, indexing='ij')
-
-    xv = np.expand_dims(xv, axis=0)
-    yv = np.expand_dims(yv, axis=0)
+    xv, yv = np.expand_dims(xv, axis=0), np.expand_dims(yv, axis=0)
 
     # get the velocity field components
-    v_x = v[0, 0]
-    v_y = v[0, 1]
+    v_x, v_y = v[0, 0], v[0, 1]
 
     # plot velocity
     fig_v, ax_v = plt.subplots()
@@ -34,8 +28,7 @@ def plot_2D(v, transformation):
     identity_grid = init_identity_grid_2D(nx, ny)
     displacement_field = transformation - identity_grid.permute([0, 3, 1, 2])
 
-    u = displacement_field[0, 0]
-    v = displacement_field[0, 1]
+    u, v = displacement_field[0, 0], displacement_field[0, 1]
 
     # plot displacement
     fig, ax = plt.subplots()
@@ -51,24 +44,14 @@ def plot_2D(v, transformation):
 
 def plot_3D(v, transformation):
     # initialise the grid
-    nx = transformation.shape[4]
-    ny = transformation.shape[3]
-    nz = transformation.shape[2]
-
-    x = np.linspace(-1.0, 1.0, nx)
-    y = np.linspace(-1.0, 1.0, ny)
-    z = np.linspace(-1.0, 1.0, nz)
+    nx, ny, nz = transformation.shape[4], transformation.shape[3], transformation.shape[2]
+    x, y, z = np.linspace(-1.0, 1.0, nx), np.linspace(-1.0, 1.0, ny), np.linspace(-1.0, 1.0, nz)
 
     xv, yv, zv = np.meshgrid(x, y, z, indexing='ij')
-
-    xv = np.expand_dims(xv, axis=0)
-    yv = np.expand_dims(yv, axis=0)
-    zv = np.expand_dims(zv, axis=0)
+    xv, yv, zv = np.expand_dims(xv, axis=0), np.expand_dims(yv, axis=0), np.expand_dims(zv, axis=0)
 
     # get the velocity field components
-    v_x = v[0, 0]
-    v_y = v[0, 1]
-    v_z = v[0, 2]
+    v_x, v_y, v_z = v[0, 0], v[0, 1], v[0, 2]
 
     # plot velocity
     fig_v = plt.figure()
@@ -84,9 +67,7 @@ def plot_3D(v, transformation):
     identity_grid = init_identity_grid_3D(nx, ny, nz)
     displacement_field = transformation - identity_grid.permute([0, 4, 1, 2, 3])
 
-    u = displacement_field[0, 0]
-    v = displacement_field[0, 1]
-    w = displacement_field[0, 2]
+    u, v, w = displacement_field[0, 0], displacement_field[0, 1], displacement_field[0, 2]
 
     # plot displacement
     fig = plt.figure()
@@ -104,10 +85,7 @@ def plot_3D(v, transformation):
 
 def plot_grid(grid):
     grid = grid.cpu().numpy()
-
-    grid_x = grid[0, 0]
-    grid_y = grid[0, 1]
-    grid_z = grid[0, 2]
+    grid_x, grid_y, grid_z = grid[0, 0], grid[0, 1], grid[0, 2]
 
     dim = grid_x.shape[0]
     idx = np.array([i for i in range(dim) if i % 16 == 0])

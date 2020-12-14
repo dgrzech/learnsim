@@ -1,9 +1,8 @@
-from utils import add_noise_SGLD, separable_conv_3D
-
-import math
 import numpy as np
 import scipy.sparse as sp
 import torch
+
+from utils import add_noise_SGLD, separable_conv_3D
 
 
 def Laplacian_1D(N):
@@ -61,12 +60,12 @@ def Sobolev_kernel_3D(_s, _lambda):
     return S.reshape((_s, _s, _s))  # 3D Sobolev filter
 
 
-def gaussian_kernel_3D(_s, sigma=1.0):
+def Gaussian_kernel_3D(_s, sigma=1.0):
     """
     approximate the Gaussian kernel
     """
 
-    x, y, z = np.mgrid[-_s // 2 + 1:_s // 2 + 1, -_s // 2 + 1:_s // 2 + 1,  -_s // 2 + 1:_s // 2 + 1]
+    x, y, z = np.mgrid[-_s // 2 + 1:_s // 2 + 1, -_s // 2 + 1:_s // 2 + 1, -_s // 2 + 1:_s // 2 + 1]
     g = np.exp(-1.0 * (x ** 2 + y ** 2 + z ** 2) / (2.0 * sigma ** 2))
 
     return g / g.sum()

@@ -1,14 +1,14 @@
-from abc import abstractmethod, ABC
-from torch import nn
-from torch.nn.functional import log_softmax
-from utils import gaussian_kernel_3D, transform_coordinates_inv, GaussianGrad, DifferentialOperator
-
 import math
-import model.distributions as model_distr
+from abc import abstractmethod, ABC
+
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch import nn
+from torch.nn.functional import log_softmax
 
+import model.distributions as model_distr
+from utils import transform_coordinates_inv, DifferentialOperator
 
 """
 data loss
@@ -26,7 +26,7 @@ class DataLoss(nn.Module, ABC):
     @abstractmethod
     def forward(self, im_fixed, im_moving, mask):
         pass
-    
+
     @abstractmethod
     def map(self, im_fixed, im_moving):
         pass
@@ -155,16 +155,16 @@ class GaussianMixtureLoss(DataLoss):
 
     def log_proportions(self):
         return log_softmax(self.logits + 1e-2, dim=0, _stacklevel=5)
-    
+
     def log_scales(self):
         return self.log_std
-    
+
     def precision(self):
         return torch.exp(-2 * self.log_std)
 
     def forward(self, z):
         return self.reduce(z)
-    
+
     def map(self, im_fixed, im_moving):
         im_fixed_padded = F.pad(im_fixed, self.padding, mode='replicate')
         im_moving_padded = F.pad(im_moving, self.padding, mode='replicate')
@@ -200,7 +200,7 @@ class RegLoss(nn.Module, ABC):
         super(RegLoss, self).__init__()
 
         if diff_op is not None:
-            if isinstance(diff_op, str):  
+            if isinstance(diff_op, str):
                 # create from string, e.g. diff_op='GradientOperator'
                 self.diff_op = DifferentialOperator.from_string(diff_op)
             else:
@@ -213,7 +213,7 @@ class RegLoss(nn.Module, ABC):
         else:
             # identity operator
             self.diff_op = DifferentialOperator()
-            
+
     def forward(self, input, *args, **kwargs):
         """
         All RegLosses operate as functions of the energy defined by the differential operator.
@@ -222,11 +222,11 @@ class RegLoss(nn.Module, ABC):
 
         D_input = self.diff_op(input)
         y = torch.sum(D_input ** 2)  # "chi-square" variable / energy
-        
+
         return self._loss(y, *args, **kwargs)
-    
+
     @abstractmethod
-    def _loss(y, *args, **kwargs):
+    def _loss(self, y, *args, **kwargs):
         """
         Override this in children classes. For Bayesian RegLosses, this _loss is of the form 
             - log_pdf(...) and potentially includes hyperpriors for tunable parameters.
@@ -252,12 +252,12 @@ class RegLoss_L2(RegLoss):
         alpha is an L2 preimage of the velocity, it lives in the frequency domain.
         v = fft(half_kernel_hat * alpha * 1 / sqrt(|omega|**2 + 1)) is the (Sobolev-smooth) velocity field
     """
-    
+
     def __init__(self, dims, w_reg, diff_op=None, learnable=False):
         super(RegLoss_L2, self).__init__(diff_op=diff_op)
 
         log_w_reg = math.log(w_reg)
-        self.log_w_reg = nn.Parameter(torch.tensor([log_w_reg])).requires_grad_(learnable)
+        self.log_w_reg = nn.Parameter(torch.tensor([log_w_reg]), requires_grad=learnable)
 
     def _loss(self, y, dof=0):
         """
@@ -266,12 +266,12 @@ class RegLoss_L2(RegLoss):
 
         return self.log_w_reg.exp() * 0.5 * y - .5 * dof * self.log_w_reg, y.log()
 
-    
+
 class RegLoss_Student(RegLoss):
     """
     See RegLossL2 for tips.
     """
-    
+
     def __init__(self, dims, diff_op=None, nu0=2e-6, lambda0=1e-6, a0=1e-6, b0=1e-6):
         """
          t_nu0(x | 0, lambda0) with  nu0 = 2 * a0 deg. of freedom and scale lambda0 = a0 / b0,
@@ -289,7 +289,7 @@ class RegLoss_Student(RegLoss):
         """
 
         super(RegLoss_Student, self).__init__(diff_op=diff_op)
-        
+
         if nu0 != 2e-6:
             self.a0 = nu0 / 2.0
         else:
@@ -308,7 +308,7 @@ class RegLoss_Student(RegLoss):
         """
 
         return torch.log(self.b0_twice + y) * (self.a0 + .5 * dof), y.log()
-    
+
 
 class RegLoss_EnergyBased(RegLoss):
     """
@@ -319,31 +319,31 @@ class RegLoss_EnergyBased(RegLoss):
     with _mlog_energy_prior corresponding to -log Gamma(dof/2,wreg/2),
     up to the quality of numerical implementation in here.
     """
-    
+
     def __init__(self, diff_op=None):
         super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
-    
+
     @abstractmethod
     def _mlog_energy_prior(self, y, *args, **kwargs):
         """
         Override in children classes, this is -log pdf of the prior on the energy y.
         """
         pass
-        
+
     def _loss(self, y, dof, *args, **kwargs):
         """
         All EnergyBasedRegLosses should use this _loss, not meant to be overriden.
         To adjust the behaviour, adjust the _mlog_energy_prior (and the class attributes)
         """
-        
+
         return self._mlog_energy_prior(y, *args, **kwargs) + (dof * 0.5 - 1.0) * torch.log(y), torch.log(y)
-        
+
 
 class RegLoss_LogNormal(RegLoss_EnergyBased):
     """
     log-Normal prior on the energy y, as returned by self.forward.
     """
-    
+
     def __init__(self, dims, w_reg=1.0, diff_op=None, learnable=False, loc_learnable=False, scale_learnable=False):
         """
         The default values have no reason to be good values. If no prior knowledge, use learnable=True along with:
@@ -377,11 +377,11 @@ class RegLoss_LogNormal(RegLoss_EnergyBased):
 
         log_scale = math.log(4.0) + math.log(loc_init)
         self.log_scale = nn.Parameter(torch.Tensor([log_scale]), requires_grad=scale_learnable)
-        
+
     def _mlog_energy_prior(self, y, *args, **kwargs):
         scale = torch.exp(self.log_scale)
         log_y = torch.log(y)
-        
+
         return log_y + self.log_scale + 0.5 * ((log_y - self.loc) / scale) ** 2
 
 
@@ -389,7 +389,7 @@ class RegLoss_LogNormal_L2(RegLoss_EnergyBased):
     def __init__(self, diff_op=None):
         super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
         self.gamma_distr = model_distr._GammaDistribution(96.0 ** 3 * 1.5, 0.1, learnable=False)
-        
+
     def _mlog_energy_prior(self, y, *args, **kwargs):
         log_y = torch.log(y)
         return -1.0 * self.gamma_distr(log_y)
@@ -424,20 +424,19 @@ class EntropyMultivariateNormal(Entropy):
     def forward(self, **kwargs):
         if len(kwargs) == 2:
             log_var_v = kwargs['log_var_v']
+            sigma_v = torch.exp(0.5 * log_var_v)
             u_v = kwargs['u_v']
 
-            sigma_v = torch.exp(0.5 * log_var_v)
             return 0.5 * (torch.log1p(torch.sum(torch.pow(u_v / sigma_v, 2))) + torch.sum(log_var_v))
         elif len(kwargs) == 4:
             v_sample = kwargs['v_sample']
 
             mu_v = kwargs['mu_v']
             log_var_v = kwargs['log_var_v']
+            sigma_v = torch.exp(0.5 * log_var_v)
             u_v = kwargs['u_v']
 
-            sigma_v = torch.exp(0.5 * log_var_v)
-
-            v = transform_coordinates_inv(v_sample - mu_v) / sigma_v  # FIXME: aiyoo..
+            v = (transform_coordinates_inv(v_sample) - mu_v) / sigma_v
             u_n = u_v / sigma_v
 
             t1 = torch.sum(torch.pow(v, 2))
