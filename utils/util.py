@@ -118,11 +118,17 @@ def calc_DSC(seg_fixed, seg_moving, structures_dict):
     return DSC
 
 
-def calc_norm(v):
+def calc_norm(field):
     """
-    calculate the voxel-wise norm of vectors in a 3D field
+    calculate the voxel-wise norm of vectors in a batch of 3D fields
     """
-    return torch.norm(v, p=2, dim=0, keepdim=True)
+
+    norms = torch.empty(size=(field.shape[0], 1, field.shape[2], field.shape[3], field.shape[4]), device=field.device)
+
+    for batch_idx in range(field.shape[0]):
+        norms[batch_idx, ...] = torch.norm(field[batch_idx], p=2, dim=0)
+
+    return norms
 
 
 def get_module_attr(module, name):

@@ -25,12 +25,25 @@ class UtilsTestMethods(unittest.TestCase):
         self.dim_x = self.dim_y = self.dim_z = n
 
     def test_norm(self):
-        v = torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
+        v = torch.ones((1, 3, self.dim_x, self.dim_y, self.dim_z))
 
         v_norm = calc_norm(v)
-        val_true = math.sqrt(3) * torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
+        val_true = math.sqrt(3) * torch.ones(size=(1, 1, self.dim_x, self.dim_y, self.dim_z))
 
         assert torch.all(torch.eq(v_norm, val_true))
+
+    def test_norm_batch(self):
+        v1 = torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
+        v2 = 2.0 * torch.ones_like(v1)
+
+        v = torch.stack([v1, v2], dim=0)
+        v_norm = calc_norm(v)
+
+        v1_norm_true = math.sqrt(3) * torch.ones(1, 1, self.dim_x, self.dim_y, self.dim_z)
+        v2_norm_true = math.sqrt(12) * torch.ones_like(v1_norm_true)
+
+        assert torch.all(torch.eq(v_norm[0], v1_norm_true))
+        assert torch.all(torch.eq(v_norm[1], v2_norm_true))
 
     def test_scaling_and_squaring_2D_translation(self):
         transformation_module = SVF_2D(self.dim_x, self.dim_y)
