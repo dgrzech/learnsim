@@ -44,7 +44,7 @@ def add_noise_SGLD(v, sigma, tau):
     return v + math.sqrt(tau) * eps * sigma
 
 
-def add_noise_uniform(field, alpha=0.1):
+def add_noise_uniform(field, alpha=0.5):
     epsilon = -2.0 * alpha * torch.rand(field.shape, device=field.device) + alpha
     return field + transform_coordinates(epsilon)
 
@@ -153,11 +153,8 @@ def init_identity_grid_2D(nx, ny):
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
 
-    x = x.expand(ny, -1)
-    y = y.expand(nx, -1).transpose(0, 1)
-
-    x.unsqueeze_(0).unsqueeze_(3)
-    y.unsqueeze_(0).unsqueeze_(3)
+    x = x.expand(ny, -1).unsqueeze(0).unsqueeze(3)
+    y = y.expand(nx, -1).transpose(0, 1).unsqueeze(0).unsqueeze(3)
 
     return torch.cat((x, y), 3)
 
@@ -175,13 +172,9 @@ def init_identity_grid_3D(nx, ny, nz):
     y = torch.linspace(-1, 1, steps=ny)
     z = torch.linspace(-1, 1, steps=nz)
 
-    x = x.expand(ny, -1).expand(nz, -1, -1)
-    y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2)
-    z = z.expand(nx, -1).transpose(0, 1).expand(ny, -1, -1).transpose(0, 1)
-
-    x.unsqueeze_(0).unsqueeze_(4)
-    y.unsqueeze_(0).unsqueeze_(4)
-    z.unsqueeze_(0).unsqueeze_(4)
+    x = x.expand(ny, -1).expand(nz, -1, -1).unsqueeze(0).unsqueeze(4)
+    y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2).unsqueeze(0).unsqueeze(4)
+    z = z.expand(nx, -1).transpose(0, 1).expand(ny, -1, -1).transpose(0, 1).unsqueeze(0).unsqueeze(4)
 
     return torch.cat((x, y, z), 4)
 
@@ -334,11 +327,7 @@ def transform_coordinates(field):
 
     field_out = field.clone()
 
-    if len(field.shape) == 4:
-        no_dims = 2
-    elif len(field.shape) == 5:
-        no_dims = 3
-
+    no_dims = field.shape[1]
     dims = field.shape[2:]
 
     for idx in range(no_dims):
@@ -354,11 +343,7 @@ def transform_coordinates_inv(field):
 
     field_out = field.clone()
 
-    if len(field.shape) == 4:
-        no_dims = 2
-    elif len(field.shape) == 5:
-        no_dims = 3
-
+    no_dims = field.shape[1]
     dims = field.shape[2:]
 
     for idx in range(no_dims):

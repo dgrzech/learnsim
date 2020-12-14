@@ -1,7 +1,5 @@
 import torch
 
-from utils import transform_coordinates
-
 
 def sample_q_v(mu_v, log_var_v, u_v, no_samples=1):
     """
@@ -14,7 +12,6 @@ def sample_q_v(mu_v, log_var_v, u_v, no_samples=1):
     x = torch.randn(1, device=u_v.device)
 
     if no_samples == 1:
-        return transform_coordinates(mu_v + eps * sigma_v + x * u_v)
+        return mu_v + eps * sigma_v + x * u_v
 
-    return transform_coordinates(mu_v + (eps * sigma_v + x * u_v)), \
-           transform_coordinates(mu_v - (eps * sigma_v + x * u_v))
+    return mu_v + (eps * sigma_v + x * u_v), mu_v - (eps * sigma_v + x * u_v)

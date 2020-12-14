@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import torch.nn.functional as F
 from torch import nn
 
-from utils import init_identity_grid_2D, init_identity_grid_3D, transform_coordinates_inv
+from utils import init_identity_grid_2D, init_identity_grid_3D, transform_coordinates, transform_coordinates_inv
 
 
 class TransformationModel(nn.Module, ABC):
@@ -36,7 +36,7 @@ class SVF_2D(TransformationModel):
         integrate a 2D stationary velocity field through scaling and squaring
         """
 
-        displacement = v / float(2 ** self.no_steps)
+        displacement = transform_coordinates(v) / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
             transformation = self.identity_grid + displacement.permute([0, 2, 3, 1])
@@ -64,7 +64,7 @@ class SVF_3D(TransformationModel):
         integrate a 3D stationary velocity field through scaling and squaring
         """
 
-        displacement = v / float(2 ** self.no_steps)
+        displacement = transform_coordinates(v) / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
             transformation = self.identity_grid + displacement.permute([0, 2, 3, 4, 1])

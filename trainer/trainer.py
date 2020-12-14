@@ -7,7 +7,7 @@ from logger import log_fields, log_hist_res, log_images, log_sample, print_log, 
     save_sample
 from optimizers import Adam
 from utils import MetricTracker, SGLD, SobolevGrad, Sobolev_kernel_1D, VD, add_noise_uniform, calc_ASD, calc_DSC, \
-    calc_det_J, max_field_update, rescale_residuals, sample_q_v, transform_coordinates
+    calc_det_J, max_field_update, rescale_residuals, sample_q_v
 
 
 class Trainer(BaseTrainer):
@@ -126,8 +126,8 @@ class Trainer(BaseTrainer):
             transformation2, displacement2 = self.transformation_model(v_sample2)
 
             with torch.no_grad():
-                nabla_v = self.diff_op(transformation1)
-                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
+                nabla = self.diff_op(transformation1, transformation=True)
+                log_det_J_transformation = torch.log(calc_det_J(nabla))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
             # add noise to account for interpolation uncertainty
@@ -160,42 +160,44 @@ class Trainer(BaseTrainer):
             self._step_GMM(res1_masked, alpha1)
 
             # q_v
-            data_term = self.data_loss(res1_masked).sum() / 2.0 * alpha1
-            data_term += self.data_loss(res2_masked).sum() / 2.0 * alpha2
+            data_term1 = self.data_loss(res1_masked).sum() / 2.0 * alpha1
+            data_term2 = self.data_loss(res2_masked).sum() / 2.0 * alpha2
 
-            data_term -= self.data_loss_scale_prior(self.data_loss.log_scales()).sum()
-            data_term -= self.data_loss_proportion_prior(self.data_loss.log_proportions()).sum()
+            data_term_scale_prior = self.data_loss_scale_prior(self.data_loss.log_scales()).sum()
+            data_term_proportion_prior = self.data_loss_proportion_prior(self.data_loss.log_proportions()).sum()
 
-            reg_term1, log_y1 = self.reg_loss(v_sample1,
-                                              dof=self.dof) if self.reg_loss_type is not 'RegLoss_L2' else self.reg_loss(
-                v_sample1)
-            reg_term2, log_y2 = self.reg_loss(v_sample2,
-                                              dof=self.dof) if self.reg_loss_type is not 'RegLoss_L2' else self.reg_loss(
-                v_sample2)
+            data_term = data_term1 + data_term2 - data_term_scale_prior - data_term_proportion_prior
+
+            reg_term1, log_y1 = \
+                self.reg_loss(v_sample1, dof=self.dof) if self.reg_loss_type is not 'RegLoss_L2' \
+                    else self.reg_loss(v_sample1)
+            reg_term2, log_y2 = \
+                self.reg_loss(v_sample2, dof=self.dof) if self.reg_loss_type is not 'RegLoss_L2' \
+                    else self.reg_loss(v_sample2)
 
             reg_term = reg_term1.sum() / 2.0 + reg_term2.sum() / 2.0
 
             if self.reg_loss_type is not 'RegLoss_L2':
-                reg_term_prior_loc = \
-                    self.reg_loss_loc_prior(log_y1).sum() / 2.0 + self.reg_loss_loc_prior(log_y2).sum() / 2.0
-                reg_term_prior_scale = self.reg_loss_scale_prior(self.reg_loss.log_scale).sum()
+                reg_term_loc_prior1 = self.reg_loss_loc_prior(log_y1).sum() / 2.0
+                reg_term_loc_prior2 = self.reg_loss_loc_prior(log_y2).sum() / 2.0
+                reg_term_scale_prior = self.reg_loss_scale_prior(self.reg_loss.log_scale).sum()
 
-                reg_term -= reg_term_prior_loc
-                reg_term -= reg_term_prior_scale
+                reg_term -= (reg_term_loc_prior1 + reg_term_loc_prior2 + reg_term_scale_prior)
 
-            entropy_term = self.entropy_loss(v_sample=v_sample1_unsmoothed,
-                                             mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
-            entropy_term += self.entropy_loss(v_sample=v_sample2_unsmoothed,
-                                              mu_v=self.mu_v, log_var_v=self.log_var_v, u_v=self.u_v).sum() / 2.0
-            entropy_term += self.entropy_loss(log_var_v=self.log_var_v, u_v=self.u_v).sum()
+            entropy_term1 = self.entropy_loss(v_sample=v_sample1_unsmoothed, mu_v=self.mu_v, log_var_v=self.log_var_v,
+                                              u_v=self.u_v).sum() / 2.0
+            entropy_term2 = self.entropy_loss(v_sample=v_sample2_unsmoothed, mu_v=self.mu_v, log_var_v=self.log_var_v,
+                                              u_v=self.u_v).sum() / 2.0
+            entropy_term3 = self.entropy_loss(log_var_v=self.log_var_v, u_v=self.u_v).sum()
 
-            loss_q_v = data_term + reg_term - entropy_term
+            entropy_term = entropy_term1 + entropy_term2 + entropy_term3
 
             self.optimizer_v.zero_grad()
 
             if self.reg_loss_type is not 'RegLoss_L2':
                 self.optimizer_w_reg.zero_grad()
 
+            loss_q_v = data_term + reg_term - entropy_term
             loss_q_v.backward()  # backprop
             self.optimizer_v.step()
 
@@ -279,7 +281,7 @@ class Trainer(BaseTrainer):
                     log_fields(self.writer, im_pair_idxs, var_params, displacement1, log_det_J_transformation)
 
                     if iter_no == self.no_iters_VI:
-                        transformation, displacement = self.transformation_model(transform_coordinates(mu_v_smoothed))
+                        transformation, displacement = self.transformation_model(mu_v_smoothed)
                         im_moving_warped = self.registration_module(im_moving, transformation)
                     else:
                         transformation = transformation1.detach().clone()
@@ -300,7 +302,8 @@ class Trainer(BaseTrainer):
 
             if no_non_diffeomorphic_voxels > 0.001 * self.N:
                 self.logger.info("detected " + str(
-                    no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic, exiting..")
+                    no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic, "
+                                                   "exiting..")
                 exit()
 
     def _test_VI(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
@@ -332,8 +335,8 @@ class Trainer(BaseTrainer):
                     score = ASD[structure]
                     self.metrics_VI.update('VI/test/ASD/' + structure, score)
 
-                nabla_v = self.diff_op(transformation)
-                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
+                nabla = self.diff_op(transformation, transformation=True)
+                log_det_J_transformation = torch.log(calc_det_J(nabla))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
                 self.metrics_VI.update('VI/test/no_non_diffeomorphic_voxels', no_non_diffeomorphic_voxels)
@@ -392,8 +395,8 @@ class Trainer(BaseTrainer):
             reg_term = reg.sum()
 
             with torch.no_grad():
-                nabla_v = self.diff_op(transformation)
-                log_det_J_transformation = torch.log(calc_det_J(nabla_v))
+                nabla = self.diff_op(transformation, transformation=True)
+                log_det_J_transformation = torch.log(calc_det_J(nabla))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
             reg_term -= self.reg_loss_loc_prior(log_y).sum()
@@ -454,7 +457,8 @@ class Trainer(BaseTrainer):
                 MCMC_sampling_speed = self.no_iters_burn_in / (stop - start).total_seconds()
                 self.logger.info(f'SG-MCMC sampling speed: {MCMC_sampling_speed:.2f} samples/sec\n')
 
-            if sample_no > self.no_iters_burn_in and sample_no % self.log_period_MCMC == 0 or sample_no == self.no_samples_MCMC:
+            if sample_no > self.no_iters_burn_in and sample_no % self.log_period_MCMC == 0 \
+                    or sample_no == self.no_samples_MCMC:
                 with torch.no_grad():
                     """
                     metrics and prints
@@ -508,12 +512,14 @@ class Trainer(BaseTrainer):
 
             if no_non_diffeomorphic_voxels > 0.001 * self.N:
                 self.logger.info("sample " + str(sample_no) + ", detected " + str(
-                    no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic; exiting..")
+                    no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic; "
+                                                   "exiting..")
                 exit()
 
     def _train_epoch(self):
         for batch_idx, (
-                im_pair_idxs, im_fixed, mask_fixed, seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v, u_v) \
+                im_pair_idxs, im_fixed, mask_fixed, seg_fixed, im_moving, mask_moving, seg_moving, mu_v, log_var_v,
+                u_v) \
                 in enumerate(self.data_loader):
             if self.im_fixed is None:
                 self.im_fixed = im_fixed.to(self.device, non_blocking=True)
@@ -538,11 +544,9 @@ class Trainer(BaseTrainer):
                 v_sample = SobolevGrad.apply(v_sample, self.S, self.padding_sz)
 
                 transformation, displacement = self.transformation_model(v_sample)
-                transformation = add_noise_uniform(transformation)
-
                 im_moving_warped = self.registration_module(im_moving, transformation)
-                n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
 
+                n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
                 res = n_F - n_M
                 res_masked = res[self.mask_fixed]
 
@@ -608,8 +612,12 @@ class Trainer(BaseTrainer):
             if self.MCMC:
                 with torch.no_grad():
                     self.SGLD_params['tau'] = self.config['optimizer_SG_MCMC']['args']['lr']
-                    self.SGLD_params['sigma'] = transform_coordinates(torch.exp(0.5 * self.log_var_v))
-                    self.SGLD_params['u'] = transform_coordinates(self.u_v)
+
+                    self.SGLD_params['sigma'] = torch.exp(0.5 * self.log_var_v).detach().clone()
+                    self.SGLD_params['sigma'].requires_grad_(False)
+
+                    self.SGLD_params['u'] = self.u_v.detach().clone()
+                    self.SGLD_params['u'].requires_grad_(False)
 
                     if self.v_curr_state is None:
                         self.v_curr_state = sample_q_v(self.mu_v, self.log_var_v, self.u_v, no_samples=1).detach()

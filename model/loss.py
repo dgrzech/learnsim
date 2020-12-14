@@ -1,5 +1,5 @@
 import math
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 
 import numpy as np
 import torch
@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn.functional import log_softmax
 
 import model.distributions as model_distr
-from utils import transform_coordinates_inv, DifferentialOperator
+from utils import DifferentialOperator
 
 """
 data loss
@@ -350,7 +350,8 @@ class RegLoss_LogNormal(RegLoss_EnergyBased):
         - A Normal hyperprior on loc, or another choice (see below)
         - A suitable scale hyperprior on scale (Gamma or Log-Normal). Careful since you will probably implement it
           as a prior on log_scale, which induces a change of variable p(log_scale)=p(scale)*scale. Convenient when it
-          turns a LogNormal prior on scale into a Normal prior on LogScale; more tricky when using a Gamma prior on scale.
+          turns a LogNormal prior on scale into a Normal prior on LogScale; more tricky when using a Gamma prior on
+          scale.
           
         A potential choice of hyperprior on loc is actually an exponential-Gamma(dof/2, wreg/2). 
         Recall that loc is the logarithm of an energy. What this prior means is that exp(loc) is Gamma(dof/2,wreg/2).
@@ -436,7 +437,7 @@ class EntropyMultivariateNormal(Entropy):
             sigma_v = torch.exp(0.5 * log_var_v)
             u_v = kwargs['u_v']
 
-            v = (transform_coordinates_inv(v_sample) - mu_v) / sigma_v
+            v = (v_sample - mu_v) / sigma_v
             u_n = u_v / sigma_v
 
             t1 = torch.sum(torch.pow(v, 2))

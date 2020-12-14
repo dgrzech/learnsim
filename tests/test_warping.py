@@ -171,9 +171,7 @@ class WarpingTestMethods(unittest.TestCase):
             np.transpose(sitk.GetArrayFromImage(im_moving), (2, 1, 0)), (dim_x, dim_y, dim_z)))
 
         im_moving = standardise_im(im_moving)
-        im_moving = rescale_im(im_moving)
-
-        im_moving.unsqueeze_(0).unsqueeze_(0)
+        im_moving = rescale_im(im_moving).unsqueeze(0).unsqueeze(0)
         im_moving = im_moving.to('cuda:0')
 
         im_moving_warped = self.registration_module(im_moving, transformation)
