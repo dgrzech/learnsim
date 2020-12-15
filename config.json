@@ -89,6 +89,10 @@
 	"trainer": {
 		"VI": true,
 		"MCMC": true,
+		"uniform_noise": {
+			"enabled": true,
+			"magnitude": 0.1
+		},
 		"no_iters_VI": 1536,
 		"no_samples_VI_test": 50,
 		"no_iters_burn_in": 10000,

@@ -19,24 +19,25 @@ class Trainer(BaseTrainer):
                  reg_loss, reg_loss_loc_prior, reg_loss_scale_prior,
                  entropy_loss, transformation_model, registration_module,
                  metric_ftns_VI, metric_ftns_MCMC, structures_dict, config, data_loader):
-        super().__init__(data_loss, data_loss_scale_prior, data_loss_proportion_prior, reg_loss, reg_loss_loc_prior,
-                         reg_loss_scale_prior,
+        super().__init__(data_loss, data_loss_scale_prior, data_loss_proportion_prior,
+                         reg_loss, reg_loss_loc_prior, reg_loss_scale_prior,
                          entropy_loss, transformation_model, registration_module, config)
-
         self.config = config
         self.data_loader = data_loader
         self.im_fixed, self.mask_fixed, self.seg_fixed = None, None, None
         self.structures_dict = structures_dict  # segmentations
 
-        self.N = config['data_loader']['args']['dim_x'] * config['data_loader']['args']['dim_y'] * \
-                 config['data_loader']['args']['dim_z']
+        cfg_trainer = config['trainer']
+        cfg_data_loader = config['data_loader']['args']
+
+        self.N = cfg_data_loader['dim_x'] * cfg_data_loader['dim_y'] * cfg_data_loader['dim_z']
         self.dof = self.N * 3.0
 
         # variational inference
         self.start_iter = 1
         self.mu_v, self.log_var_v, self.u_v = None, None, None
 
-        self.VI = config['trainer']['VI']
+        self.VI = cfg_trainer['VI']
         self.optimizer_GMM, self.optimizer_w_reg, self.optimizer_v = None, None, None
         self.metrics_VI = MetricTracker(*[m for m in metric_ftns_VI], writer=self.writer)
 
@@ -45,7 +46,7 @@ class Trainer(BaseTrainer):
         self.v_curr_state = None
         self.SGLD_params = {'tau': None, 'sigma': None, 'u': None}
 
-        self.MCMC = config['trainer']['MCMC']
+        self.MCMC = cfg_trainer['MCMC']
         self.optimizer_SG_MCMC = None
         self.metrics_MCMC = MetricTracker(*[m for m in metric_ftns_MCMC], writer=self.writer)
 
@@ -67,6 +68,12 @@ class Trainer(BaseTrainer):
             S_z = S.unsqueeze(3).unsqueeze(4).to(self.device, non_blocking=True)
 
             self.S = {'x': S_x, 'y': S_y, 'z': S_z}
+
+        # uniform noise magnitude
+        self.add_noise_uniform = cfg_trainer['uniform_noise']['enabled']
+
+        if self.add_noise_uniform:
+            self.alpha = cfg_trainer['uniform_noise']['magnitude']
 
         # virtual decimation
         self.virutal_decimation = config['virtual_decimation']
@@ -130,9 +137,9 @@ class Trainer(BaseTrainer):
                 log_det_J_transformation = torch.log(calc_det_J(nabla))
                 no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation).sum().item()
 
-            # add noise to account for interpolation uncertainty
-            transformation1 = add_noise_uniform(transformation1)
-            transformation2 = add_noise_uniform(transformation2)
+            if self.add_noise_uniform:  # add noise to account for interpolation uncertainty
+                transformation1 = add_noise_uniform(transformation1, self.alpha)
+                transformation2 = add_noise_uniform(transformation2, self.alpha)
 
             im_moving_warped1, im_moving_warped2 = self.registration_module(im_moving, transformation1), \
                                                    self.registration_module(im_moving, transformation2)
@@ -402,9 +409,10 @@ class Trainer(BaseTrainer):
             reg_term -= self.reg_loss_loc_prior(log_y).sum()
             reg_term -= self.reg_loss_scale_prior(self.reg_loss.log_scale).sum()
 
-            transformation = add_noise_uniform(transformation)
-            im_moving_warped = self.registration_module(im_moving, transformation)
+            if self.add_noise_uniform:
+                transformation = add_noise_uniform(transformation, self.alpha)
 
+            im_moving_warped = self.registration_module(im_moving, transformation)
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
             res = n_F - n_M
 

@@ -27,9 +27,11 @@ def main(config):
     data_loader = config.init_obj('data_loader', module_data, save_dirs=config.save_dirs)
 
     # initialise the transformation model and registration modules
-    dim_x = config['data_loader']['args']['dim_x']
-    dim_y = config['data_loader']['args']['dim_y']
-    dim_z = config['data_loader']['args']['dim_z']
+    cfg_data_loader = config['data_loader']['args']
+
+    dim_x = cfg_data_loader['dim_x']
+    dim_y = cfg_data_loader['dim_y']
+    dim_z = cfg_data_loader['dim_z']
 
     dims = (dim_x, dim_y, dim_z)
 
@@ -48,7 +50,8 @@ def main(config):
     entropy_loss = config.init_obj('entropy_loss', model_loss)
 
     # metrics
-    num_components = config['data_loss']['args']['num_components']
+    cfg_data_loss = config['data_loss']['args']
+    num_components = cfg_data_loss['num_components']
 
     sigmas_VI = ['VI/train/GMM/sigma_' + str(idx) for idx in range(num_components)]
     proportions_VI = ['VI/train/GMM/proportion_' + str(idx) for idx in range(num_components)]

@@ -44,7 +44,7 @@ def add_noise_SGLD(v, sigma, tau):
     return v + math.sqrt(tau) * eps * sigma
 
 
-def add_noise_uniform(field, alpha=0.5):
+def add_noise_uniform(field, alpha):
     epsilon = -2.0 * alpha * torch.rand(field.shape, device=field.device) + alpha
     return field + transform_coordinates(epsilon)
 
