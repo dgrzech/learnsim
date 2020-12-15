@@ -320,7 +320,7 @@ class RegLoss_EnergyBased(RegLoss):
     up to the quality of numerical implementation in here.
     """
 
-    def __init__(self, diff_op=None):
+    def __init__(self, dims, diff_op=None):
         super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
 
     @abstractmethod
@@ -387,9 +387,9 @@ class RegLoss_LogNormal(RegLoss_EnergyBased):
 
 
 class RegLoss_LogNormal_L2(RegLoss_EnergyBased):
-    def __init__(self, diff_op=None):
+    def __init__(self, dims, diff_op=None):
         super(RegLoss_EnergyBased, self).__init__(diff_op=diff_op)
-        self.gamma_distr = model_distr._GammaDistribution(96.0 ** 3 * 1.5, 0.1, learnable=False)
+        self.gamma_distr = model_distr._GammaDistribution(np.prod(dims) * 1.5, 0.1, learnable=False)
 
     def _mlog_energy_prior(self, y, *args, **kwargs):
         log_y = torch.log(y)
