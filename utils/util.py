@@ -71,52 +71,48 @@ def calc_det_J(nabla):
     return det_J
 
 
-def calc_ASD(seg_fixed, seg_moving, structures_dict, spacing):
+def calc_metrics(seg_fixed, seg_moving, structures_dict, spacing):
     """
-    calculate the symmetric average surface distance
+    calculate average surface distances and Dice scores
     """
 
-    ASD = dict()  # dict. with the output for each segmentation
+    ASD = dict()
+    DSC = dict()
+
     hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
+    overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
 
     seg_fixed_arr = seg_fixed.squeeze().cpu().numpy()
     seg_moving_arr = seg_moving.squeeze().cpu().numpy()
     spacing = spacing.numpy().tolist()
 
+    def calc_ASD(seg_fixed_im, seg_moving_im):
+        seg_fixed_contour = sitk.LabelContour(seg_fixed_im)
+        seg_moving_contour = sitk.LabelContour(seg_moving_im)
+
+        hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
+        return hausdorff_distance_filter.GetAverageHausdorffDistance()
+
+    def calc_DSC(seg_fixed_im, seg_moving_im):
+        overlap_measures_filter.Execute(seg_fixed_im, seg_moving_im)
+        return overlap_measures_filter.GetDiceCoefficient()
+
     for structure in structures_dict:
         label = structures_dict[structure]
 
-        seg_fixed_structure, seg_moving_structure = np.where(seg_fixed_arr == label, 1, 0), \
-                                                    np.where(seg_moving_arr == label, 1, 0)
-        seg_fixed_im, seg_moving_im = sitk.GetImageFromArray(seg_fixed_structure), \
-                                      sitk.GetImageFromArray(seg_moving_structure)
+        seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
+        seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
+
+        seg_fixed_im = sitk.GetImageFromArray(seg_fixed_structure)
+        seg_moving_im = sitk.GetImageFromArray(seg_moving_structure)
 
         seg_fixed_im.SetSpacing(spacing)
         seg_moving_im.SetSpacing(spacing)
 
-        seg_fixed_contour, seg_moving_contour = sitk.LabelContour(seg_fixed_im), \
-                                                sitk.LabelContour(seg_moving_im)
+        ASD[structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+        DSC[structure] = calc_DSC(seg_fixed_im, seg_moving_im)
 
-        hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
-        ASD[structure] = hausdorff_distance_filter.GetAverageHausdorffDistance()
-
-    return ASD
-
-
-def calc_DSC(seg_fixed, seg_moving, structures_dict):
-    DSC = dict()  # dict. with dice scores for each segmentation
-
-    for structure in structures_dict:
-        label = structures_dict[structure]
-
-        numerator = 2.0 * ((seg_fixed == label) * (seg_moving == label)).sum().item()
-        denominator = (seg_fixed == label).sum().item() + (seg_moving == label).sum().item()
-
-        score = numerator / denominator
-        DSC[structure] = score
-
-    return DSC
-
+    return ASD, DSC
 
 def calc_norm(field):
     """

@@ -6,8 +6,8 @@ from base import BaseTrainer
 from logger import log_fields, log_hist_res, log_images, log_sample, print_log, save_fields, save_grids, save_images, \
     save_sample
 from optimizers import Adam
-from utils import MetricTracker, SGLD, SobolevGrad, Sobolev_kernel_1D, VD, add_noise_uniform, calc_ASD, calc_DSC, \
-    calc_det_J, max_field_update, rescale_residuals, sample_q_v
+from utils import MetricTracker, SGLD, SobolevGrad, Sobolev_kernel_1D, VD, add_noise_uniform, calc_det_J, \
+    calc_metrics, max_field_update, rescale_residuals, sample_q_v
 
 
 class Trainer(BaseTrainer):
@@ -252,16 +252,14 @@ class Trainer(BaseTrainer):
                     self.metrics_VI.update('VI/train/max_updates/log_var_v', max_update_log_var_v.item())
                     self.metrics_VI.update('VI/train/max_updates/u_v', max_update_u_v.item())
 
-                    # Dice scores
+                    # average surface distances and Dice scores
                     seg_moving_warped = self.registration_module(seg_moving, transformation1)
-                    DSC = calc_DSC(self.seg_fixed, seg_moving_warped, self.structures_dict)
+                    ASD, DSC = calc_metrics(self.seg_fixed, seg_moving_warped,
+                                            self.structures_dict, self.data_loader.spacing)
 
                     for structure in DSC:
                         score = DSC[structure]
                         self.metrics_VI.update('VI/train/DSC/' + structure, score)
-
-                    # average surface distances
-                    ASD = calc_ASD(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.spacing)
 
                     for structure in ASD:
                         dist = ASD[structure]
@@ -327,12 +325,11 @@ class Trainer(BaseTrainer):
                 transformation, displacement = self.transformation_model(v_sample_smoothed)
 
                 im_moving_warped = self.registration_module(im_moving, transformation)
-                seg_moving_warped = self.registration_module(seg_moving, transformation)
 
-                # Dice scores
-                DSC = calc_DSC(self.seg_fixed, seg_moving_warped, self.structures_dict)
-                # average surface distances
-                ASD = calc_ASD(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.spacing)
+                # average surface distances and Dice scores
+                seg_moving_warped = self.registration_module(seg_moving, transformation)
+                ASD, DSC = calc_metrics(self.seg_fixed, seg_moving_warped,
+                                        self.structures_dict, self.data_loader.spacing)
 
                 for structure in DSC:
                     score = DSC[structure]
@@ -488,16 +485,14 @@ class Trainer(BaseTrainer):
                     v_curr_state_smoothed = SobolevGrad.apply(self.v_curr_state, self.S, self.padding_sz)
                     transformation, displacement = self.transformation_model(v_curr_state_smoothed)
 
-                    # Dice scores
+                    # average surface distances and Dice scores
                     seg_moving_warped = self.registration_module(seg_moving, transformation)
-                    DSC = calc_DSC(self.seg_fixed, seg_moving_warped, self.structures_dict)
+                    ASD, DSC = calc_metrics(self.seg_fixed, seg_moving_warped,
+                                            self.structures_dict, self.data_loader.spacing)
 
                     for structure in DSC:
                         score = DSC[structure]
                         self.metrics_MCMC.update('MCMC/DSC/' + structure, score)
-
-                    # average surface distances
-                    ASD = calc_ASD(self.seg_fixed, seg_moving_warped, self.structures_dict, self.data_loader.spacing)
 
                     for structure in ASD:
                         dist = ASD[structure]
@@ -583,15 +578,12 @@ class Trainer(BaseTrainer):
                 self.metrics_VI.update('VI/train/data_term', loss_unwarped.item())
                 log_hist_res(self.writer, im_pair_idxs, res_masked, self.data_loss)  # residual histogram
 
-                # Dice scores
-                DSC = calc_DSC(self.seg_fixed, seg_moving, self.structures_dict)
+                # average surface distances and Dice scores
+                ASD, DSC = calc_metrics(self.seg_fixed, seg_moving, self.structures_dict, self.data_loader.spacing)
 
                 for structure in DSC:
                     score = DSC[structure]
                     self.metrics_VI.update('VI/train/DSC/' + structure, score)
-
-                # average surface distances
-                ASD = calc_ASD(self.seg_fixed, seg_moving, self.structures_dict, self.data_loader.spacing)
 
                 for structure in ASD:
                     dist = ASD[structure]
