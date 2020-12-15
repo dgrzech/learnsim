@@ -1,4 +1,3 @@
-import importlib
 from datetime import datetime
 
 import matplotlib.pyplot as plt
@@ -6,6 +5,7 @@ import seaborn as sns
 import torch
 
 from utils import calc_norm, im_flip
+from .writer import SummaryWriter
 
 
 class TensorboardWriter:
@@ -15,23 +15,7 @@ class TensorboardWriter:
 
         if enabled:
             log_dir = str(log_dir)
-
-            # Retrieve vizualization writer.
-            succeeded = False
-            for module in ["torch.utils.tensorboard", "tensorboardX"]:
-                try:
-                    self.writer = importlib.import_module(module).SummaryWriter(log_dir)
-                    succeeded = True
-                    break
-                except ImportError:
-                    succeeded = False
-                self.selected_module = module
-
-            if not succeeded:
-                message = "Warning: visualization (Tensorboard) is configured to use, but currently not installed on " \
-                          "this machine. Please install TensorboardX with 'pip install tensorboardx', upgrade PyTorch to " \
-                          "version >= 1.1 to use 'torch.utils.tensorboard' or turn off the option in the 'config.json' file."
-                logger.warning(message)
+            self.writer = SummaryWriter(log_dir)
 
         self.step = 0
         self.mode = ''
@@ -41,7 +25,7 @@ class TensorboardWriter:
 
         self.tb_writer_ftns = {
             'add_scalar', 'add_scalars', 'add_image', 'add_images', 'add_audio', 'add_figure',
-            'add_text', 'add_histogram', 'add_pr_curve', 'add_embedding'
+            'add_text', 'add_histogram', 'add_pr_curve', 'add_embedding', 'add_hparams'
         }
         self.tag_mode_exceptions = {'add_histogram', 'add_embedding'}
         self.timer = datetime.now()
@@ -49,6 +33,18 @@ class TensorboardWriter:
     def set_step(self, step, mode='train'):
         self.mode = mode
         self.step = step
+
+    def write_hparams(self, config):
+        cfg_reg_loss = config['reg_loss']['args']
+        cfg_optimizer_v = config['optimizer_v']['args']
+        cfg_optimizer_SG_MCMC = config['optimizer_SG_MCMC']['args']
+
+        cfg_trainer = config['trainer']
+        uniform_noise_magnitude = cfg_trainer['uniform_noise'].get('magnitude', 0.0)
+
+        hparam_dict = {'VI/train/lr': cfg_optimizer_v['lr'], 'SG_MCMC/tau': cfg_optimizer_SG_MCMC['lr'],
+                       'w_reg': cfg_reg_loss['w_reg'], 'uniform_noise_magnitude': uniform_noise_magnitude}
+        self.writer.add_hparams(hparam_dict=hparam_dict, metric_dict={})
 
     def __getattr__(self, name):
         """

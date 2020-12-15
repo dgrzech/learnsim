@@ -65,6 +65,7 @@ class BaseTrainer:
 
         # setup visualization writer instance
         self.writer = TensorboardWriter(config.log_dir, self.logger, cfg_trainer['tensorboard'])
+        self.writer.write_hparams(config)
 
     @abstractmethod
     def _train_epoch(self):
