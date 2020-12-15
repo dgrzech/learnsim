@@ -12,12 +12,9 @@ class SummaryWriter(SummaryWriter):
 
         exp, ssi, sei = hparams(hparam_dict, metric_dict)
 
-        logdir = self._get_file_writer().get_logdir()
+        self.file_writer.add_summary(exp)
+        self.file_writer.add_summary(ssi)
+        self.file_writer.add_summary(sei)
 
-        with SummaryWriter(log_dir=logdir) as w_hp:
-            w_hp.file_writer.add_summary(exp)
-            w_hp.file_writer.add_summary(ssi)
-            w_hp.file_writer.add_summary(sei)
-
-            for k, v in metric_dict.items():
-                w_hp.add_scalar(k, v)
+        for k, v in metric_dict.items():
+            self.add_scalar(k, v)
