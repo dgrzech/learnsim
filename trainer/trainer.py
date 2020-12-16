@@ -306,9 +306,8 @@ class Trainer(BaseTrainer):
                     self._save_checkpoint_VI(iter_no)
 
             if no_non_diffeomorphic_voxels > 0.001 * self.N:
-                self.logger.info("detected " + str(
-                    no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic, "
-                                                   "exiting..")
+                self.logger.info("detected " + str(no_non_diffeomorphic_voxels) +
+                                 " voxels where the sample transformation is not diffeomorphic, exiting..")
                 exit()
 
     def _test_VI(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
@@ -391,11 +390,11 @@ class Trainer(BaseTrainer):
             stochastic gradient Langevin dynamics
             """
 
-            v_curr_state_noise = SGLD.apply(self.v_curr_state, self.SGLD_params['sigma'], self.SGLD_params['tau'])
-            v_curr_state_noise_smoothed = SobolevGrad.apply(v_curr_state_noise, self.S, self.padding_sz)
-            transformation, displacement = self.transformation_model(v_curr_state_noise_smoothed)
+            v_curr_state = SGLD.apply(self.v_curr_state, self.SGLD_params['sigma'], self.SGLD_params['tau'])
+            v_curr_state_smoothed = SobolevGrad.apply(v_curr_state, self.S, self.padding_sz)
+            transformation, displacement = self.transformation_model(v_curr_state_smoothed)
 
-            reg, log_y = self.reg_loss(v_curr_state_noise_smoothed, dof=dof)
+            reg, log_y = self.reg_loss(v_curr_state_smoothed, dof=dof)
             reg_term = reg.sum()
 
             with torch.no_grad():
@@ -407,9 +406,11 @@ class Trainer(BaseTrainer):
             reg_term -= self.reg_loss_scale_prior(self.reg_loss.log_scale).sum()
 
             if self.add_noise_uniform:
-                transformation = add_noise_uniform(transformation, self.alpha)
+                transformation_with_uniform_noise = add_noise_uniform(transformation, self.alpha)
+                im_moving_warped = self.registration_module(im_moving, transformation_with_uniform_noise)
+            else:
+                im_moving_warped = self.registration_module(im_moving, transformation)
 
-            im_moving_warped = self.registration_module(im_moving, transformation)
             n_F, n_M = self.data_loss.map(self.im_fixed, im_moving_warped)
             res = n_F - n_M
 
@@ -482,9 +483,6 @@ class Trainer(BaseTrainer):
 
                     self.metrics_MCMC.update('MCMC/y', log_y.exp().item())
 
-                    v_curr_state_smoothed = SobolevGrad.apply(self.v_curr_state, self.S, self.padding_sz)
-                    transformation, displacement = self.transformation_model(v_curr_state_smoothed)
-
                     # average surface distances and Dice scores
                     seg_moving_warped = self.registration_module(seg_moving, transformation)
                     ASD, DSC = calc_metrics(self.seg_fixed, seg_moving_warped,
@@ -514,9 +512,8 @@ class Trainer(BaseTrainer):
                     self._save_checkpoint_MCMC(sample_no)
 
             if no_non_diffeomorphic_voxels > 0.001 * self.N:
-                self.logger.info("sample " + str(sample_no) + ", detected " + str(
-                    no_non_diffeomorphic_voxels) + " voxels where the sample transformation is not diffeomorphic; "
-                                                   "exiting..")
+                self.logger.info("sample " + str(sample_no) + ", detected " + str(no_non_diffeomorphic_voxels) +
+                                 " voxels where the sample transformation is not diffeomorphic; exiting..")
                 exit()
 
     def _train_epoch(self):

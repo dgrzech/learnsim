@@ -39,14 +39,18 @@ def inf_loop(data_loader):
         yield from loader
 
 
-def add_noise_SGLD(v, sigma, tau):
-    eps = torch.randn(sigma.shape, device=sigma.device)
-    return v + math.sqrt(tau) * eps * sigma
-
-
 def add_noise_uniform(field, alpha):
+    return field + get_noise_uniform(field, alpha)
+
+
+def get_noise_uniform(field, alpha):
     epsilon = -2.0 * alpha * torch.rand(field.shape, device=field.device) + alpha
-    return field + transform_coordinates(epsilon)
+    return transform_coordinates(epsilon)
+
+
+def get_noise_Langevin(sigma, tau):
+    eps = torch.randn(sigma.shape, device=sigma.device)
+    return math.sqrt(2.0 * tau) * sigma * eps
 
 
 def calc_det_J(nabla):

@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse as sp
 import torch
 
-from utils import add_noise_SGLD, separable_conv_3D
+from utils import get_noise_Langevin, separable_conv_3D
 
 
 def Laplacian_1D(N):
@@ -75,11 +75,12 @@ class SGLD(torch.autograd.Function):
     @staticmethod
     def forward(ctx, v_curr_state, sigma, tau):
         ctx.sigma = sigma
-        return add_noise_SGLD(v_curr_state, sigma, tau)
+        ctx.noise = get_noise_Langevin(sigma, tau) / tau
+        return v_curr_state
 
     @staticmethod
     def backward(ctx, grad_output):
-        return ctx.sigma ** 2 * grad_output, None, None
+        return ctx.sigma ** 2 * grad_output + ctx.noise, None, None
 
 
 class GaussianGrad(torch.autograd.Function):
