@@ -29,13 +29,13 @@
 			"learnable": true,
 			"loc_learnable": true,
 			"scale_learnable": true,
-			"w_reg": 8e-1
+			"w_reg": 0.75
 		}
 	},
 	"reg_loss_loc_prior": {
 		"type": "LogEnergyExpGammaPrior",
 		"args": {
-			"w_reg": 8e-1,
+			"w_reg": 0.75,
 			"dof": 2654208.0,
 			"learnable": false
 		}
@@ -68,7 +68,7 @@
 	"optimizer_SG_MCMC": {
 		"type": "SGD",
 		"args": {
-			"lr": 1e-1
+			"lr": 0.25
 		}
 	},
 	"data_loader": {
