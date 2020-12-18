@@ -31,7 +31,7 @@ class Trainer(BaseTrainer):
         cfg_data_loader = config['data_loader']['args']
 
         self.N = cfg_data_loader['dim_x'] * cfg_data_loader['dim_y'] * cfg_data_loader['dim_z']
-        self.dof = self.N * 3.0
+        self.dof = self.N * 3.0 if self.reg_loss_type is not 'RegLoss_L2' else 0.0
 
         # variational inference
         self.start_iter = 1
@@ -367,8 +367,6 @@ class Trainer(BaseTrainer):
         self.logger.info(f'VI sampling speed: {VI_sampling_speed:.2f} samples/sec')
 
     def _run_MCMC(self, im_pair_idxs, im_moving, mask_moving, seg_moving):
-        dof = self.dof if self.reg_loss_type is not 'RegLoss_L2' else 0.0
-
         self.mu_v.requires_grad_(False)
         self.log_var_v.requires_grad_(False)
         self.u_v.requires_grad_(False)
@@ -394,7 +392,7 @@ class Trainer(BaseTrainer):
             v_curr_state_smoothed = SobolevGrad.apply(v_curr_state, self.S, self.padding_sz)
             transformation, displacement = self.transformation_model(v_curr_state_smoothed)
 
-            reg, log_y = self.reg_loss(v_curr_state_smoothed, dof=dof)
+            reg, log_y = self.reg_loss(v_curr_state_smoothed, dof=self.dof)
             reg_term = reg.sum()
 
             with torch.no_grad():

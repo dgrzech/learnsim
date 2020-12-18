@@ -43,6 +43,10 @@ def add_noise_uniform(field, alpha):
     return field + get_noise_uniform(field, alpha)
 
 
+def add_noise_Langevin(field, sigma, tau):
+    return field + get_noise_Langevin(sigma, tau)
+
+
 def get_noise_uniform(field, alpha):
     epsilon = -2.0 * alpha * torch.rand(field.shape, device=field.device) + alpha
     return transform_coordinates(epsilon)
