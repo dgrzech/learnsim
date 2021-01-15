@@ -1,6 +1,5 @@
 image registration via SG-MCMC
 ============
-code for the paper "Image registration via stochastic gradient Markov chain Monte Carlo"
 
 
 dependencies
@@ -27,4 +26,13 @@ python run.py -vi 1 -mcmc 1 -d device_id -c config.json
 to resume:
 ```
 python train.py -r path/to/last/checkpoint.pth
+```
+
+
+paper
+------------
+if you use our code, please cite the following paper
+
+```
+Grzech, D., Kainz, B., Glocker, B., & Le Folgoc, L. (2020). Image registration via stochastic gradient Markov chain Monte Carlo. UNSURE MICCAI.
 ```
