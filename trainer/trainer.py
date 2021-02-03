@@ -74,8 +74,8 @@ class Trainer(BaseTrainer):
 
     def _step_q_v(self, im_pair_idxs, moving, var_params_q_v):
         for iter_no in range(1, self.no_iters_q_v + 1):
-            n = len(im_pair_idxs)
             self.step_global += 1
+            n = len(im_pair_idxs)
 
             # get samples from q_v
             v_sample1_unsmoothed, v_sample2_unsmoothed = sample_q_v(var_params_q_v, no_samples=2)
@@ -101,10 +101,10 @@ class Trainer(BaseTrainer):
             if iter_no % self.log_period == 0:
                 self.writer.set_step(self.step_global)
 
-                self.metrics.update('train/loss/data_term', data_term.item(), n=n)
-                self.metrics.update('train/loss/reg_term', reg_term.item(), n=n)
-                self.metrics.update('train/loss/entropy_term', entropy_term.item(), n=n)
-                self.metrics.update('train/loss/q_v', loss_q_v.item(), n=n)
+                self.metrics.update('loss/data_term', data_term.item(), n=n)
+                self.metrics.update('loss/reg_term', reg_term.item(), n=n)
+                self.metrics.update('loss/entropy_term', entropy_term.item(), n=n)
+                self.metrics.update('loss/q_v', loss_q_v.item(), n=n)
 
                 with torch.no_grad():
                     var_params_q_v_smoothed = dict()
@@ -116,25 +116,20 @@ class Trainer(BaseTrainer):
                     log_det_J_transformation = torch.log(calc_det_J(nabla))
                     no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation)
 
+                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].sum().item()
+                        self.metrics.update('no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
+
                     log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
                     log_images(self.writer, im_pair_idxs, self.fixed['im'], moving['im'], im_moving_warped1)
 
                     segs_moving_warped = self.registration_module(moving['seg'], transformation1)
-                    ASD, DSC = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.data_loader.spacing)
-
-                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].sum().item()
-                        self.metrics.update('train/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
-
-                        for structure in self.structures_dict:
-                            ASD_val = ASD[im_pair_idx][structure]
-                            DSC_val = DSC[im_pair_idx][structure]
-
-                            self.metrics.update('train/ASD/im_pair_' + str(im_pair_idx) + '/' + structure, ASD_val)
-                            self.metrics.update('train/DSC/im_pair_' + str(im_pair_idx) + '/' + structure, DSC_val)
+                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.data_loader.spacing)
+                    self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
     def _step_q_f_q_phi(self, im_pair_idxs, moving, var_params_q_v):
         self.step_global += 1
+        n = len(im_pair_idxs)
 
         # draw a sample from q_v
         v_sample = sample_q_v(var_params_q_v, no_samples=1)
@@ -147,7 +142,6 @@ class Trainer(BaseTrainer):
         term3 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample2)
 
         loss_q_f_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
-        n = len(im_pair_idxs)
         loss_q_f_q_phi /= n
 
         if self.optimize_q_f:
@@ -164,9 +158,9 @@ class Trainer(BaseTrainer):
 
         # tensorboard
         self.writer.set_step(self.step_global)
+        self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item(), n=n)
 
         with torch.no_grad():
-            self.metrics.update('train/loss/q_f_q_phi', loss_q_f_q_phi.item(), n=n)
             log_q_f(self.writer, self.var_params_q_f)
 
     def _train_epoch(self, epoch):
@@ -228,15 +222,8 @@ class Trainer(BaseTrainer):
                     if self.optimize_q_f:
                         log_q_f(self.writer, self.var_params_q_f)
 
-                ASD, DSC = calc_metrics(im_pair_idxs, self .fixed['seg'], moving['seg'], self.structures_dict, self.data_loader.spacing)
-
-                for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-                    for structure in self.structures_dict:
-                        ASD_val = ASD[im_pair_idx][structure]
-                        DSC_val = DSC[im_pair_idx][structure]
-
-                        self.metrics.update('train/ASD/im_pair_' + str(im_pair_idx) + '/' + structure, ASD_val)
-                        self.metrics.update('train/DSC/im_pair_' + str(im_pair_idx) + '/' + structure, DSC_val)
+                metrics_im_pairs = calc_metrics(im_pair_idxs, self .fixed['seg'], moving['seg'], self.structures_dict, self.data_loader.spacing)
+                self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
     def __Sobolev_gradients_init(self):
         _s = self.config['Sobolev_grad']['s']

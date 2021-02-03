@@ -84,8 +84,7 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing):
     calculate average surface distances and Dice scores
     """
 
-    ASD = dict()
-    DSC = dict()
+    metrics = dict()
 
     hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
     overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
@@ -107,9 +106,7 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing):
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         seg_moving_arr = seg_moving[loop_idx].squeeze()
-
-        ASD_im_pair = dict()
-        DSC_im_pair = dict()
+        metrics_im_pair = {'ASD': dict(), 'DSC': dict()}
 
         for structure in structures_dict:
             label = structures_dict[structure]
@@ -123,17 +120,12 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing):
             seg_fixed_im.SetSpacing(spacing)
             seg_moving_im.SetSpacing(spacing)
 
-            try:
-                ASD_im_pair[structure] = calc_ASD(seg_fixed_im, seg_moving_im)
-                DSC_im_pair[structure] = calc_DSC(seg_fixed_im, seg_moving_im)
-            except:
-                print(im_pair_idx)
-                exit()
+            metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+            metrics_im_pair['DSC'][structure] = calc_DSC(seg_fixed_im, seg_moving_im)
 
-        ASD[im_pair_idx] = ASD_im_pair
-        DSC[im_pair_idx] = DSC_im_pair
+        metrics[im_pair_idx] = metrics_im_pair
 
-    return ASD, DSC
+    return metrics
 
 
 def calc_norm(field):
@@ -492,6 +484,16 @@ class MetricTracker:
         self._data.total[key] += value * n
         self._data.counts[key] += n
         self._data.average[key] = self._data.total[key] / self._data.counts[key]
+
+    def update_ASD_and_DSC(self, metrics_im_pairs):
+        for im_pair_idx in metrics_im_pairs:
+            ASDs = metrics_im_pairs[im_pair_idx]['ASD']
+            DSCs = metrics_im_pairs[im_pair_idx]['DSC']
+
+            for structure in ASDs:
+                self.update('ASD/im_pair_' + str(im_pair_idx) + '/' + structure, ASDs[structure])
+            for structure in DSCs:
+                self.update('DSC/im_pair_' + str(im_pair_idx) + '/' + structure, DSCs[structure])
 
     def avg(self, key):
         return self._data.average[key]

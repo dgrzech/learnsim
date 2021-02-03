@@ -46,19 +46,16 @@ def main(config):
                        'right_caudate': 50, 'right_putamen': 51, 'right_pallidum': 52,
                        'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
 
-    loss_terms = ['train/loss/data_term', 'train/loss/reg_term', 'train/loss/entropy_term']
-    loss_vals = ['train/loss/q_v', 'train/loss/q_f_q_phi']
+    loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term']
+    loss_vals = ['loss/q_v', 'loss/q_f_q_phi']
 
     no_samples = data_loader.no_samples
 
-    ASD = ['train/ASD/im_pair_' + str(im_pair_idx) + '/' + structure for structure in structures_dict for im_pair_idx in range(no_samples)]
-    DSC = ['train/DSC/im_pair_' + str(im_pair_idx) + '/' + structure for structure in structures_dict for im_pair_idx in range(no_samples)]
+    ASD = ['ASD/im_pair_' + str(im_pair_idx) + '/' + structure for structure in structures_dict for im_pair_idx in range(no_samples)]
+    DSC = ['DSC/im_pair_' + str(im_pair_idx) + '/' + structure for structure in structures_dict for im_pair_idx in range(no_samples)]
 
-    ASD_avg = ['train/ASD/avg/' + structure for structure in structures_dict]  # TODO
-    DSC_avg = ['train/DSC/avg/' + structure for structure in structures_dict]
-
-    no_non_diffeomorphic_voxels = ['train/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx) for im_pair_idx in range(no_samples)]
-    metrics = loss_terms + loss_vals + ASD + ASD_avg + DSC + DSC_avg + no_non_diffeomorphic_voxels
+    no_non_diffeomorphic_voxels = ['no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx) for im_pair_idx in range(no_samples)]
+    metrics = loss_terms + loss_vals + ASD + DSC + no_non_diffeomorphic_voxels
 
     # train the model
     trainer = Trainer(config, data_loader, encoder, losses, transformation_model, registration_module, metrics, structures_dict)
