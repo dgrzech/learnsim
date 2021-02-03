@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 import torch
 
-from utils import calc_norm, pixel_to_normalised_3D, pixel_to_normalised_2D, plot_2D, plot_3D, \
-    separable_conv_3D, SVF_2D, SVF_3D
+from utils import SVF_2D, SVF_3D, calc_norm, pixel_to_normalised_2D, pixel_to_normalised_3D, plot_2D, plot_3D, \
+    separable_conv_3D
 
 # fix random seeds for reproducibility
 SEED = 123
@@ -22,50 +22,53 @@ class UtilsTestMethods(unittest.TestCase):
         print(self._testMethodName + '\n')
 
         n = 8
+
         self.dim_x = self.dim_y = self.dim_z = n
+        self.dims_2D = (n, n)
+        self.dims_3D = (n, n, n)
 
     def test_norm(self):
-        v = torch.ones((1, 3, self.dim_x, self.dim_y, self.dim_z))
+        v = torch.ones((1, 3, *self.dims_3D))
 
         v_norm = calc_norm(v)
-        val_true = math.sqrt(3) * torch.ones(size=(1, 1, self.dim_x, self.dim_y, self.dim_z))
+        val_true = math.sqrt(3) * torch.ones(size=(1, 1, *self.dims_3D))
 
         assert torch.all(torch.eq(v_norm, val_true))
 
     def test_norm_batch(self):
-        v1 = torch.ones((3, self.dim_x, self.dim_y, self.dim_z))
+        v1 = torch.ones((3, *self.dims_3D))
         v2 = 2.0 * torch.ones_like(v1)
 
         v = torch.stack([v1, v2], dim=0)
         v_norm = calc_norm(v)
 
-        v1_norm_true = math.sqrt(3) * torch.ones(1, 1, self.dim_x, self.dim_y, self.dim_z)
+        v1_norm_true = math.sqrt(3) * torch.ones(1, 1, *self.dims_3D)
         v2_norm_true = math.sqrt(12) * torch.ones_like(v1_norm_true)
 
         assert torch.all(torch.eq(v_norm[0], v1_norm_true))
         assert torch.all(torch.eq(v_norm[1], v2_norm_true))
 
     def test_scaling_and_squaring_2D_translation(self):
-        transformation_module = SVF_2D(self.dim_x, self.dim_y)
+        transformation_module = SVF_2D(self.dims_2D)
 
-        v = 0.2 * torch.ones(1, 2, self.dim_x, self.dim_y)
+        v = 0.2 * torch.ones(1, 2, *self.dims_2D)
         transformation, displacement = transformation_module(v)
         plot_2D(v, transformation)
 
     def test_scaling_and_squaring_3D_translation(self):
-        transformation_module = SVF_3D(self.dim_x, self.dim_y, self.dim_z)
+        transformation_module = SVF_3D(self.dims_3D)
 
-        v = 0.2 * torch.ones(1, 3, self.dim_x, self.dim_y, self.dim_z)
+        v = 0.2 * torch.ones(1, 3, *self.dims_3D)
         transformation, displacement = transformation_module(v)
         plot_3D(v, transformation)
 
     def test_scaling_and_squaring_2D_rotation(self):
-        transformation_module = SVF_2D(self.dim_x, self.dim_y)
+        transformation_module = SVF_2D(self.dims_2D)
 
-        v = torch.zeros(1, 2, self.dim_x, self.dim_y)
+        v = torch.zeros(1, 2, *self.dims_2D)
         for idx_x in range(v.shape[3]):
             for idx_y in range(v.shape[2]):
-                x, y = pixel_to_normalised_2D(idx_x, idx_y, self.dim_x, self.dim_y)
+                x, y = pixel_to_normalised_2D(idx_x, idx_y, *self.dims_2D)
 
                 v[0, 0, idx_x, idx_y] = y
                 v[0, 1, idx_x, idx_y] = -1.0 * x
@@ -74,13 +77,13 @@ class UtilsTestMethods(unittest.TestCase):
         plot_2D(v, transformation)
 
     def test_scaling_and_squaring_3D_rotation(self):
-        transformation_module = SVF_3D(self.dim_x, self.dim_y, self.dim_z)
+        transformation_module = SVF_3D(self.dims_3D)
 
-        v = torch.zeros(1, 3, self.dim_x, self.dim_y, self.dim_z)
+        v = torch.zeros(1, 3, *self.dims_3D)
         for idx_z in range(v.shape[2]):
             for idx_y in range(v.shape[3]):
                 for idx_x in range(v.shape[4]):
-                    x, y, z = pixel_to_normalised_3D(idx_x, idx_y, idx_z, self.dim_x, self.dim_y, self.dim_z)
+                    x, y, z = pixel_to_normalised_3D(idx_x, idx_y, idx_z, *self.dims_3D)
 
                     v[0, 0, idx_x, idx_y, idx_z] = y
                     v[0, 1, idx_x, idx_y, idx_z] = -1.0 * x

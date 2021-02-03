@@ -28,10 +28,12 @@ class WarpingTestMethods(unittest.TestCase):
         n = 8
 
         self.dim_x = self.dim_y = self.dim_z = n
-        self.dims_im = (1, 1, self.dim_x, self.dim_y, self.dim_z)
-        self.dims_v = (1, 3, self.dim_x, self.dim_y, self.dim_z)
 
-        self.identity_grid = init_identity_grid_3D(self.dim_x, self.dim_y, self.dim_z).to('cuda:0')
+        self.dims = (n, n, n)
+        self.dims_im = (1, 1, n, n, n)
+        self.dims_v = (1, 3, n, n, n)
+
+        self.identity_grid = init_identity_grid_3D(self.dims).to('cuda:0')
 
         """
         losses
@@ -57,8 +59,11 @@ class WarpingTestMethods(unittest.TestCase):
         transformation = self.identity_grid.permute([0, 4, 1, 2, 3])
         im_moving_warped = self.registration_module(im_moving, transformation)
 
-        unwarped_loss_value = self.loss(im_fixed=im_fixed, im_moving=im_moving, mask=mask).item()
-        warped_loss_value = self.loss(im_fixed=im_fixed, im_moving=im_moving_warped, mask=mask).item()
+        z_unwarped = (im_fixed - im_moving) ** 2 * mask
+        z_warped = (im_fixed - im_moving_warped) ** 2 * mask
+
+        unwarped_loss_value = self.loss(z_unwarped).item()
+        warped_loss_value = self.loss(z_warped).item()
 
         assert pytest.approx(unwarped_loss_value, 0.001) == warped_loss_value
 
@@ -150,7 +155,9 @@ class WarpingTestMethods(unittest.TestCase):
         dim_y = 128
         dim_z = 128
 
-        identity_grid = init_identity_grid_3D(dim_x, dim_y, dim_z).to('cuda:0')
+        dims = (dim_x, dim_y, dim_z)
+
+        identity_grid = init_identity_grid_3D(dims).to('cuda:0')
         transformation = identity_grid.permute([0, 4, 1, 2, 3])
 
         for idx_z in range(transformation.shape[2]):

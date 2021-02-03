@@ -22,7 +22,8 @@ class DiffTestMethods(unittest.TestCase):
 
         n = 8
         self.dim_x = self.dim_y = self.dim_z = n
-        self.dims_v = (1, 3, self.dim_x, self.dim_y, self.dim_z)
+        self.dims_3D = (n, n, n)
+        self.dims_v = (1, 3, *self.dims_3D)
 
         """
         differential operator
@@ -151,9 +152,8 @@ class DiffTestMethods(unittest.TestCase):
         initialise a transformation
         """
 
-        nabla_x, nabla_y, nabla_z = torch.zeros(self.dims_v).to('cuda:0'), torch.zeros(self.dims_v).to(
-            'cuda:0'), torch.zeros(self.dims_v).to('cuda:0')
-        det_J_true = torch.zeros((1, 1, self.dim_z, self.dim_y, self.dim_x)).to('cuda:0')
+        nabla_x, nabla_y, nabla_z = torch.zeros(self.dims_v).to('cuda:0'), torch.zeros(self.dims_v).to('cuda:0'), torch.zeros(self.dims_v).to('cuda:0')
+        det_J_true = torch.zeros((1, 1, *self.dims_3D)).to('cuda:0')
 
         for idx_z in range(nabla_x.shape[2]):
             for idx_y in range(nabla_x.shape[3]):
@@ -208,7 +208,7 @@ class DiffTestMethods(unittest.TestCase):
         initialise the identity transformation
         """
 
-        identity_transformation = init_identity_grid_3D(self.dim_x, self.dim_y, self.dim_z).permute([0, 4, 1, 2, 3])
+        identity_transformation = init_identity_grid_3D(self.dims_3D).permute([0, 4, 1, 2, 3])
 
         """
         calculate its Jacobian
@@ -238,7 +238,7 @@ class DiffTestMethods(unittest.TestCase):
         initialise the transformation
         """
 
-        identity_transformation = init_identity_grid_3D(self.dim_x, self.dim_y, self.dim_z).permute([0, 4, 1, 2, 3])
+        identity_transformation = init_identity_grid_3D(self.dims_3D).permute([0, 4, 1, 2, 3])
         transformation = torch.zeros_like(identity_transformation)
 
         for idx_z in range(transformation.shape[2]):
