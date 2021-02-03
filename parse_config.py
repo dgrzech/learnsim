@@ -32,26 +32,32 @@ class ConfigParser:
         if run_id is None:  # use timestamp as default run-id
             run_id = datetime.now().strftime(r'%m%d_%H%M%S')
         
-        self._save_dir = save_dir / exper_name / run_id / 'models'
-        self._log_dir = save_dir / exper_name / run_id / 'log'
+        self._save_dir = save_dir / exper_name / run_id / 'checkpoints'
+        self._optimizers_dir = save_dir / exper_name / run_id / 'optimizers'
+        self._tensors_dir = save_dir / exper_name / run_id / 'tensors'
         self._samples_dir = save_dir / exper_name / run_id / 'samples'
+
+        self._log_dir = save_dir / exper_name / run_id / 'log'
 
         self._im_dir = save_dir / exper_name / run_id / 'images'
         self._fields_dir = save_dir / exper_name / run_id / 'fields'
-        self._norms_dir = save_dir / exper_name / run_id / 'norms'
         self._grids_dir = save_dir / exper_name / run_id / 'grids'
+        self._norms_dir = save_dir / exper_name / run_id / 'norms'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
 
         self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.optimizers_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.tensors_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
+
+        self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.grids_dir.mkdir(parents=True, exist_ok=exist_ok)
+        self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
@@ -104,9 +110,14 @@ class ConfigParser:
         """
 
         module_name = self[name]['type']
-        module_args = dict(self[name]['args'])
-        assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
-        module_args.update(kwargs)
+
+        if 'args' in dict(self[name]):
+            module_args = dict(self[name]['args'])
+            assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
+            module_args.update(kwargs)
+        else:
+            module_args = dict()
+
         return getattr(module, module_name)(*args, **module_args)
 
     def init_ftn(self, name, module, *args, **kwargs):
@@ -147,12 +158,20 @@ class ConfigParser:
         return self._save_dir
 
     @property
-    def log_dir(self):
-        return self._log_dir
+    def optimizers_dir(self):
+        return self._optimizers_dir
+
+    @property
+    def tensors_dir(self):
+        return self._tensors_dir
 
     @property
     def samples_dir(self):
         return self._samples_dir
+
+    @property
+    def log_dir(self):
+        return self._log_dir
 
     @property
     def im_dir(self):
@@ -163,17 +182,17 @@ class ConfigParser:
         return self._fields_dir
 
     @property
-    def norms_dir(self):
-        return self._norms_dir
-
-    @property
     def grids_dir(self):
         return self._grids_dir
 
     @property
+    def norms_dir(self):
+        return self._norms_dir
+
+    @property
     def save_dirs(self):
-        return {'samples': self.samples_dir,
-                'images': self.im_dir, 'fields': self.fields_dir, 'norms': self.norms_dir, 'grids': self.grids_dir}
+        return {'optimizers': self.optimizers_dir, 'tensors': self.tensors_dir, 'samples': self.samples_dir,
+                'images': self.im_dir, 'fields': self.fields_dir, 'grids': self.grids_dir, 'norms': self.norms_dir}
 
 
 # helper functions to update config dict with custom cli options

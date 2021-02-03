@@ -79,7 +79,7 @@ def calc_det_J(nabla):
     return det_J
 
 
-def calc_metrics(seg_fixed, seg_moving, structures_dict, spacing):
+def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing):
     """
     calculate average surface distances and Dice scores
     """
@@ -91,7 +91,7 @@ def calc_metrics(seg_fixed, seg_moving, structures_dict, spacing):
     overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
 
     seg_fixed_arr = seg_fixed.squeeze().cpu().numpy()
-    seg_moving_arr = seg_moving.squeeze().cpu().numpy()
+    seg_moving = seg_moving.cpu().numpy()
     spacing = spacing.numpy().tolist()
 
     def calc_ASD(seg_fixed_im, seg_moving_im):
@@ -105,22 +105,36 @@ def calc_metrics(seg_fixed, seg_moving, structures_dict, spacing):
         overlap_measures_filter.Execute(seg_fixed_im, seg_moving_im)
         return overlap_measures_filter.GetDiceCoefficient()
 
-    for structure in structures_dict:
-        label = structures_dict[structure]
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        seg_moving_arr = seg_moving[loop_idx].squeeze()
 
-        seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
-        seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
+        ASD_im_pair = dict()
+        DSC_im_pair = dict()
 
-        seg_fixed_im = sitk.GetImageFromArray(seg_fixed_structure)
-        seg_moving_im = sitk.GetImageFromArray(seg_moving_structure)
+        for structure in structures_dict:
+            label = structures_dict[structure]
 
-        seg_fixed_im.SetSpacing(spacing)
-        seg_moving_im.SetSpacing(spacing)
+            seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
+            seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
 
-        ASD[structure] = calc_ASD(seg_fixed_im, seg_moving_im)
-        DSC[structure] = calc_DSC(seg_fixed_im, seg_moving_im)
+            seg_fixed_im = sitk.GetImageFromArray(seg_fixed_structure)
+            seg_moving_im = sitk.GetImageFromArray(seg_moving_structure)
+
+            seg_fixed_im.SetSpacing(spacing)
+            seg_moving_im.SetSpacing(spacing)
+
+            try:
+                ASD_im_pair[structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+                DSC_im_pair[structure] = calc_DSC(seg_fixed_im, seg_moving_im)
+            except:
+                print(im_pair_idx)
+                exit()
+
+        ASD[im_pair_idx] = ASD_im_pair
+        DSC[im_pair_idx] = DSC_im_pair
 
     return ASD, DSC
+
 
 def calc_norm(field):
     """
@@ -146,13 +160,12 @@ def im_flip(array):
     return np.fliplr(np.flipud(np.transpose(array, (1, 0))))
 
 
-def init_identity_grid_2D(nx, ny):
+def init_identity_grid_2D(dims):
     """
     initialise a 2D identity grid
-
-    :param nx: number of voxels in the x direction
-    :param ny: number of voxels in the y direction
     """
+
+    nx, ny = dims[0], dims[1]
 
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
@@ -163,14 +176,12 @@ def init_identity_grid_2D(nx, ny):
     return torch.cat((x, y), 3)
 
 
-def init_identity_grid_3D(nx, ny, nz):
+def init_identity_grid_3D(dims):
     """
     initialise a 3D identity grid
-
-    :param nx: number of voxels in the x direction
-    :param ny: number of voxels in the y direction
-    :param nz: number of voxels in the z direction
     """
+
+    nx, ny, nz = dims[0], dims[1], dims[2]
 
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)

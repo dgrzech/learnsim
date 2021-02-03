@@ -6,9 +6,8 @@ class BaseDataLoader(DataLoader):
     base class for all data loaders
     """
 
-    def __init__(self, dataset):
-        self.batch_idx = 0
-        self.n_samples = len(dataset)
-        self.init_kwargs = {'dataset': dataset, 'pin_memory': True}
+    def __init__(self, batch_size, dataset, no_workers):
+        # NOTE (DG): shuffle needs to be set to false for the optimisers to save correctly
+        init_kwargs = {'batch_size': batch_size, 'dataset': dataset, 'num_workers': no_workers, 'pin_memory': True, 'shuffle': False}
+        super().__init__(sampler=None, **init_kwargs)
 
-        super().__init__(sampler=None, **self.init_kwargs)

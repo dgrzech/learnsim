@@ -1,7 +1,6 @@
 from datetime import datetime
 
 import matplotlib.pyplot as plt
-import seaborn as sns
 import torch
 
 from utils import calc_norm, im_flip
@@ -9,7 +8,7 @@ from .writer import SummaryWriter
 
 
 class TensorboardWriter:
-    def __init__(self, log_dir, logger, enabled):
+    def __init__(self, log_dir, enabled):
         self.writer = None
         self.selected_module = ""
 
@@ -17,16 +16,14 @@ class TensorboardWriter:
             log_dir = str(log_dir)
             self.writer = SummaryWriter(log_dir)
 
-        self.step = 0
         self.mode = ''
-
-        self.hist_xlim = None
-        self.hist_ylim = None
+        self.step = 0
 
         self.tb_writer_ftns = {
             'add_scalar', 'add_scalars', 'add_image', 'add_images', 'add_audio', 'add_figure',
             'add_text', 'add_histogram', 'add_pr_curve', 'add_embedding', 'add_hparams'
         }
+
         self.tag_mode_exceptions = {'add_histogram', 'add_embedding'}
         self.timer = datetime.now()
 
@@ -35,15 +32,9 @@ class TensorboardWriter:
         self.step = step
 
     def write_hparams(self, config):
+        cfg_data_loss = config['data_loss']
         cfg_reg_loss = config['reg_loss']['args']
-        cfg_optimizer_v = config['optimizer_v']['args']
-        cfg_optimizer_SG_MCMC = config['optimizer_SG_MCMC']['args']
-
-        cfg_trainer = config['trainer']
-        uniform_noise_magnitude = cfg_trainer['uniform_noise'].get('magnitude', 0.0)
-
-        hparam_dict = {'VI/train/lr': cfg_optimizer_v['lr'], 'SG_MCMC/tau': cfg_optimizer_SG_MCMC['lr'],
-                       'w_reg': cfg_reg_loss['w_reg'], 'uniform_noise_magnitude': uniform_noise_magnitude}
+        hparam_dict = {'model/type': cfg_data_loss['type'], 'reg_loss/w_reg': cfg_reg_loss['w_reg']}
         self.writer.add_hparams(hparam_dict=hparam_dict, metric_dict={})
 
     def __getattr__(self, name):
@@ -71,41 +62,43 @@ class TensorboardWriter:
 
 
 """
-histogram of residuals
+q_f
 """
 
 
-def log_hist_res(writer, im_pair_idxs, residuals_batch, data_loss):
-    device_temp = residuals_batch.device
-    residuals_batch = residuals_batch.view(1, -1).cpu().numpy()
+def var_params_q_f_grid(log_var_f_slices, u_f_slices):
+    fig, axs = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
-        residuals = residuals_batch[loop_idx]
+    cols = ['axial', 'coronal', 'sagittal']
+    rows = ['log_var_f', 'u_f']
 
-        fig, ax = plt.subplots()
-        sns.distplot(residuals, kde=False, norm_hist=True)
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
 
-        if writer.hist_xlim is None or writer.hist_ylim is None:
-            xmin, xmax = ax.get_xlim()
-            ymin, ymax = ax.get_ylim()
+    for ax, row in zip(axs[:, 0], rows):
+        ax.set_xticks([], [])
+        ax.set_yticks([], [])
 
-            xmin = -1.0 * xmax
+        ax.set_ylabel(row, rotation=90, size='large')
 
-            writer.hist_xlim = (xmin, xmax)
-            writer.hist_ylim = (ymin, ymax + 1.5)
-        else:
-            xmin, xmax = writer.hist_xlim[0], writer.hist_xlim[1]
+    for i in range(3):
+        axs[0, i].imshow(im_flip(log_var_f_slices[i]))
+        axs[1, i].imshow(im_flip(u_f_slices[i]))
 
-        x = torch.linspace(xmin, xmax, steps=10000).unsqueeze(0).unsqueeze(-1).to(device_temp)
-        model_fit = torch.exp(data_loss.log_pdf(x)).detach().squeeze().cpu().numpy()
-        x = x.detach().squeeze().cpu().numpy()
+    return fig
 
-        sns.lineplot(x=x, y=model_fit, color='green', ax=ax)
 
-        plt.xlim(writer.hist_xlim[0], writer.hist_xlim[1])
-        plt.ylim(writer.hist_ylim[0], writer.hist_ylim[1])
+def log_q_f(writer,  var_params_q_f):
+    log_var_f, u_f = var_params_q_f['log_var'].cpu().numpy(), var_params_q_f['u'].cpu().numpy()
+    mid_idxs = get_im_or_field_mid_slices_idxs(log_var_f)
 
-        writer.add_figure('hist_residuals/' + str(im_pair_idx), fig)
+    log_var_f = log_var_f[0]
+    log_var_f_slices = get_slices(log_var_f, mid_idxs)
+
+    u_f = u_f[0]
+    u_f_slices = get_slices(u_f, mid_idxs)
+
+    writer.add_figure('q_f', var_params_q_f_grid(log_var_f_slices, u_f_slices))
 
 
 """
@@ -141,22 +134,28 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
 
 
 def get_im_or_field_mid_slices_idxs(im_or_field):
-    return int(im_or_field.shape[4] / 2), int(im_or_field.shape[3] / 2), int(im_or_field.shape[2] / 2)
+    if len(im_or_field.shape) == 3:
+        return int(im_or_field.shape[2] / 2), int(im_or_field.shape[1] / 2), int(im_or_field.shape[0] / 2)
+    elif len(im_or_field.shape) == 4:
+        return int(im_or_field.shape[3] / 2), int(im_or_field.shape[2] / 2), int(im_or_field.shape[1] / 2)
+    elif len(im_or_field.shape) == 5:
+        return int(im_or_field.shape[4] / 2), int(im_or_field.shape[3] / 2), int(im_or_field.shape[2] / 2)
+
+    raise NotImplementedError
 
 
 def get_slices(field, mid_idxs):
     return [field[:, :, mid_idxs[0]], field[:, mid_idxs[1], :], field[mid_idxs[2], :, :]]
 
 
-def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
-    im_fixed_batch = im_fixed_batch.cpu().numpy()
+def log_images(writer, im_pair_idxs, im_fixed, im_moving_batch, im_moving_warped_batch):
+    im_fixed = im_fixed.cpu().numpy().squeeze()
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
-    mid_idxs = get_im_or_field_mid_slices_idxs(im_fixed_batch)
+    mid_idxs = get_im_or_field_mid_slices_idxs(im_moving_batch)
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
-        im_fixed = im_fixed_batch[loop_idx, 0]
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_moving = im_moving_batch[loop_idx, 0]
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
 
@@ -203,16 +202,16 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
 
 
 def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
-    mu_v_norm_batch = calc_norm(var_params_batch['mu_v']).cpu().numpy()
-    sigma_v_norm_batch = calc_norm(torch.exp(0.5 * var_params_batch['log_var_v'])).cpu().numpy()
-    u_v_norm_batch = calc_norm(var_params_batch['u_v']).cpu().numpy()
+    mu_v_norm_batch = calc_norm(var_params_batch['mu']).cpu().numpy()
+    sigma_v_norm_batch = calc_norm(torch.exp(0.5 * var_params_batch['log_var'])).cpu().numpy()
+    u_v_norm_batch = calc_norm(var_params_batch['u']).cpu().numpy()
 
     displacement_norm_batch = calc_norm(displacement_batch).cpu().numpy()
     log_det_J_batch = log_det_J_batch.cpu().numpy()
 
     mid_idxs = get_im_or_field_mid_slices_idxs(mu_v_norm_batch)
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         mu_v_norm = mu_v_norm_batch[loop_idx, 0]
         sigma_v_norm = sigma_v_norm_batch[loop_idx, 0]
         u_v_norm = u_v_norm_batch[loop_idx, 0]
@@ -228,8 +227,7 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
         log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
         writer.add_figure('q_v/' + str(im_pair_idx),
-                          fields_grid(mu_v_norm_slices, displacement_norm_slices,
-                                      sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
+                          fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
 
 
 """
@@ -265,10 +263,7 @@ def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices
     return fig
 
 
-def log_sample(writer, im_pair_idxs, data_loss, im_moving_warped_batch, res_batch, v_batch, displacement_batch,
-               log_det_J_batch):
-    log_hist_res(writer, im_pair_idxs, res_batch, data_loss)
-
+def log_sample(writer, im_pair_idxs, im_moving_warped_batch, v_batch, displacement_batch, log_det_J_batch):
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
     v_norm_batch = calc_norm(v_batch).cpu().numpy()
     displacement_norm_batch = calc_norm(displacement_batch).cpu().numpy()
@@ -288,5 +283,4 @@ def log_sample(writer, im_pair_idxs, data_loss, im_moving_warped_batch, res_batc
         log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
         writer.add_figure('samples/' + str(im_pair_idx),
-                          sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices,
-                                      log_det_J_slices))
+                          sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices, log_det_J_slices))

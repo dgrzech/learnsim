@@ -112,16 +112,73 @@ def save_im_to_disk(im, file_path, spacing=(1, 1, 1)):
     im.to_filename(file_path)
 
 
-def save_optimiser_to_disk(optimiser, file_path):
-    """
-    save an optimiser state to a .pth file
+"""
+(vector) fields
+"""
 
-    :param optimiser: optimiser
-    :param file_path: path to use
+
+def save_field(save_dirs_dict, im_pair_idx, field, spacing, field_name, sample=False):
+    folder = save_dirs_dict['samples'] if sample else save_dirs_dict['fields']
+    field_path = path.join(folder, field_name + '_' + str(im_pair_idx) + '.vtk')
+    save_field_to_disk(field, field_path, spacing)
+
+
+def save_fields(data_loader, im_pair_idxs, **kwargs):
+    save_dirs_dict = data_loader.save_dirs
+    spacing = data_loader.dataset.spacing
+
+    for field_name, field_batch in kwargs.items():
+        field_batch = field_batch * spacing[0]
+        field_batch = field_batch.cpu().numpy()
+
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
+            field_norm = field_batch[loop_idx]
+            save_field(save_dirs_dict, im_pair_idx, field_norm, spacing, field_name)
+
+
+"""
+(vector) field norms
+"""
+
+
+def save_norm(save_dirs_dict, im_pair_idx, norm, spacing, name):
+    norm_path = path.join(save_dirs_dict['norms'], name + '_norm_' + str(im_pair_idx) + '.nii.gz')
+    save_im_to_disk(norm, norm_path, spacing)
+
+
+def save_norms(data_loader, im_pair_idxs, **kwargs):
+    """
+    save input and output images to .nii.gz
     """
 
-    state_dict = optimiser.state_dict()
-    torch.save(state_dict, file_path)
+    save_dirs_dict = data_loader.save_dirs
+    spacing = data_loader.dataset.spacing
+
+    for field_name, field_batch in kwargs.items():
+        field_batch = calc_norm(field_batch * spacing[0])
+        field_batch = field_batch.cpu().numpy()
+
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
+            field_norm = field_batch[loop_idx, 0]
+            save_norm(save_dirs_dict, im_pair_idx, field_norm, spacing, field_name)
+
+
+"""
+grids
+"""
+
+
+def save_grids(data_loader, im_pair_idxs, grids):
+    """
+    save output structured grids to .vtk
+    """
+
+    save_dirs_dict = data_loader.save_dirs
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
+        grid_path = path.join(save_dirs_dict['grids'], 'grid_' + str(im_pair_idx) + '.vtk')
+        grid = grids[loop_idx]
+        save_grid_to_disk(grid, grid_path)
 
 
 """
@@ -158,72 +215,18 @@ def save_images(data_loader, im_pair_idxs, **kwargs):
 
 
 """
-vector field norms
+optimizers
 """
 
 
-def save_norm(save_dirs_dict, im_pair_idx, norm, spacing, name):
-    norm_path = path.join(save_dirs_dict['norms'], name + '_norm_' + str(im_pair_idx) + '.nii.gz')
-    save_im_to_disk(norm, norm_path, spacing)
-
-
-def save_norms(data_loader, im_pair_idxs, **kwargs):
+def save_optimizer(batch_idx, save_dirs_dict, optimizer, optimizer_name):
     """
-    save input and output images to .nii.gz
+    save an optimiser state to a .pth file
     """
 
-    save_dirs_dict = data_loader.save_dirs
-    spacing = data_loader.dataset.spacing
-
-    for field_name, field_batch in kwargs.items():
-        field_batch = calc_norm(field_batch * spacing[0])
-        field_batch = field_batch.cpu().numpy()
-
-        for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
-            field_norm = field_batch[loop_idx, 0]
-            save_norm(save_dirs_dict, im_pair_idx, field_norm, spacing, field_name)
-
-
-"""
-vector fields
-"""
-
-
-def save_field(save_dirs_dict, im_pair_idx, field, spacing, field_name, sample=False):
-    folder = save_dirs_dict['samples'] if sample else save_dirs_dict['fields']
-    field_path = path.join(folder, field_name + '_' + str(im_pair_idx) + '.vtk')
-    save_field_to_disk(field, field_path, spacing)
-
-
-def save_fields(data_loader, im_pair_idxs, **kwargs):
-    save_dirs_dict = data_loader.save_dirs
-    spacing = data_loader.dataset.spacing
-
-    for field_name, field_batch in kwargs.items():
-        field_batch = field_batch * spacing[0]
-        field_batch = field_batch.cpu().numpy()
-
-        for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
-            field_norm = field_batch[loop_idx]
-            save_field(save_dirs_dict, im_pair_idx, field_norm, spacing, field_name)
-
-
-"""
-transformation grids
-"""
-
-
-def save_grids(data_loader, im_pair_idxs, grids):
-    """
-    save output structured grids to .vtk
-    """
-
-    save_dirs_dict = data_loader.save_dirs
-
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
-        grid_path = path.join(save_dirs_dict['grids'], 'grid_' + str(im_pair_idx) + '.vtk')
-        grid = grids[loop_idx]
-        save_grid_to_disk(grid, grid_path)
+    optimizer_path = path.join(save_dirs_dict['optimizers'], optimizer_name + '_' + str(batch_idx) + '.pt')
+    state_dict = optimizer.state_dict()
+    torch.save(state_dict, optimizer_path)
 
 
 """
@@ -252,3 +255,23 @@ def save_sample(data_loader, im_pair_idxs, sample_no, im_moving_warped_batch, di
         displacement = displacement_batch[loop_idx]
         name = 'sample_' + model + '_' + str(sample_no) + '_displacement'
         save_field(save_dirs_dict, im_pair_idx, displacement, spacing, name, sample=True)
+
+
+"""
+tensors
+"""
+
+
+def save_tensors(im_pair_idxs, save_dirs, var_params_q_v):
+    mu_v = var_params_q_v['mu']
+    log_var_v = var_params_q_v['log_var']
+    u_v = var_params_q_v['u']
+
+    def save_tensor(im_pair_idx, tensor, tensor_name):
+        tensor_path = path.join(save_dirs['tensors'], tensor_name + '_' + str(im_pair_idx) + '.pt')
+        torch.save(tensor.detach().cpu(), tensor_path)
+
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        save_tensor(im_pair_idx, mu_v[loop_idx], 'mu_v')
+        save_tensor(im_pair_idx, log_var_v[loop_idx], 'log_var_v')
+        save_tensor(im_pair_idx, u_v[loop_idx], 'u_v')

@@ -3,13 +3,30 @@ from .datasets import BiobankDataset
 
 
 class LearnSimDataLoader(BaseDataLoader):
-    def __init__(self, data_dir, dim_x, dim_y, dim_z, save_dirs=None):
+    def __init__(self, batch_size, data_dir, dims, no_workers=1, save_dirs=None):
         self.data_dir = data_dir
         self.save_dirs = save_dirs
-        self.dataset = BiobankDataset(data_dir, save_dirs, dim_x, dim_y, dim_z)
 
-        super().__init__(self.dataset)
+        dataset = BiobankDataset(data_dir, save_dirs, dims)
+        super().__init__(batch_size, dataset, no_workers)
 
     @property
-    def spacing(self):
+    def dims(self):
+        return self.dataset.dims
+
+    @property
+    def fixed(self):
+        return self.dataset.fixed
+
+    @property
+    def no_samples(self):
+        return len(self.dataset)
+
+    @property
+    def spacing(self):  # TODO (DG): change the name to "voxel_spacing"
         return self.dataset.spacing
+
+    @property
+    def var_params_q_f(self):
+        return self.dataset.var_params_q_f
+

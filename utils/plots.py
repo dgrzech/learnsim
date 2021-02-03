@@ -25,7 +25,8 @@ def plot_2D(v, transformation):
     ax_v.set_ylabel('y')
 
     # get the displacement vectors
-    identity_grid = init_identity_grid_2D(nx, ny)
+    dims = (nx, ny)
+    identity_grid = init_identity_grid_2D(dims)
     displacement_field = transformation - identity_grid.permute([0, 3, 1, 2])
 
     u, v = displacement_field[0, 0], displacement_field[0, 1]
@@ -64,7 +65,8 @@ def plot_3D(v, transformation):
     ax_v.set_zlabel('z')
 
     # get the displacement vectors
-    identity_grid = init_identity_grid_3D(nx, ny, nz)
+    dims = (nx, ny, nz)
+    identity_grid = init_identity_grid_3D(dims)
     displacement_field = transformation - identity_grid.permute([0, 4, 1, 2, 3])
 
     u, v, w = displacement_field[0, 0], displacement_field[0, 1], displacement_field[0, 2]

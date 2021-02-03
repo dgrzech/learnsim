@@ -1,4 +1,5 @@
 from os import listdir, path
+from utils import rescale_im
 
 import SimpleITK as sitk
 import numpy as np
@@ -8,14 +9,11 @@ from torch.utils.data import Dataset
 
 
 class BiobankDataset(Dataset):
-    def __init__(self, im_paths, save_paths, dim_x, dim_y, dim_z):
+    def __init__(self, im_paths, save_paths, dims):
         self.im_paths = im_paths
         self.save_paths = save_paths
 
-        self.dims = (dim_x, dim_y, dim_z)
-        self.dims_im = (1, dim_x, dim_y, dim_z)
-        self.dims_v = (3, dim_x, dim_y, dim_z)
-
+        self.dims, self.dims_im, self.dims_v = dims, (1, *dims), (3, *dims)
         self.padding, self.spacing = None, None
 
         # image filenames
@@ -24,22 +22,30 @@ class BiobankDataset(Dataset):
         seg_filenames = self._get_filenames(path.join(im_paths, 'segs'))
 
         # all-to-one
-        self.im_mask_seg_fixed_triples = list()
+        self.im_mask_seg_triples = list()
 
         for triple in list(zip(im_filenames, mask_filenames, seg_filenames)):
-            self.im_mask_seg_fixed_triples.append({'im': triple[0], 'mask': triple[1], 'seg': triple[2]})
+            self.im_mask_seg_triples.append({'im': triple[0], 'mask': triple[1], 'seg': triple[2]})
 
-        # pre-load im_fixed and the segmentation
-        im_fixed_path = self.im_mask_seg_fixed_triples[0]['im']
-        mask_fixed_path = self.im_mask_seg_fixed_triples[0]['mask']
-        seg_fixed_path = self.im_mask_seg_fixed_triples[0]['seg']
+        # pre-load the fixed image, the segmentation, the mask, and the parameters of q_f
+        fixed_triple = self.im_mask_seg_triples.pop(0)
 
-        self.im_fixed = self.get_image(im_fixed_path)
-        self.mask_fixed = self.get_mask(mask_fixed_path)
-        self.seg_fixed = self.get_seg(seg_fixed_path)
+        im_fixed_path = fixed_triple['im']
+        mask_fixed_path = fixed_triple['mask']
+        seg_fixed_path = fixed_triple['seg']
+
+        im_fixed = self._get_image(im_fixed_path).unsqueeze(0)
+        mask_fixed = self._get_mask(mask_fixed_path).unsqueeze(0)
+        seg_fixed = self._get_seg(seg_fixed_path).unsqueeze(0)
+
+        log_var_f = self._init_log_var_f(self.dims_im)
+        u_f = self._init_u_f(self.dims_im)
+
+        self.fixed = {'im': rescale_im(im_fixed), 'mask': mask_fixed, 'seg': seg_fixed}
+        self.var_params_q_f = {'log_var': log_var_f, 'u': u_f}
 
     def __len__(self):
-        return 1
+        return len(self.im_mask_seg_triples)
 
     @staticmethod
     def _get_filenames(p):
@@ -49,19 +55,51 @@ class BiobankDataset(Dataset):
         return ['' for _ in range(2)]
 
     @staticmethod
+    def _init_log_var_f(dims):
+        return torch.zeros(dims)
+
+    @staticmethod
+    def _init_u_f(dims):
+        return torch.zeros(dims)
+
+    @staticmethod
     def _init_mu_v(dims):
         return torch.zeros(dims)
+
+    def _get_mu_v(self, idx):
+        tensor_path = path.join(self.save_paths['tensors'], 'mu_v_' + str(idx) + '.pt')
+
+        if path.exists(tensor_path):
+            return torch.load(tensor_path)
+        else:
+            return self._init_mu_v(self.dims_v)
 
     @staticmethod
     def _init_log_var_v(dims):
         var_v = (0.5 ** 2) * torch.ones(dims)
         return torch.log(var_v)
 
+    def _get_log_var_v(self, idx):
+        tensor_path = path.join(self.save_paths['tensors'], 'log_var_v_' + str(idx) + '.pt')
+
+        if path.exists(tensor_path):
+            return torch.load(tensor_path)
+        else:
+            return self._init_log_var_v(self.dims_v)
+
     @staticmethod
     def _init_u_v(dims):
         return torch.zeros(dims)
 
-    def get_image(self, im_path):
+    def _get_u_v(self, idx):
+        tensor_path = path.join(self.save_paths['tensors'], 'u_v_' + str(idx) + '.pt')
+
+        if path.exists(tensor_path):
+            return torch.load(tensor_path)
+        else:
+            return self._init_u_v(self.dims_v)
+
+    def _get_image(self, im_path):
         im = sitk.ReadImage(im_path, sitk.sitkFloat32)
         im_arr = np.transpose(sitk.GetArrayFromImage(im), (2, 1, 0))
 
@@ -77,7 +115,7 @@ class BiobankDataset(Dataset):
 
         return F.interpolate(im, size=self.dims, mode='trilinear', align_corners=True).squeeze(0)
 
-    def get_mask(self, mask_path):
+    def _get_mask(self, mask_path):
         if mask_path is '':
             return torch.ones_like(self.im_fixed).bool()
 
@@ -90,7 +128,7 @@ class BiobankDataset(Dataset):
 
         return F.interpolate(mask, size=self.dims, mode='nearest').bool().squeeze(0)
 
-    def get_seg(self, seg_path):
+    def _get_seg(self, seg_path):
         if seg_path is '':
             return torch.ones_like(self.im_fixed).short()
 
@@ -104,19 +142,19 @@ class BiobankDataset(Dataset):
         return F.interpolate(seg, size=self.dims, mode='nearest').short().squeeze(0)
 
     def __getitem__(self, idx):
-        im_moving_path = self.im_mask_seg_fixed_triples[1]['im']
-        mask_moving_path = self.im_mask_seg_fixed_triples[1]['mask']
-        seg_moving_path = self.im_mask_seg_fixed_triples[1]['seg']
+        im_moving_path = self.im_mask_seg_triples[idx]['im']
+        mask_moving_path = self.im_mask_seg_triples[idx]['mask']
+        seg_moving_path = self.im_mask_seg_triples[idx]['seg']
 
-        im_moving = self.get_image(im_moving_path)
-        mask_moving = self.get_mask(mask_moving_path)
-        seg_moving = self.get_seg(seg_moving_path)
+        im_moving = self._get_image(im_moving_path)
+        mask_moving = self._get_mask(mask_moving_path)
+        seg_moving = self._get_seg(seg_moving_path)
 
-        assert self.im_fixed.shape == im_moving.shape, 'images don\'t have the same dimensions'
+        mu_v = self._get_mu_v(idx)
+        log_var_v = self._get_log_var_v(idx)
+        u_v = self._get_u_v(idx)
 
-        mu_v = self._init_mu_v(self.dims_v)
-        log_var_v = self._init_log_var_v(self.dims_v)
-        u_v = self._init_u_v(self.dims_v)
+        moving = {'im': rescale_im(im_moving), 'mask': mask_moving, 'seg': seg_moving}
+        var_params_q_v = {'mu': mu_v, 'log_var': log_var_v, 'u': u_v}
 
-        return idx, self.im_fixed, self.mask_fixed, self.seg_fixed, im_moving, mask_moving, seg_moving, \
-               mu_v, log_var_v, u_v
+        return idx, moving, var_params_q_v
