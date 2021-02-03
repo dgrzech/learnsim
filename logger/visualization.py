@@ -149,7 +149,7 @@ def get_slices(field, mid_idxs):
 
 
 def log_images(writer, im_pair_idxs, im_fixed, im_moving_batch, im_moving_warped_batch):
-    im_fixed = im_fixed.cpu().numpy().squeeze()
+    im_fixed = im_fixed[0, 0].cpu().numpy().squeeze()
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 

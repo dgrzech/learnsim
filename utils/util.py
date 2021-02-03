@@ -89,7 +89,7 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing):
     hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
     overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
 
-    seg_fixed_arr = seg_fixed.squeeze().cpu().numpy()
+    seg_fixed_arr = seg_fixed[0].squeeze().cpu().numpy()
     seg_moving = seg_moving.cpu().numpy()
     spacing = spacing.numpy().tolist()
 
@@ -235,24 +235,6 @@ def rescale_im(im, range_min=-1.0, range_max=1.0):
     return (range_max - range_min) * (im - im_min) / (im_max - im_min) + range_min
 
 
-def rescale_residuals(res, mask, data_loss):
-    """
-    rescale residuals by the estimated voxel-wise standard deviation
-    """
-
-    res_masked = torch.where(mask, res, torch.zeros_like(res))
-    res_masked_flattened = res_masked.view(1, -1, 1)
-
-    scaled_res = res_masked_flattened * torch.exp(-data_loss.log_std)
-    scaled_res.requires_grad_(True)
-    scaled_res.retain_grad()
-
-    loss_VD = -1.0 * torch.sum(data_loss.log_pdf_VD(scaled_res))
-    loss_VD.backward()
-
-    return torch.sum(scaled_res * scaled_res.grad, dim=-1).view(res.shape)
-
-
 def separable_conv_3D(field, *args):
     """
     implements separable convolution over a three-dimensional vector field either as three 1D convolutions
@@ -357,114 +339,6 @@ def transform_coordinates_inv(field):
         field_out[:, idx] = field_out[:, idx] * float(dims[idx] - 1) / 2.0
 
     return field_out
-
-
-def VD(residual, mask):
-    """
-    virtual decimation
-
-    input x = residual (Gaussian-ish) field with stationary covariance, e.g. residual map (I-J) / sigma,
-    where sigma is the noise sigma if you use SSD/Gaussian model or else the EM voxel-wise estimate if you use a GMM.
-
-    EM voxel-wise estimate of precision = var^(-1) is sum_k rho_k precision_k,
-    where rho_k is the component responsible for the voxel.
-
-    The general idea is that each voxel-wise observation now only counts for "VD < 1 of an observation";
-    imagine sampling a z ~ bernoulli(VD) at each voxel and you only add the voxel's loss if z == 1.
-
-    In practice you do that in expectation. In the simplest case it looks like VD * data_loss,
-    and goes well in a VB framework, as if you added a q(z) = Bernoulli(VD) to a VB approximation
-    and took the expectation wrt q(z).
-    """
-
-    with torch.no_grad():
-        # variance
-        residual_masked = residual[mask]
-        var_res = torch.mean(residual_masked ** 2)
-
-        # covariance..
-        no_unmasked_voxels = torch.sum(mask)
-        residual_masked = torch.where(mask, residual, torch.zeros_like(residual))
-
-        cov_x = torch.sum(residual_masked[:, :, :-1] * residual_masked[:, :, 1:]) / no_unmasked_voxels
-        cov_y = torch.sum(residual_masked[:, :, :, :-1] * residual_masked[:, :, :, 1:]) / no_unmasked_voxels
-        cov_z = torch.sum(residual_masked[:, :, :, :, :-1] * residual_masked[:, :, :, :, 1:]) / no_unmasked_voxels
-
-        corr_x = cov_x / var_res
-        corr_y = cov_y / var_res
-        corr_z = cov_z / var_res
-
-        sq_VD_x = torch.clamp(-2.0 / math.pi * torch.log(corr_x), max=1.0)
-        sq_VD_y = torch.clamp(-2.0 / math.pi * torch.log(corr_y), max=1.0)
-        sq_VD_z = torch.clamp(-2.0 / math.pi * torch.log(corr_z), max=1.0)
-
-        return torch.sqrt(sq_VD_x * sq_VD_y * sq_VD_z)
-
-
-def VD_reg(nabla_vx, nabla_vy, nabla_vz, mask):
-    with torch.no_grad():
-        mask_stacked = torch.cat((mask, mask, mask), dim=1)
-
-        # variance
-        nabla_vx_masked = nabla_vx[mask_stacked]
-        nabla_vy_masked = nabla_vy[mask_stacked]
-        nabla_vz_masked = nabla_vz[mask_stacked]
-
-        var_nabla_vx = torch.mean(nabla_vx_masked ** 2)
-        var_nabla_vy = torch.mean(nabla_vy_masked ** 2)
-        var_nabla_vz = torch.mean(nabla_vz_masked ** 2)
-
-        # covariance..
-        no_unmasked_voxels = torch.sum(mask_stacked)
-
-        nabla_vx_masked = torch.where(mask_stacked, nabla_vx, torch.zeros_like(nabla_vx))
-        nabla_vy_masked = torch.where(mask_stacked, nabla_vy, torch.zeros_like(nabla_vy))
-        nabla_vz_masked = torch.where(mask_stacked, nabla_vz, torch.zeros_like(nabla_vz))
-
-        cov_nabla_vx_x = torch.sum(nabla_vx_masked[:, :, :-1] * nabla_vx_masked[:, :, 1:]) / no_unmasked_voxels
-        cov_nabla_vx_y = torch.sum(nabla_vx_masked[:, :, :, :-1] * nabla_vx_masked[:, :, :, 1:]) / no_unmasked_voxels
-        cov_nabla_vx_z = \
-            torch.sum(nabla_vx_masked[:, :, :, :, :-1] * nabla_vx_masked[:, :, :, :, 1:]) / no_unmasked_voxels
-
-        cov_nabla_vy_x = torch.sum(nabla_vy_masked[:, :, :-1] * nabla_vy_masked[:, :, 1:]) / no_unmasked_voxels
-        cov_nabla_vy_y = torch.sum(nabla_vy_masked[:, :, :, :-1] * nabla_vy_masked[:, :, :, 1:]) / no_unmasked_voxels
-        cov_nabla_vy_z = \
-            torch.sum(nabla_vy_masked[:, :, :, :, :-1] * nabla_vy_masked[:, :, :, :, 1:]) / no_unmasked_voxels
-
-        cov_nabla_vz_x = torch.sum(nabla_vz_masked[:, :, :-1] * nabla_vz_masked[:, :, 1:]) / no_unmasked_voxels
-        cov_nabla_vz_y = torch.sum(nabla_vz_masked[:, :, :, :-1] * nabla_vz_masked[:, :, :, 1:]) / no_unmasked_voxels
-        cov_nabla_vz_z = \
-            torch.sum(nabla_vz_masked[:, :, :, :, :-1] * nabla_vz_masked[:, :, :, :, 1:]) / no_unmasked_voxels
-
-        corr_vx_x = cov_nabla_vx_x / var_nabla_vx
-        corr_vx_y = cov_nabla_vx_y / var_nabla_vx
-        corr_vx_z = cov_nabla_vx_z / var_nabla_vx
-
-        corr_vy_x = cov_nabla_vy_x / var_nabla_vy
-        corr_vy_y = cov_nabla_vy_y / var_nabla_vy
-        corr_vy_z = cov_nabla_vy_z / var_nabla_vy
-
-        corr_vz_x = cov_nabla_vz_x / var_nabla_vz
-        corr_vz_y = cov_nabla_vz_y / var_nabla_vz
-        corr_vz_z = cov_nabla_vz_z / var_nabla_vz
-
-        sq_VD_nabla_vx_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_x), max=1.0)
-        sq_VD_nabla_vx_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_y), max=1.0)
-        sq_VD_nabla_vx_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vx_z), max=1.0)
-
-        sq_VD_nabla_vy_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_x), max=1.0)
-        sq_VD_nabla_vy_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_y), max=1.0)
-        sq_VD_nabla_vy_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vy_z), max=1.0)
-
-        sq_VD_nabla_vz_x = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_x), max=1.0)
-        sq_VD_nabla_vz_y = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_y), max=1.0)
-        sq_VD_nabla_vz_z = torch.clamp(-2.0 / math.pi * torch.log(corr_vz_z), max=1.0)
-
-        VD_nabla_vx = torch.sqrt(sq_VD_nabla_vx_x * sq_VD_nabla_vx_y * sq_VD_nabla_vx_z)
-        VD_nabla_vy = torch.sqrt(sq_VD_nabla_vy_x * sq_VD_nabla_vy_y * sq_VD_nabla_vy_z)
-        VD_nabla_vz = torch.sqrt(sq_VD_nabla_vz_x * sq_VD_nabla_vz_y * sq_VD_nabla_vz_z)
-
-        return (VD_nabla_vx + VD_nabla_vy + VD_nabla_vz) / 3.0
 
 
 class MetricTracker:

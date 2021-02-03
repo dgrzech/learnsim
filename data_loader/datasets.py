@@ -41,7 +41,7 @@ class BiobankDataset(Dataset):
         log_var_f = self._init_log_var_f(self.dims_im)
         u_f = self._init_u_f(self.dims_im)
 
-        self.fixed = {'im': rescale_im(im_fixed), 'mask': mask_fixed, 'seg': seg_fixed}
+        self.fixed = {'im': im_fixed, 'mask': mask_fixed, 'seg': seg_fixed}
         self.var_params_q_f = {'log_var': log_var_f, 'u': u_f}
 
     def __len__(self):
@@ -111,9 +111,10 @@ class BiobankDataset(Dataset):
 
         # pad
         im_arr_padded = np.pad(im_arr, self.padding, mode='minimum')
-        im = torch.from_numpy(im_arr_padded).unsqueeze(0).unsqueeze(0)
+        im_tensor = torch.from_numpy(im_arr_padded).unsqueeze(0).unsqueeze(0)
+        im = F.interpolate(im_tensor, size=self.dims, mode='trilinear', align_corners=True).squeeze(0)
 
-        return F.interpolate(im, size=self.dims, mode='trilinear', align_corners=True).squeeze(0)
+        return rescale_im(im)
 
     def _get_mask(self, mask_path):
         if mask_path is '':
@@ -154,7 +155,7 @@ class BiobankDataset(Dataset):
         log_var_v = self._get_log_var_v(idx)
         u_v = self._get_u_v(idx)
 
-        moving = {'im': rescale_im(im_moving), 'mask': mask_moving, 'seg': seg_moving}
+        moving = {'im': im_moving, 'mask': mask_moving, 'seg': seg_moving}
         var_params_q_v = {'mu': mu_v, 'log_var': log_var_v, 'u': u_v}
 
         return idx, moving, var_params_q_v

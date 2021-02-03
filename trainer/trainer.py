@@ -5,7 +5,7 @@ from torch import nn
 
 from base import BaseTrainer
 from logger import log_fields, log_images, log_q_f, save_optimizer, save_tensors
-from utils import MetricTracker, SobolevGrad, Sobolev_kernel_1D, add_noise_uniform, calc_det_J, calc_metrics, sample_q_f, sample_q_v
+from utils import MetricTracker, SobolevGrad, Sobolev_kernel_1D, add_noise_uniform, calc_det_J, calc_metrics, get_module_attr, sample_q_f, sample_q_v
 
 
 class Trainer(BaseTrainer):
@@ -72,7 +72,7 @@ class Trainer(BaseTrainer):
 
         return data_term, reg_term, entropy_term, transformation, displacement, im_moving_warped
 
-    def _step_q_v(self, im_pair_idxs, moving, var_params_q_v):
+    def _step_q_v(self, epoch, im_pair_idxs, moving, var_params_q_v):
         for iter_no in range(1, self.no_iters_q_v + 1):
             self.step_global += 1
             n = len(im_pair_idxs)
@@ -107,11 +107,6 @@ class Trainer(BaseTrainer):
                 self.metrics.update('loss/q_v', loss_q_v.item(), n=n)
 
                 with torch.no_grad():
-                    var_params_q_v_smoothed = dict()
-
-                    for param in var_params_q_v:
-                        var_params_q_v_smoothed[param] = SobolevGrad.apply(var_params_q_v[param], self.S, self.padding_sz)
-
                     nabla = self.diff_op(transformation1, transformation=True)
                     log_det_J_transformation = torch.log(calc_det_J(nabla))
                     no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation)
@@ -120,12 +115,18 @@ class Trainer(BaseTrainer):
                         no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].sum().item()
                         self.metrics.update('no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
 
-                    log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
-                    log_images(self.writer, im_pair_idxs, self.fixed['im'], moving['im'], im_moving_warped1)
+        # tensorboard cont.
+        with torch.no_grad():
+            self.writer.set_step(epoch)
 
-                    segs_moving_warped = self.registration_module(moving['seg'], transformation1)
-                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.data_loader.spacing)
-                    self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+            var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
+            segs_moving_warped = self.registration_module(moving['seg'], transformation1)
+
+            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.data_loader.spacing)
+            self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+
+            log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
+            log_images(self.writer, im_pair_idxs, self.fixed['im'], moving['im'], im_moving_warped1)
 
     def _step_q_f_q_phi(self, im_pair_idxs, moving, var_params_q_v):
         self.step_global += 1
@@ -181,7 +182,7 @@ class Trainer(BaseTrainer):
             if self.optimize_q_v:
                 self._enable_gradients_variational_parameters(var_params_q_v)
                 self.__init_optimizer_q_v(batch_idx, var_params_q_v)
-                self._step_q_v(im_pair_idxs, moving, var_params_q_v)
+                self._step_q_v(epoch, im_pair_idxs, moving, var_params_q_v)
                 self._disable_gradients_variational_parameters(var_params_q_v)
 
                 save_tensors(im_pair_idxs, self.data_loader.save_dirs, var_params_q_v)
@@ -195,50 +196,63 @@ class Trainer(BaseTrainer):
                 if self.optimize_q_f:
                     self._enable_gradients_variational_parameters(self.var_params_q_f)
                 if self.optimize_q_phi:
-                    self.model.enable_gradients()
+                    self._enable_gradients_model()
 
                 self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
 
                 if self.optimize_q_f:
                     self._disable_gradients_variational_parameters(self.var_params_q_f)
                 if self.optimize_q_phi:
-                    self.model.disable_gradients()
+                    self._disable_gradients_model()
 
         self._save_checkpoint(epoch)
 
     def __pre_registration(self):
         self.writer.set_step(self.step_global)
 
-        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
-            im_pair_idxs = im_pair_idxs.tolist()
+        with torch.no_grad():
+            for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
+                im_pair_idxs = im_pair_idxs.tolist()
 
-            for key in moving:
-                moving[key] = moving[key].to(self.device, non_blocking=True)
-            for param_key in var_params_q_v:
-                var_params_q_v[param_key] = var_params_q_v[param_key].to(self.device, non_blocking=True)
-
-            with torch.no_grad():
                 if batch_idx == 0:
+                    self.fixed['im'] = self.fixed['im'].expand_as(moving['im'])
+                    self.fixed['mask'] = self.fixed['mask'].expand_as(moving['mask'])
+                    self.fixed['seg'] = self.fixed['seg'].expand_as(moving['seg'])
+
                     if self.optimize_q_f:
                         log_q_f(self.writer, self.var_params_q_f)
 
-                metrics_im_pairs = calc_metrics(im_pair_idxs, self .fixed['seg'], moving['seg'], self.structures_dict, self.data_loader.spacing)
+                for key in moving:
+                    moving[key] = moving[key].to(self.device, non_blocking=True)
+                for param_key in var_params_q_v:
+                    var_params_q_v[param_key] = var_params_q_v[param_key].to(self.device, non_blocking=True)
+
+                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], moving['seg'], self.structures_dict, self.data_loader.spacing)
                 self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
     def __Sobolev_gradients_init(self):
-        _s = self.config['Sobolev_grad']['s']
-        _lambda = self.config['Sobolev_grad']['lambda']
-        self.padding_sz = _s // 2
+        with torch.no_grad():
+            _s = self.config['Sobolev_grad']['s']
+            _lambda = self.config['Sobolev_grad']['lambda']
+            self.padding_sz = _s // 2
 
-        S, S_sqrt = Sobolev_kernel_1D(_s, _lambda)
-        S = torch.from_numpy(S).float().unsqueeze(0)
-        S = torch.stack((S, S, S), 0)
+            S, S_sqrt = Sobolev_kernel_1D(_s, _lambda)
+            S = torch.from_numpy(S).float().unsqueeze(0)
+            S = torch.stack((S, S, S), 0)
 
-        S_x = S.unsqueeze(2).unsqueeze(2).to(self.device, non_blocking=True)
-        S_y = S.unsqueeze(2).unsqueeze(4).to(self.device, non_blocking=True)
-        S_z = S.unsqueeze(3).unsqueeze(4).to(self.device, non_blocking=True)
+            S_x = S.unsqueeze(2).unsqueeze(2).to(self.device, non_blocking=True)
+            S_y = S.unsqueeze(2).unsqueeze(4).to(self.device, non_blocking=True)
+            S_z = S.unsqueeze(3).unsqueeze(4).to(self.device, non_blocking=True)
 
-        self.S = {'x': S_x, 'y': S_y, 'z': S_z}
+            self.S = {'x': S_x, 'y': S_y, 'z': S_z}
+
+    def __get_var_params_smoothed(self, var_params):
+        var_params_smoothed = dict()
+
+        for param in var_params:
+            var_params_smoothed[param] = SobolevGrad.apply(var_params[param], self.S, self.padding_sz)
+
+        return var_params_smoothed
 
     def _init_optimizers(self):
         if self.optimize_q_v:
@@ -250,9 +264,9 @@ class Trainer(BaseTrainer):
             self._disable_gradients_variational_parameters(self.var_params_q_f)
 
         if self.optimize_q_phi:
-            self.model.enable_gradients()
+            self._enable_gradients_model()
             self.__init_optimizer_q_phi()
-            self.model.disable_gradients()
+            self._disable_gradients_model()
 
     def __init_optimizer_q_f(self):
         trainable_params_q_f = filter(lambda p: p.requires_grad, self.var_params_q_f.values())

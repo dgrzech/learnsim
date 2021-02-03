@@ -36,9 +36,9 @@ class BaseTrainer:
         if len(device_ids) > 1:
             self.model = torch.nn.DataParallel(model, device_ids=device_ids)
 
-            self.data_loss = torch.nn.DataParallel(data_loss, device_ids=device_ids)
-            self.reg_loss = torch.nn.DataParallel(reg_loss, device_ids=device_ids)
-            self.entropy_loss = torch.nn.DataParallel(entropy_loss, device_ids=device_ids)
+            self.data_loss = torch.nn.DataParallel(losses['data'], device_ids=device_ids)
+            self.reg_loss = torch.nn.DataParallel(losses['regularisation'], device_ids=device_ids)
+            self.entropy_loss = torch.nn.DataParallel(losses['entropy'], device_ids=device_ids)
 
             self.transformation_model = torch.nn.DataParallel(transformation_model, device_ids=device_ids)
             self.registration_module = torch.nn.DataParallel(registration_module, device_ids=device_ids)
@@ -109,6 +109,12 @@ class BaseTrainer:
     def _disable_gradients_variational_parameters(var_params):
         for param_key in var_params:
             var_params[param_key].requires_grad_(False)
+
+    def _enable_gradients_model(self):
+        get_module_attr(self.model, 'enable_gradients')()
+
+    def _disable_gradients_model(self):
+        get_module_attr(self.model, 'disable_gradients')()
 
     def _save_checkpoint(self, epoch):
         filename = str(self.checkpoint_dir / f'checkpoint_{epoch}.pth')
