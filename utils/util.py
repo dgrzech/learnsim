@@ -79,6 +79,34 @@ def calc_det_J(nabla):
     return det_J
 
 
+def calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict):
+    """
+    calculate the Dice scores
+    """
+
+    with torch.no_grad():
+        DSC_batch = dict()  # dict. with Dice scores for each image pair and segmentation
+
+        for idx, im_pair in enumerate(im_pair_idxs):
+            DSC = dict()  # dict. with Dice scores for the image pair
+
+            seg_fixed_im_pair = seg_fixed[idx]
+            seg_moving_im_pair = seg_moving[idx]
+
+            for structure in structures_dict:
+                label = structures_dict[structure]
+
+                numerator = 2.0 * ((seg_fixed_im_pair == label) * (seg_moving_im_pair == label)).sum().item()
+                denominator = (seg_fixed_im_pair == label).sum().item() + (seg_moving_im_pair == label).sum().item()
+
+                score = numerator / denominator
+                DSC[structure] = score
+
+            DSC_batch[im_pair] = DSC
+
+    return DSC_batch
+
+
 def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing):
     """
     calculate average surface distances and Dice scores
