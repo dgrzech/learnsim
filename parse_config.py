@@ -30,8 +30,13 @@ class ConfigParser:
         exper_name = self.config['name']
 
         if run_id is None:  # use timestamp as default run-id
-            run_id = datetime.now().strftime(r'%m%d_%H%M%S')
-        
+            timestamp = datetime.now().strftime(r'%m%d_%H%M%S')
+
+            if config['optimize_q_phi']:
+                run_id = 'learnt_' + timestamp
+            else:
+                run_id = 'baseline_' + timestamp
+
         self._save_dir = save_dir / exper_name / run_id / 'checkpoints'
         self._optimizers_dir = save_dir / exper_name / run_id / 'optimizers'
         self._tensors_dir = save_dir / exper_name / run_id / 'tensors'
