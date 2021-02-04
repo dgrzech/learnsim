@@ -1,4 +1,5 @@
 from datetime import datetime
+from distutils.dir_util import copy_tree
 from functools import reduce, partial
 from operator import getitem
 from pathlib import Path
@@ -63,6 +64,13 @@ class ConfigParser:
         self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.grids_dir.mkdir(parents=True, exist_ok=exist_ok)
         self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
+
+        # copy values of variational parameters
+        if self.resume is not None:
+            print('copying previous values of variational parameters..')
+            copy_tree((self.resume.parent.parent / 'optimizers').absolute().as_posix(), self._optimizers_dir.absolute().as_posix())
+            copy_tree((self.resume.parent.parent / 'tensors').absolute().as_posix(), self._tensors_dir.absolute().as_posix())
+            print('done!\n')
 
         # save updated config file to the checkpoint dir
         write_json(self.config, self.save_dir / 'config.json')
