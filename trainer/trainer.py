@@ -5,7 +5,7 @@ from torch import nn
 
 from base import BaseTrainer
 from logger import log_fields, log_images, log_q_f, save_optimizer, save_tensors
-from utils import MetricTracker, SobolevGrad, Sobolev_kernel_1D, add_noise_uniform, calc_det_J, calc_metrics, get_module_attr, sample_q_f, sample_q_v
+from utils import MetricTracker, SobolevGrad, Sobolev_kernel_1D, add_noise_uniform, calc_det_J, calc_metrics, sample_q_f, sample_q_v
 
 
 class Trainer(BaseTrainer):
