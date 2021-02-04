@@ -98,7 +98,7 @@ class Trainer(BaseTrainer):
             self.optimizer_q_v.step()
 
             # tensorboard
-            if iter_no % self.log_period == 0:
+            if iter_no == 1 or iter_no % self.log_period == 0:
                 self.writer.set_step(self.step_global)
 
                 self.metrics.update('loss/data_term', data_term.item(), n=n)
