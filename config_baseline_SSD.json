@@ -1,17 +1,15 @@
 {
-	"name": "temp",
-	"n_gpu": 1,
+	"name": "SSD",
+	"n_gpu": 2,
 
 	"optimize_q_v": true,
-	"optimize_q_f": true,
-	"optimize_q_phi": true,
+	"optimize_q_f": false,
+	"optimize_q_phi": false,
 
 	"model": {
         "type": "CNN_SSD",
         "args": {
-			"learnable": true,
-	    	"no_feature_maps": 8,
-			"s": 3
+			"learnable": false
 	    }
     },
 
@@ -22,7 +20,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 2.0
+			"w_reg": 1.2
 		}
 	},
 	"entropy_loss": {
@@ -59,8 +57,9 @@
 		"type": "LearnSimDataLoader",
 		"args": {
 			"batch_size": 4,
-			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_08",
-			"dims": [64, 64, 64]
+			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_64",
+			"dims": [128, 128, 128],
+			"num_workers": 4
 		}
 	},
 
@@ -76,11 +75,11 @@
 		},
 
 		"no_epochs": 4,
-		"no_iters_q_v": 1024,
-		"log_period": 128,
+		"no_iters_q_v": 512,
+		"log_period": 256,
 
 		"tensorboard": true,
-		"verbosity": 2,
-		"save_dir": "saved/"
+		"save_dir": "saved/",
+		"verbosity": 2
 	}
 }

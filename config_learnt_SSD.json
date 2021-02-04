@@ -1,0 +1,87 @@
+{
+	"name": "SSD",
+	"n_gpu": 2,
+
+	"optimize_q_v": true,
+	"optimize_q_f": true,
+	"optimize_q_phi": true,
+
+	"model": {
+        "type": "CNN_SSD",
+        "args": {
+			"learnable": true,
+			"no_feature_maps": 4,
+			"s": 2
+	    }
+    },
+
+	"data_loss": {
+		"type": "SSD"
+	},
+	"reg_loss": {
+		"type": "RegLoss_L2",
+		"args": {
+			"diff_op": "GradientOperator",
+			"w_reg": 1.2
+		}
+	},
+	"entropy_loss": {
+		"type": "EntropyMultivariateNormal"
+	},
+
+	"transformation_model": {
+		"type": "SVF_3D"
+	},
+	"registration_module": {
+		"type": "RegistrationModule"
+	},
+
+	"optimizer_q_f": {
+		"type": "Adam",
+		"args": {
+			"lr": 2e-3
+		}
+	},
+	"optimizer_q_phi": {
+		"type": "Adam",
+		"args": {
+			"lr": 1e-4
+		}
+	},
+	"optimizer_q_v": {
+		"type": "Adam",
+		"args": {
+			"lr": 2e-3
+		}
+	},
+
+	"data_loader": {
+		"type": "LearnSimDataLoader",
+		"args": {
+			"batch_size": 4,
+			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_64",
+			"dims": [128, 128, 128],
+			"num_workers": 4
+		}
+	},
+
+	"Sobolev_grad": {
+		"enabled": true,
+		"s": 7,
+		"lambda": 5e-1
+	},
+
+	"trainer": {
+		"uniform_noise": {
+			"enabled": false
+		},
+
+		"no_epochs": 50,
+		"no_iters_q_v": 1536,
+		"log_period": 1536,
+
+		"tensorboard": true,
+		"save_dir": "saved/",
+		"verbosity": 2
+	}
+}
