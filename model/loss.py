@@ -32,7 +32,7 @@ class LCC(DataLoss):
         super(LCC, self).__init__()
 
     def forward(self, z):
-        return -1.0 * z.sum()
+        return -1.0 * torch.sum(z, dim=(1, 2, 3, 4))
 
 
 class SSD(DataLoss):
@@ -44,7 +44,7 @@ class SSD(DataLoss):
         super(SSD, self).__init__()
 
     def forward(self, z):
-        return z.sum()
+        return torch.sum(z, dim=(1, 2, 3, 4))
 
 
 """
@@ -85,7 +85,7 @@ class RegLoss(nn.Module, ABC):
         """
 
         D_input = self.diff_op(input)
-        y = torch.sum(D_input ** 2)  # "chi-square" variable / energy
+        y = torch.sum(D_input ** 2, dim=(1, 2, 3, 4))  # "chi-square" variable / energy
 
         return self._loss(y, *args, **kwargs)
 
@@ -119,7 +119,7 @@ class RegLoss_L2(RegLoss):
 
     def __init__(self, w_reg, diff_op=None):
         super(RegLoss_L2, self).__init__(diff_op=diff_op)
-        self.w_reg = nn.Parameter(torch.tensor([w_reg]))
+        self.w_reg = w_reg
 
     def _loss(self, y):
         return 0.5 * self.w_reg * y
@@ -157,7 +157,7 @@ class EntropyMultivariateNormal(Entropy):
             u = kwargs['u']
 
             sigma = torch.exp(0.5 * log_var)
-            return 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2))) + torch.sum(log_var))
+            return 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2), dim=(1, 2, 3, 4))) + torch.sum(log_var, dim=(1, 2, 3, 4)))
         elif len(kwargs) == 4:
             sample = kwargs['sample']
 
@@ -170,7 +170,6 @@ class EntropyMultivariateNormal(Entropy):
             sample_n = (sample - mu) / sigma
             u_n = u / sigma
 
-            t1 = torch.sum(torch.pow(sample_n, 2))
-            t2 = torch.pow(torch.sum(sample_n * u_n), 2) / (1.0 + torch.sum(torch.pow(u_n, 2)))
-
+            t1 = torch.sum(torch.pow(sample_n, 2), dim=(1, 2, 3, 4))
+            t2 = torch.pow(torch.sum(sample_n * u_n, dim=(1, 2, 3, 4)), 2) / (1.0 + torch.sum(torch.pow(u_n, 2), dim=(1, 2, 3, 4)))
             return 0.5 * (t1 - t2)

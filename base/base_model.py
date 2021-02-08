@@ -17,6 +17,10 @@ class BaseModel(nn.Module):
     def encode(self, im_fixed, im_moving):
         pass
 
+    @abstractmethod
+    def print_weights(self):
+        pass
+
     def enable_gradients(self):
         for param in self.parameters():
             param.requires_grad_(True)

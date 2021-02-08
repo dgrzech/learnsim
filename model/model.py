@@ -23,6 +23,9 @@ class CNN_LCC(BaseModel):
                 self.kernel.weight = nn.Parameter(w + epsilon)
                 self.kernel.weight.requires_grad_(learnable)
 
+    def print_weights(self):
+        print(self.kernel.weight)
+
     def encode(self, im_fixed, im_moving):
         u_F = self.kernel(im_fixed) / self.sz
         u_M = self.kernel(im_moving) / self.sz
@@ -55,6 +58,10 @@ class CNN_SSD(BaseModel):
 
                 self.conv1.weight.requires_grad_(learnable)
                 self.agg.weight.requires_grad_(learnable)
+
+    def print_weights(self):
+        print(self.conv1.weight)
+        print(self.agg.weight)
 
     def encode(self, im_fixed, im_moving):
         if self.learnable:
