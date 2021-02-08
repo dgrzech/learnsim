@@ -14,7 +14,7 @@ SEED = 123
 torch.manual_seed(SEED)
 np.random.seed(SEED)
 
-torch.autograd.set_detect_anomaly(False)  # TODO
+torch.autograd.set_detect_anomaly(False)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -32,9 +32,9 @@ def main(config):
 
     metrics = config.init_metrics(no_samples)  # metrics
 
-    # train the model
-    trainer = Trainer(config, data_loader, encoder, losses, transformation_module, registration_module, metrics)
-    trainer.train()
+    # test the model
+    trainer = Trainer(config, data_loader, encoder, losses, transformation_module, registration_module, metrics, test=True)
+    trainer.eval()
 
 
 if __name__ == '__main__':
@@ -44,5 +44,5 @@ if __name__ == '__main__':
     args.add_argument('-r', '--resume', default=None, type=str, help='path to latest checkpoint (default: None)')
     args.add_argument('-d', '--device', default=None, type=str, help='indices of GPUs to enable (default: all)')
 
-    config = ConfigParser.from_args(args, [])
+    config = ConfigParser.from_args(args, test=True)
     main(config)

@@ -387,15 +387,17 @@ class MetricTracker:
         self._data.counts[key] += n
         self._data.average[key] = self._data.total[key] / self._data.counts[key]
 
-    def update_ASD_and_DSC(self, metrics_im_pairs):
+    def update_ASD_and_DSC(self, metrics_im_pairs, test=False):
         for im_pair_idx in metrics_im_pairs:
             ASDs = metrics_im_pairs[im_pair_idx]['ASD']
             DSCs = metrics_im_pairs[im_pair_idx]['DSC']
 
             for structure in ASDs:
-                self.update('ASD/im_pair_' + str(im_pair_idx) + '/' + structure, ASDs[structure])
+                name = 'ASD/im_pair_' + str(im_pair_idx) + '/' + structure if not test else 'test/ASD/im_pair_' + str(im_pair_idx) + '/' + structure
+                self.update(name, ASDs[structure])
             for structure in DSCs:
-                self.update('DSC/im_pair_' + str(im_pair_idx) + '/' + structure, DSCs[structure])
+                name = 'DSC/im_pair_' + str(im_pair_idx) + '/' + structure if not test else 'test/DSC/im_pair_' + str(im_pair_idx) + '/' + structure
+                self.update(name, DSCs[structure])
 
     def avg(self, key):
         return self._data.average[key]

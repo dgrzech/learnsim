@@ -4,6 +4,10 @@ from functools import reduce, partial
 from operator import getitem
 from pathlib import Path
 
+import model.loss as model_loss
+import utils.registration as registration
+import utils.transformation as transformation
+
 from logger import setup_logging
 from utils import read_json, write_json
 
@@ -12,7 +16,7 @@ import logging
 
 
 class ConfigParser:
-    def __init__(self, config, resume=None, modification=None, run_id=None):
+    def __init__(self, config, resume=None, modification=None, run_id=None, test=False):
         """
         class to parse configuration json file
         handles hyperparameters for training, initializations of modules, checkpoint saving and logging module
@@ -25,6 +29,7 @@ class ConfigParser:
         # load config file and apply modification
         self._config = _update_config(config, modification)
         self.resume = resume
+        self.test = test
 
         # set save_dir where trained model and log will be saved.
         save_dir = Path(self.config['trainer']['save_dir'])
@@ -38,17 +43,19 @@ class ConfigParser:
             else:
                 run_id = 'baseline_' + timestamp
 
-        self._save_dir = save_dir / exper_name / run_id / 'checkpoints'
-        self._optimizers_dir = save_dir / exper_name / run_id / 'optimizers'
-        self._tensors_dir = save_dir / exper_name / run_id / 'tensors'
-        self._samples_dir = save_dir / exper_name / run_id / 'samples'
+        dir = save_dir / exper_name / run_id
 
-        self._log_dir = save_dir / exper_name / run_id / 'log'
+        self._save_dir = dir / 'checkpoints'
+        self._optimizers_dir = dir / 'optimizers'
+        self._tensors_dir = dir / 'tensors'
+        self._samples_dir = dir / 'samples'
 
-        self._im_dir = save_dir / exper_name / run_id / 'images'
-        self._fields_dir = save_dir / exper_name / run_id / 'fields'
-        self._grids_dir = save_dir / exper_name / run_id / 'grids'
-        self._norms_dir = save_dir / exper_name / run_id / 'norms'
+        self._log_dir = dir / 'log'
+
+        self._im_dir = dir / 'images'
+        self._fields_dir = dir / 'fields'
+        self._grids_dir = dir / 'grids'
+        self._norms_dir = dir / 'norms'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''
@@ -66,14 +73,14 @@ class ConfigParser:
         self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # copy values of variational parameters
-        if self.resume is not None:
+        if self.resume is not None and not self.test:
             print('copying previous values of variational parameters..')
             copy_tree((self.resume.parent.parent / 'optimizers').absolute().as_posix(), self._optimizers_dir.absolute().as_posix())
             copy_tree((self.resume.parent.parent / 'tensors').absolute().as_posix(), self._tensors_dir.absolute().as_posix())
             print('done!\n')
 
         # save updated config file to the checkpoint dir
-        write_json(self.config, self.save_dir / 'config.json')
+        write_json(self.config, dir / 'config.json')
 
         # configure logging module
         setup_logging(self.log_dir)
@@ -83,8 +90,15 @@ class ConfigParser:
             2: logging.DEBUG
         }
 
+        # segmentation IDs
+        self.structures_dict = {'left_thalamus': 10, 'left_caudate': 11, 'left_putamen': 12,
+                                'left_pallidum': 13, 'brain_stem': 16, 'left_hippocampus': 17,
+                                'left_amygdala': 18, 'left_accumbens': 26, 'right_thalamus': 49,
+                                'right_caudate': 50, 'right_putamen': 51, 'right_pallidum': 52,
+                                'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
+
     @classmethod
-    def from_args(cls, args, options=''):
+    def from_args(cls, args, options='', test=False):
         """
         initialize this class from some cli arguments; used in train, test
         """
@@ -97,7 +111,7 @@ class ConfigParser:
             os.environ["CUDA_VISIBLE_DEVICES"] = args.device
         if args.resume is not None:
             resume = Path(args.resume)
-            cfg_fname = resume.parent / 'config.json'
+            cfg_fname = resume.parent.parent / 'config.json'
         else:
             msg_no_cfg = "Configuration file need to be specified. Add '-c config.json', for example."
             assert args.config is not None, msg_no_cfg
@@ -110,7 +124,7 @@ class ConfigParser:
             config.update(read_json(args.config))
 
         modification = {opt.target: getattr(args, _get_opt_name(opt.flags)) for opt in options}
-        return cls(config, resume, modification)
+        return cls(config, resume, modification, test=test)
 
     def init_obj(self, name, module, *args, **kwargs):
         """
@@ -148,6 +162,30 @@ class ConfigParser:
         assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
         module_args.update(kwargs)
         return partial(getattr(module, module_name), *args, **module_args)
+
+    def init_losses(self):
+        data_loss = self.init_obj('data_loss', model_loss)
+        reg_loss = self.init_obj('reg_loss', model_loss)
+        entropy_loss = self.init_obj('entropy_loss', model_loss)
+
+        return {'data': data_loss, 'regularisation': reg_loss, 'entropy': entropy_loss}
+
+    def init_metrics(self, no_samples):
+        loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term', 'loss/q_v', 'loss/q_f_q_phi']
+
+        ASD = ['ASD/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)]
+        DSC = ['DSC/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)]
+        no_non_diffeomorphic_voxels = ['no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx) for im_pair_idx in range(no_samples)]
+
+        if self.test:
+            ASD.extend(['test/ASD/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)])
+            DSC.extend(['test/DSC/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)])
+            no_non_diffeomorphic_voxels.extend(['test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx) for im_pair_idx in range(no_samples)])
+
+        return loss_terms + ASD + DSC + no_non_diffeomorphic_voxels
+
+    def init_transformation_and_registration_modules(self, dims):
+        return self.init_obj('transformation_module', transformation, dims), self.init_obj('registration_module', registration)
 
     def __getitem__(self, name):
         """Access items like ordinary dict."""

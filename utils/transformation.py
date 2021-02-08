@@ -6,20 +6,20 @@ from torch import nn
 from utils import init_identity_grid_2D, init_identity_grid_3D, transform_coordinates, transform_coordinates_inv
 
 
-class TransformationModel(nn.Module, ABC):
+class TransformationModule(nn.Module, ABC):
     """
     abstract class for a transformation model, e.g. B-splines or a stationary velocity field
     """
 
     def __init__(self):
-        super(TransformationModel, self).__init__()
+        super(TransformationModule, self).__init__()
 
     @abstractmethod
     def forward(self, v):
         pass
 
 
-class SVF_2D(TransformationModel):
+class SVF_2D(TransformationModule):
     """
     stationary velocity field transformation model
     """
@@ -47,7 +47,7 @@ class SVF_2D(TransformationModel):
         return transformation, transform_coordinates_inv(displacement)
 
 
-class SVF_3D(TransformationModel):
+class SVF_3D(TransformationModule):
     """
     stationary velocity field transformation model
     """

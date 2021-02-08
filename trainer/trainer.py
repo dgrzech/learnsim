@@ -1,7 +1,6 @@
 from os import path
 
 import torch
-from torch import nn
 
 from base import BaseTrainer
 from logger import log_fields, log_images, log_q_f, save_optimizer, save_tensors
@@ -13,22 +12,8 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_model, registration_module, metrics, structures_dict):
-        super().__init__(config, data_loader, model, losses, transformation_model, registration_module)
-
-        # all-to-one registration
-        fixed = self.data_loader.fixed
-        var_params_q_f = self.data_loader.var_params_q_f
-
-        self.fixed = dict()
-        self.var_params_q_f = dict()
-
-        for key in fixed:
-            self.fixed[key] = fixed[key].to(self.device, non_blocking=True)
-
-        for key in var_params_q_f:
-            parameter = var_params_q_f[key].to(self.device, non_blocking=True)
-            self.var_params_q_f[key] = nn.Parameter(parameter)
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test=False):
+        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, test)
 
         # optimizers
         self._init_optimizers()
@@ -48,20 +33,21 @@ class Trainer(BaseTrainer):
 
         # metrics
         self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
-        self.structures_dict = structures_dict
-        self.__pre_registration()
+
+        if not self.test:
+            self.__pre_registration()
 
     def __calc_sample_loss(self, moving, v_sample_unsmoothed, var_params_q_v, im_fixed_sample=None):
         v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding_sz)
-        transformation, displacement = self.transformation_model(v_sample)
+        transformation, displacement = self.transformation_module(v_sample)
 
         if self.add_noise_uniform:
             transformation = add_noise_uniform(transformation, self.alpha)
 
-        im_fixed = self.fixed['im'] if im_fixed_sample is None else im_fixed_sample
+        im_fixed = self.fixed_batch['im'] if im_fixed_sample is None else im_fixed_sample
         im_moving_warped = self.registration_module(moving['im'], transformation)
 
-        z = self.model(im_fixed, im_moving_warped, self.fixed['mask'])
+        z = self.model(im_fixed, im_moving_warped, self.fixed_batch['mask'])
         data_term = self.data_loss(z)
 
         if im_fixed_sample is not None:
@@ -122,7 +108,7 @@ class Trainer(BaseTrainer):
             var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
             segs_moving_warped = self.registration_module(moving['seg'], transformation1)
 
-            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.data_loader.spacing)
+            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.spacing)
             self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
             log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
@@ -134,10 +120,10 @@ class Trainer(BaseTrainer):
 
         # draw a sample from q_v
         v_sample = sample_q_v(var_params_q_v, no_samples=1)
-        term1 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=self.fixed['im'])
+        term1 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=self.fixed_batch['im'])
 
         # draw samples from q_f
-        im_fixed_sample1, im_fixed_sample2 = sample_q_f(self.fixed['im'], self.var_params_q_f, no_samples=2)
+        im_fixed_sample1, im_fixed_sample2 = sample_q_f(self.fixed_batch['im'], self.var_params_q_f, no_samples=2)
 
         term2 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample1)
         term3 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample2)
@@ -164,16 +150,14 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             log_q_f(self.writer, self.var_params_q_f)
 
-    def _train_epoch(self, epoch):
+    def _train_epoch(self, epoch=0):
         self.metrics.reset()
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             im_pair_idxs = im_pair_idxs.tolist()
 
-            for key in moving:
-                moving[key] = moving[key].to(self.device, non_blocking=True)
-            for param_key in var_params_q_v:
-                var_params_q_v[param_key] = var_params_q_v[param_key].to(self.device, non_blocking=True)
+            self.__batch_init(moving)
+            self.__moving_init(moving, var_params_q_v)
 
             """
             q_v
@@ -205,30 +189,37 @@ class Trainer(BaseTrainer):
                 if self.optimize_q_phi:
                     self._disable_gradients_model()
 
-        self._save_checkpoint(epoch)
+        if not self.test:
+            self._save_checkpoint(epoch)
 
-    def __pre_registration(self):
-        self.writer.set_step(self.step_global)
-
+    def _test(self, no_samples):
         with torch.no_grad():
             for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
                 im_pair_idxs = im_pair_idxs.tolist()
+                self.__moving_init(moving, var_params_q_v)
 
-                if batch_idx == 0:
-                    self.fixed['im'] = self.fixed['im'].expand_as(moving['im'])
-                    self.fixed['mask'] = self.fixed['mask'].expand_as(moving['mask'])
-                    self.fixed['seg'] = self.fixed['seg'].expand_as(moving['seg'])
+                for sample_no in range(1, no_samples+1):
+                    v_sample_unsmoothed = sample_q_v(var_params_q_v, no_samples=1)
+                    v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding_sz)
 
-                    if self.optimize_q_f:
-                        log_q_f(self.writer, self.var_params_q_f)
+                    transformation, displacement = self.transformation_module(v_sample)
+                    segs_moving_warped = self.registration_module(moving['seg'], transformation)
 
-                for key in moving:
-                    moving[key] = moving[key].to(self.device, non_blocking=True)
-                for param_key in var_params_q_v:
-                    var_params_q_v[param_key] = var_params_q_v[param_key].to(self.device, non_blocking=True)
+                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.spacing)
+                    self.writer.set_step(sample_no)
+                    self.metrics.update_ASD_and_DSC(metrics_im_pairs, test=True)
 
-                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], moving['seg'], self.structures_dict, self.data_loader.spacing)
-                self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+    def __batch_init(self, moving):
+        with torch.no_grad():
+            self.fixed_batch['im'] = self.fixed['im'].expand_as(moving['im'])
+            self.fixed_batch['mask'] = self.fixed['mask'].expand_as(moving['mask'])
+            self.fixed_batch['seg'] = self.fixed['seg'].expand_as(moving['seg'])
+
+    def __moving_init(self, moving, var_params_q_v):
+        for key in moving:
+            moving[key] = moving[key].to(self.device, non_blocking=True)
+        for param_key in var_params_q_v:
+            var_params_q_v[param_key] = var_params_q_v[param_key].to(self.device, non_blocking=True)
 
     def __Sobolev_gradients_init(self):
         with torch.no_grad():
@@ -254,28 +245,6 @@ class Trainer(BaseTrainer):
 
         return var_params_smoothed
 
-    def _init_optimizers(self):
-        if self.optimize_q_v:
-            self.optimizer_q_v = None
-
-        if self.optimize_q_f:
-            self._enable_gradients_variational_parameters(self.var_params_q_f)
-            self.__init_optimizer_q_f()
-            self._disable_gradients_variational_parameters(self.var_params_q_f)
-
-        if self.optimize_q_phi:
-            self._enable_gradients_model()
-            self.__init_optimizer_q_phi()
-            self._disable_gradients_model()
-
-    def __init_optimizer_q_f(self):
-        trainable_params_q_f = filter(lambda p: p.requires_grad, self.var_params_q_f.values())
-        self.optimizer_q_f = self.config.init_obj('optimizer_q_f', torch.optim, trainable_params_q_f)
-
-    def __init_optimizer_q_phi(self):
-        trainable_params_q_phi = filter(lambda p: p.requires_grad, self.model.parameters())
-        self.optimizer_q_phi = self.config.init_obj('optimizer_q_phi', torch.optim, trainable_params_q_phi)
-
     def __init_optimizer_q_v(self, batch_idx, var_params_q_v):
         trainable_params_q_v = filter(lambda p: p.requires_grad, var_params_q_v.values())
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
@@ -285,3 +254,19 @@ class Trainer(BaseTrainer):
         if path.exists(optimizer_path):
             checkpoint = torch.load(optimizer_path)
             self.optimizer_q_v.load_state_dict(checkpoint)
+
+    def __pre_registration(self):
+        self.writer.set_step(self.step_global)
+
+        with torch.no_grad():
+            for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
+                im_pair_idxs = im_pair_idxs.tolist()
+
+                self.__batch_init(moving)
+                self.__moving_init(moving, var_params_q_v)
+
+                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], moving['seg'], self.structures_dict, self.spacing)
+                self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+
+            if self.optimize_q_f:
+                log_q_f(self.writer, self.var_params_q_f)
