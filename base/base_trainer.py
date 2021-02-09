@@ -17,6 +17,8 @@ class BaseTrainer:
         self.data_loader = data_loader
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
+        self.save_dirs = self.data_loader.save_dirs
+
         # setup GPU device if available and move the model and losses into configured device
         self.device, device_ids = self._prepare_device(config['n_gpu'])
 
@@ -50,11 +52,12 @@ class BaseTrainer:
         var_params_q_f = self.data_loader.var_params_q_f
 
         self.fixed = dict()
-        self.fixed_batch = dict()
         self.var_params_q_f = dict()
 
         for key in fixed:
             self.fixed[key] = fixed[key].to(self.device, non_blocking=True)
+
+        self.fixed_batch = self.fixed
 
         # optimisers
         self.optimize_q_v, self.optimize_q_f, self.optimize_q_phi = config['optimize_q_v'], config['optimize_q_f'], config['optimize_q_phi']
@@ -68,11 +71,10 @@ class BaseTrainer:
         self.diff_op = get_module_attr(self.reg_loss, 'diff_op')
 
         # training logic
-        self.start_epoch, self.step_global = 1, 0
-
         cfg_trainer = config['trainer']
 
         self.log_period = int(cfg_trainer['log_period'])
+        self.start_epoch, self.step = 1, 0
         self.no_epochs, self.no_iters_q_v = int(cfg_trainer['no_epochs']), int(cfg_trainer['no_iters_q_v'])
 
         # setup visualization writer instance
@@ -195,7 +197,7 @@ class BaseTrainer:
         filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
         self.logger.info(f'\nsaving checkpoint: {filename}..')
 
-        state = {'epoch': epoch, 'step_global': self.step_global, 'config': self.config}
+        state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
         if self.optimize_q_f:
             for param_key in self.var_params_q_f:
@@ -217,7 +219,7 @@ class BaseTrainer:
         checkpoint = torch.load(resume_path)
 
         self.start_epoch = checkpoint['epoch'] + 1 if not self.test else 1
-        self.step_global = checkpoint['step_global'] + 1 if not self.test else 0
+        self.step = checkpoint['step'] + 1 if not self.test else 0
 
         if self.optimize_q_f:
             for param_key in self.var_params_q_f:

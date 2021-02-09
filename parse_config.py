@@ -43,6 +43,9 @@ class ConfigParser:
             else:
                 run_id = 'baseline_' + timestamp
 
+            if self.test:
+                run_id = 'test_' + run_id
+
         dir = save_dir / exper_name / run_id
 
         self._save_dir = dir / 'checkpoints'
