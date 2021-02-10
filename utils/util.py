@@ -107,51 +107,60 @@ def calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict):
     return DSC_batch
 
 
-def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing):
+def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, GPU=True):
     """
     calculate average surface distances and Dice scores
     """
 
-    metrics = dict()
+    with torch.no_grad():
+        metrics = dict()
 
-    hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
-    overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
+        hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
 
-    seg_fixed_arr = seg_fixed[0].squeeze().cpu().numpy()
-    seg_moving = seg_moving.cpu().numpy()
-    spacing = spacing.numpy().tolist()
+        if GPU:
+            DSCs = calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict)
+        else:
+            overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
 
-    def calc_ASD(seg_fixed_im, seg_moving_im):
-        seg_fixed_contour = sitk.LabelContour(seg_fixed_im)
-        seg_moving_contour = sitk.LabelContour(seg_moving_im)
+        seg_fixed_arr = seg_fixed[0].squeeze().cpu().numpy()
+        seg_moving = seg_moving.cpu().numpy()
+        spacing = spacing.numpy().tolist()
 
-        hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
-        return hausdorff_distance_filter.GetAverageHausdorffDistance()
+        def calc_ASD(seg_fixed_im, seg_moving_im):
+            seg_fixed_contour = sitk.LabelContour(seg_fixed_im)
+            seg_moving_contour = sitk.LabelContour(seg_moving_im)
 
-    def calc_DSC(seg_fixed_im, seg_moving_im):
-        overlap_measures_filter.Execute(seg_fixed_im, seg_moving_im)
-        return overlap_measures_filter.GetDiceCoefficient()
+            hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
+            return hausdorff_distance_filter.GetAverageHausdorffDistance()
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        seg_moving_arr = seg_moving[loop_idx].squeeze()
-        metrics_im_pair = {'ASD': dict(), 'DSC': dict()}
+        def calc_DSC(seg_fixed_im, seg_moving_im):
+            overlap_measures_filter.Execute(seg_fixed_im, seg_moving_im)
+            return overlap_measures_filter.GetDiceCoefficient()
 
-        for structure in structures_dict:
-            label = structures_dict[structure]
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+            seg_moving_arr = seg_moving[loop_idx].squeeze()
+            metrics_im_pair = {'ASD': dict(), 'DSC': dict()}
 
-            seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
-            seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
+            for structure in structures_dict:
+                label = structures_dict[structure]
 
-            seg_fixed_im = sitk.GetImageFromArray(seg_fixed_structure)
-            seg_moving_im = sitk.GetImageFromArray(seg_moving_structure)
+                seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
+                seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
 
-            seg_fixed_im.SetSpacing(spacing)
-            seg_moving_im.SetSpacing(spacing)
+                seg_fixed_im = sitk.GetImageFromArray(seg_fixed_structure)
+                seg_moving_im = sitk.GetImageFromArray(seg_moving_structure)
 
-            metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
-            metrics_im_pair['DSC'][structure] = calc_DSC(seg_fixed_im, seg_moving_im)
+                seg_fixed_im.SetSpacing(spacing)
+                seg_moving_im.SetSpacing(spacing)
 
-        metrics[im_pair_idx] = metrics_im_pair
+                metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+
+                if GPU:
+                    metrics_im_pair['DSC'][structure] = DSCs[im_pair_idx][structure]
+                else:
+                    metrics_im_pair['DSC'][structure] = calc_DSC(seg_fixed_im, seg_moving_im)
+
+            metrics[im_pair_idx] = metrics_im_pair
 
     return metrics
 
