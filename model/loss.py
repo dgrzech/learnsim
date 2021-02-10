@@ -44,7 +44,7 @@ class SSD(DataLoss):
         super(SSD, self).__init__()
 
     def forward(self, z):
-        return torch.sum(z, dim=(1, 2, 3, 4))
+        return 0.5 * torch.sum(z, dim=(1, 2, 3, 4))
 
 
 """

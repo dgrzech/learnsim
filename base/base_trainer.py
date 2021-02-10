@@ -130,7 +130,7 @@ class BaseTrainer:
         full testing logic
         """
 
-        self._train_epoch()
+        self._train_epoch(epoch=1)
         self._test(no_samples=50)
 
     def _prepare_device(self, n_gpu_use):

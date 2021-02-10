@@ -46,8 +46,8 @@ class LossTestMethods(unittest.TestCase):
 
     def test_entropy(self):
         # initialise variance to 1 and the first mode of variation to zero
-        log_var_v = torch.log(torch.ones(self.dims)).to('cuda:0')
-        u_v = torch.zeros(self.dims).to('cuda:0')
+        log_var_v = torch.log(torch.ones(1, 1, *self.dims)).to('cuda:0')
+        u_v = torch.zeros(1, 1, *self.dims).to('cuda:0')
 
         # calculate the entropy
         val = self.entropy(log_var=log_var_v, u=u_v).item()
@@ -55,7 +55,7 @@ class LossTestMethods(unittest.TestCase):
         assert pytest.approx(val, 0.01) == val_true
 
         # initialise variance randomly
-        log_var_v = torch.log(torch.abs(torch.randn(self.dims))).to('cuda:0')
+        log_var_v = torch.log(torch.abs(torch.randn(1, 1, *self.dims))).to('cuda:0')
         sigma_v = torch.exp(0.5 * log_var_v)
 
         # calculate the entropy
@@ -94,4 +94,4 @@ class LossTestMethods(unittest.TestCase):
         loss = self.loss_SSD(z)
         loss_true = self.loss_SSD((im_fixed - im_moving) ** 2 * mask)
 
-        assert torch.allclose(loss, loss_true, atol=0.01)
+        assert torch.allclose(loss_true, loss, atol=0.01)
