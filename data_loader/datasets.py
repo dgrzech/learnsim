@@ -56,7 +56,10 @@ class BiobankDataset(Dataset):
 
     @staticmethod
     def _init_log_var_f(dims):
-        return torch.zeros(dims)
+        sigma_f = 0.1
+        var_f = (sigma_f ** 2) * torch.ones(dims)
+
+        return torch.log(var_f)
 
     @staticmethod
     def _init_u_f(dims):
@@ -76,7 +79,9 @@ class BiobankDataset(Dataset):
 
     @staticmethod
     def _init_log_var_v(dims):
-        var_v = (0.5 ** 2) * torch.ones(dims)
+        sigma_v = 0.5
+        var_v = (sigma_v ** 2) * torch.ones(dims)
+
         return torch.log(var_v)
 
     def _get_log_var_v(self, idx):
