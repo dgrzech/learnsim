@@ -5,11 +5,11 @@ import SimpleITK as sitk
 import numpy as np
 import pytest
 import torch
+from model.loss import SSD
 from skimage import transform
 
 from logger import save_im_to_disk
-from model.loss import SSD
-from utils import init_identity_grid_3D, pixel_to_normalised_3D, rescale_im, standardise_im, RegistrationModule
+from utils import RegistrationModule, init_identity_grid_3D, pixel_to_normalised_3D, rescale_im, standardise_im
 
 # fix random seeds for reproducibility
 SEED = 123

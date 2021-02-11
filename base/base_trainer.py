@@ -1,7 +1,7 @@
 from abc import abstractmethod
-from torch import nn
 
 import torch
+from torch import nn
 
 from logger import TensorboardWriter
 from utils import get_module_attr

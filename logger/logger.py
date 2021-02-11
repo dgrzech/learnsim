@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from tvtk.api import tvtk, write_data
 
-from utils import calc_norm, read_json
+from utils import read_json
 
 
 def setup_logging(save_dir, log_config='logger/logger_config.json', default_level=logging.INFO):

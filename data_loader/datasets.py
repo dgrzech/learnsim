@@ -1,11 +1,12 @@
 from os import listdir, path
-from utils import rescale_im
 
 import SimpleITK as sitk
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
+
+from utils import rescale_im
 
 
 class BiobankDataset(Dataset):

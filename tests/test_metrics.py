@@ -1,12 +1,13 @@
-from data_loader import BiobankDataset
-from parse_config import ConfigParser
-from utils import calc_metrics
-
 import json
+import unittest
+
 import numpy as np
 import pytest
 import torch
-import unittest
+
+from data_loader import BiobankDataset
+from parse_config import ConfigParser
+from utils import calc_metrics
 
 # fix random seeds for reproducibility
 SEED = 123
