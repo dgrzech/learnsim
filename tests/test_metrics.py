@@ -1,4 +1,5 @@
 import json
+import shutil
 import unittest
 
 import numpy as np
@@ -22,13 +23,21 @@ torch.autograd.set_detect_anomaly(True)
 test_config_str = '{' \
                   '"name": "test", "optimize_q_f": false, "optimize_q_phi": false, "optimize_q_v": false,' \
                   '"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_02", "dims": [64, 64, 64], ' \
-                  '"trainer": {"save_dir": "."}' \
+                  '"trainer": {"save_dir": "./temp"}' \
                   '}'
 
 
 class MetricsTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName + '\n')
+
+    def tearDown(self):
+        save_path = './temp/test'
+
+        try:
+            shutil.rmtree(save_path, ignore_errors=True)
+        except:
+            pass
 
     def test_DSC(self):
         test_config_json = json.loads(test_config_str)
@@ -62,4 +71,3 @@ class MetricsTestMethods(unittest.TestCase):
             for structure in structures_dict:
                 val_CPU, val_GPU = DSC_CPU[structure], DSC_GPU[structure]
                 assert pytest.approx(val_CPU, 1e-4) == val_GPU
-
