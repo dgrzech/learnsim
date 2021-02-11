@@ -15,8 +15,8 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 
 torch.autograd.set_detect_anomaly(False)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = False
+torch.backends.cudnn.benchmark = True
 
 
 def main(config):
