@@ -195,53 +195,53 @@ class Trainer(BaseTrainer):
         if not self.test:
             self._save_checkpoint(epoch)
 
+    @torch.no_grad()
     def _test(self, no_samples):
-        with torch.no_grad():
-            save_fixed_image(self.save_dirs, self.spacing, self.fixed['im'])
+        save_fixed_image(self.save_dirs, self.spacing, self.fixed['im'])
 
-            for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
-                im_pair_idxs = im_pair_idxs.tolist()
-                self.__moving_init(moving, var_params_q_v)
-                save_moving_images(im_pair_idxs, self.save_dirs, self.spacing, moving['im'])
+        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
+            im_pair_idxs = im_pair_idxs.tolist()
+            self.__moving_init(moving, var_params_q_v)
+            save_moving_images(im_pair_idxs, self.save_dirs, self.spacing, moving['im'])
 
-                for sample_no in range(1, no_samples+1):
-                    v_sample = sample_q_v(var_params_q_v, no_samples=1)
-                    v_sample_smoothed = SobolevGrad.apply(v_sample, self.S, self.padding_sz)
-                    transformation, displacement = self.transformation_module(v_sample_smoothed)
+            for sample_no in range(1, no_samples+1):
+                v_sample = sample_q_v(var_params_q_v, no_samples=1)
+                v_sample_smoothed = SobolevGrad.apply(v_sample, self.S, self.padding_sz)
+                transformation, displacement = self.transformation_module(v_sample_smoothed)
 
-                    im_moving_warped = self.registration_module(moving['im'], transformation)
-                    segs_moving_warped = self.registration_module(moving['seg'], transformation)
+                im_moving_warped = self.registration_module(moving['im'], transformation)
+                segs_moving_warped = self.registration_module(moving['seg'], transformation)
 
-                    # metrics
-                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.spacing)
-                    self.writer.set_step(sample_no)
-                    self.metrics.update_ASD_and_DSC(metrics_im_pairs, test=True)
+                # metrics
+                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.spacing)
+                self.writer.set_step(sample_no)
+                self.metrics.update_ASD_and_DSC(metrics_im_pairs, test=True)
 
-                    # .nii.gz/.vtk
-                    save_sample(im_pair_idxs, self.save_dirs, self.spacing, sample_no, im_moving_warped, displacement)
+                # .nii.gz/.vtk
+                save_sample(im_pair_idxs, self.save_dirs, self.spacing, sample_no, im_moving_warped, displacement)
 
+    @torch.no_grad()
     def __batch_init(self, moving):
-        with torch.no_grad():
-            if self.fixed_batch['im'].shape != moving['im'].shape:
-                self.fixed_batch['im'] = self.fixed['im'].expand_as(moving['im'])
-                self.fixed_batch['mask'] = self.fixed['mask'].expand_as(moving['mask'])
-                self.fixed_batch['seg'] = self.fixed['seg'].expand_as(moving['seg'])
+        if self.fixed_batch['im'].shape != moving['im'].shape:
+            self.fixed_batch['im'] = self.fixed['im'].expand_as(moving['im'])
+            self.fixed_batch['mask'] = self.fixed['mask'].expand_as(moving['mask'])
+            self.fixed_batch['seg'] = self.fixed['seg'].expand_as(moving['seg'])
 
+    @torch.no_grad()
     def __metrics_init(self):
         self.writer.set_step(self.step)
 
-        with torch.no_grad():
-            for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
-                im_pair_idxs = im_pair_idxs.tolist()
+        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
+            im_pair_idxs = im_pair_idxs.tolist()
 
-                self.__batch_init(moving)
-                self.__moving_init(moving, var_params_q_v)
+            self.__batch_init(moving)
+            self.__moving_init(moving, var_params_q_v)
 
-                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], moving['seg'], self.structures_dict, self.spacing)
-                self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed['seg'], moving['seg'], self.structures_dict, self.spacing)
+            self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
-            if self.optimize_q_f:
-                log_q_f(self.writer, self.var_params_q_f)
+        if self.optimize_q_f:
+            log_q_f(self.writer, self.var_params_q_f)
 
     def __moving_init(self, moving, var_params_q_v):
         for key in moving:
@@ -249,21 +249,21 @@ class Trainer(BaseTrainer):
         for param_key in var_params_q_v:
             var_params_q_v[param_key] = var_params_q_v[param_key].to(self.device, non_blocking=True)
 
+    @torch.no_grad()
     def __Sobolev_gradients_init(self):
-        with torch.no_grad():
-            _s = self.config['Sobolev_grad']['s']
-            _lambda = self.config['Sobolev_grad']['lambda']
-            self.padding_sz = _s // 2
+        _s = self.config['Sobolev_grad']['s']
+        _lambda = self.config['Sobolev_grad']['lambda']
+        self.padding_sz = _s // 2
 
-            S, S_sqrt = Sobolev_kernel_1D(_s, _lambda)
-            S = torch.from_numpy(S).float().unsqueeze(0)
-            S = torch.stack((S, S, S), 0)
+        S, S_sqrt = Sobolev_kernel_1D(_s, _lambda)
+        S = torch.from_numpy(S).float().unsqueeze(0)
+        S = torch.stack((S, S, S), 0)
 
-            S_x = S.unsqueeze(2).unsqueeze(2).to(self.device, non_blocking=True)
-            S_y = S.unsqueeze(2).unsqueeze(4).to(self.device, non_blocking=True)
-            S_z = S.unsqueeze(3).unsqueeze(4).to(self.device, non_blocking=True)
+        S_x = S.unsqueeze(2).unsqueeze(2).to(self.device, non_blocking=True)
+        S_y = S.unsqueeze(2).unsqueeze(4).to(self.device, non_blocking=True)
+        S_z = S.unsqueeze(3).unsqueeze(4).to(self.device, non_blocking=True)
 
-            self.S = {'x': S_x, 'y': S_y, 'z': S_z}
+        self.S = {'x': S_x, 'y': S_y, 'z': S_z}
 
     def __get_var_params_smoothed(self, var_params):
         var_params_smoothed = dict()

@@ -79,88 +79,87 @@ def calc_det_J(nabla):
     return det_J
 
 
+@torch.no_grad()
 def calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict):
     """
     calculate the Dice scores
     """
 
-    with torch.no_grad():
-        DSC_batch = dict()  # dict. with Dice scores for each image pair and segmentation
+    DSC_batch = dict()  # dict. with Dice scores for each image pair and segmentation
 
-        for idx, im_pair in enumerate(im_pair_idxs):
-            DSC = dict()  # dict. with Dice scores for the image pair
+    for idx, im_pair in enumerate(im_pair_idxs):
+        DSC = dict()  # dict. with Dice scores for the image pair
 
-            seg_fixed_im_pair = seg_fixed[idx]
-            seg_moving_im_pair = seg_moving[idx]
+        seg_fixed_im_pair = seg_fixed[idx]
+        seg_moving_im_pair = seg_moving[idx]
 
-            for structure in structures_dict:
-                label = structures_dict[structure]
+        for structure in structures_dict:
+            label = structures_dict[structure]
 
-                numerator = 2.0 * ((seg_fixed_im_pair == label) * (seg_moving_im_pair == label)).sum().item()
-                denominator = (seg_fixed_im_pair == label).sum().item() + (seg_moving_im_pair == label).sum().item()
+            numerator = 2.0 * ((seg_fixed_im_pair == label) * (seg_moving_im_pair == label)).sum().item()
+            denominator = (seg_fixed_im_pair == label).sum().item() + (seg_moving_im_pair == label).sum().item()
 
-                score = numerator / denominator
-                DSC[structure] = score
+            score = numerator / denominator
+            DSC[structure] = score
 
-            DSC_batch[im_pair] = DSC
+        DSC_batch[im_pair] = DSC
 
     return DSC_batch
 
 
+@torch.no_grad()
 def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, GPU=True):
     """
     calculate average surface distances and Dice scores
     """
 
-    with torch.no_grad():
-        metrics = dict()
+    metrics = dict()
+    hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
 
-        hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
+    if GPU:
+        DSCs = calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict)
+    else:
+        overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
 
-        if GPU:
-            DSCs = calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict)
-        else:
-            overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
+    seg_fixed_arr = seg_fixed[0].squeeze().cpu().numpy()
+    seg_moving = seg_moving.cpu().numpy()
+    spacing = spacing.numpy().tolist()
 
-        seg_fixed_arr = seg_fixed[0].squeeze().cpu().numpy()
-        seg_moving = seg_moving.cpu().numpy()
-        spacing = spacing.numpy().tolist()
+    def calc_ASD(seg_fixed_im, seg_moving_im):
+        seg_fixed_contour = sitk.LabelContour(seg_fixed_im)
+        seg_moving_contour = sitk.LabelContour(seg_moving_im)
 
-        def calc_ASD(seg_fixed_im, seg_moving_im):
-            seg_fixed_contour = sitk.LabelContour(seg_fixed_im)
-            seg_moving_contour = sitk.LabelContour(seg_moving_im)
+        hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
+        return hausdorff_distance_filter.GetAverageHausdorffDistance()
 
-            hausdorff_distance_filter.Execute(seg_fixed_contour, seg_moving_contour)
-            return hausdorff_distance_filter.GetAverageHausdorffDistance()
+    def calc_DSC(seg_fixed_im, seg_moving_im):
+        overlap_measures_filter.Execute(seg_fixed_im, seg_moving_im)
+        return overlap_measures_filter.GetDiceCoefficient()
 
-        def calc_DSC(seg_fixed_im, seg_moving_im):
-            overlap_measures_filter.Execute(seg_fixed_im, seg_moving_im)
-            return overlap_measures_filter.GetDiceCoefficient()
+    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        seg_moving_arr = seg_moving[loop_idx].squeeze()
+        metrics_im_pair = {'ASD': dict(), 'DSC': dict()}
 
-        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            seg_moving_arr = seg_moving[loop_idx].squeeze()
-            metrics_im_pair = {'ASD': dict(), 'DSC': dict()}
+        for structure in structures_dict:
+            label = structures_dict[structure]
 
-            for structure in structures_dict:
-                label = structures_dict[structure]
+            seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
+            seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
 
-                seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
-                seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
+            seg_fixed_im = sitk.GetImageFromArray(seg_fixed_structure)
+            seg_moving_im = sitk.GetImageFromArray(seg_moving_structure)
 
-                seg_fixed_im = sitk.GetImageFromArray(seg_fixed_structure)
-                seg_moving_im = sitk.GetImageFromArray(seg_moving_structure)
+            seg_fixed_im.SetSpacing(spacing)
+            seg_moving_im.SetSpacing(spacing)
 
-                seg_fixed_im.SetSpacing(spacing)
-                seg_moving_im.SetSpacing(spacing)
+            metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
 
-                metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+            if GPU:
+                metrics_im_pair['DSC'][structure] = DSCs[im_pair_idx][structure]
+            else:
+                metrics_im_pair['DSC'][structure] = calc_DSC(seg_fixed_im, seg_moving_im)
 
-                if GPU:
-                    metrics_im_pair['DSC'][structure] = DSCs[im_pair_idx][structure]
-                else:
-                    metrics_im_pair['DSC'][structure] = calc_DSC(seg_fixed_im, seg_moving_im)
-
-            metrics[im_pair_idx] = metrics_im_pair
+        metrics[im_pair_idx] = metrics_im_pair
 
     return metrics
 
