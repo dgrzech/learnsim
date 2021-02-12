@@ -1,3 +1,5 @@
+import json
+import os
 from os import listdir, path
 
 import SimpleITK as sitk
@@ -27,6 +29,11 @@ class BiobankDataset(Dataset):
 
         for triple in list(zip(im_filenames, mask_filenames, seg_filenames)):
             self.im_mask_seg_triples.append({'im': triple[0], 'mask': triple[1], 'seg': triple[2]})
+
+        txt_file_path = os.path.join(self.save_paths['dir'], 'idx_to_biobank_ID.json')
+
+        with open(txt_file_path, 'w') as out:
+            json.dump(dict(enumerate(self.im_mask_seg_triples)), out, indent=4, sort_keys=True)
 
         # pre-load the fixed image, the segmentation, the mask, and the parameters of q_f
         fixed_triple = self.im_mask_seg_triples.pop(0)

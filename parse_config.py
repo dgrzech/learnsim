@@ -48,6 +48,7 @@ class ConfigParser:
 
         dir = save_dir / exper_name / run_id
 
+        self._dir = dir
         self._save_dir = dir / 'checkpoints'
         self._optimizers_dir = dir / 'optimizers'
         self._tensors_dir = dir / 'tensors'
@@ -208,6 +209,10 @@ class ConfigParser:
         return self._config
 
     @property
+    def dir(self):
+        return self._dir
+
+    @property
     def save_dir(self):
         return self._save_dir
 
@@ -245,7 +250,7 @@ class ConfigParser:
 
     @property
     def save_dirs(self):
-        return {'optimizers': self.optimizers_dir, 'tensors': self.tensors_dir, 'samples': self.samples_dir,
+        return {'dir': self.dir, 'optimizers': self.optimizers_dir, 'tensors': self.tensors_dir, 'samples': self.samples_dir,
                 'images': self.im_dir, 'fields': self.fields_dir, 'grids': self.grids_dir, 'norms': self.norms_dir}
 
 
