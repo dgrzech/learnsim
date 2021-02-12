@@ -1,9 +1,9 @@
+import socket
 from datetime import datetime
-from tensorboard.plugins.hparams import api as hp
 
 import matplotlib.pyplot as plt
-import socket
 import torch
+import numpy as np
 
 from utils import calc_norm, im_flip
 from .writer import SummaryWriter
@@ -23,7 +23,7 @@ class TensorboardWriter:
 
         self.tb_writer_ftns = {
             'add_scalar', 'add_scalars', 'add_image', 'add_images', 'add_audio', 'add_figure',
-            'add_text', 'add_histogram', 'add_pr_curve', 'add_embedding', 'add_hparams'
+            'add_text', 'add_histogram', 'add_pr_curve', 'add_embedding', 'add_histogram'
         }
 
         self.tag_mode_exceptions = {'add_histogram', 'add_embedding'}
@@ -32,6 +32,11 @@ class TensorboardWriter:
     def set_step(self, step, mode='train'):
         self.mode = mode
         self.step = step
+
+    def write_graph(self, model):
+        im_fixed = im_moving = mask = torch.randn([1, 1, 16, 16, 16])
+        inputs = (im_fixed, im_moving, mask)
+        self.writer.add_graph(model, input_to_model=inputs)
 
     def write_hparams(self, config):
         hostname = socket.gethostname()
@@ -67,6 +72,16 @@ class TensorboardWriter:
             except AttributeError:
                 raise AttributeError("type object '{}' has no attribute '{}'".format(self.selected_module, name))
             return attr
+
+
+"""
+model
+"""
+
+
+def log_model_weights(writer,  model):
+    for name, p in model.named_parameters():
+        writer.add_histogram(name, p, bins=np.arange(-1.5, 1.5, 0.1))
 
 
 """

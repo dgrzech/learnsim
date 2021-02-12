@@ -152,7 +152,10 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
             seg_fixed_im.SetSpacing(spacing)
             seg_moving_im.SetSpacing(spacing)
 
-            metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+            try:
+                metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+            except:
+                metrics_im_pair['ASD'][structure] = np.inf
 
             if GPU:
                 metrics_im_pair['DSC'][structure] = DSCs[im_pair_idx][structure]

@@ -15,9 +15,16 @@ class BaseTrainer:
     def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, test):
         self.config = config
         self.data_loader = data_loader
-        self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
 
+        self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
         self.save_dirs = self.data_loader.save_dirs
+
+        # setup visualization writer instance
+        cfg_trainer = config['trainer']
+
+        self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
+        self.writer.write_graph(model)
+        self.writer.write_hparams(config)
 
         # setup GPU device if available and move the model and losses into configured device
         self.device, device_ids = self._prepare_device(config['n_gpu'])
@@ -71,16 +78,11 @@ class BaseTrainer:
         self.diff_op = get_module_attr(self.reg_loss, 'diff_op')
 
         # training logic
-        cfg_trainer = config['trainer']
 
         self.log_period = int(cfg_trainer['log_period'])
         self.start_epoch, self.step = 1, 0
         self.no_epochs, self.no_iters_q_v = int(cfg_trainer['no_epochs']), int(cfg_trainer['no_iters_q_v'])
         self.no_batches = len(self.data_loader)
-
-        # setup visualization writer instance
-        self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
-        self.writer.write_hparams(config)
 
         # testing
         self.test = test
