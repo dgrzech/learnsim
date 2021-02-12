@@ -157,6 +157,7 @@ class Trainer(BaseTrainer):
         self.metrics.reset()
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
+            self.logger.info(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
             im_pair_idxs = im_pair_idxs.tolist()
 
             self.__batch_init(moving)
@@ -172,6 +173,7 @@ class Trainer(BaseTrainer):
                 self._step_q_v(epoch, im_pair_idxs, moving, var_params_q_v)
                 self._disable_gradients_variational_parameters(var_params_q_v)
 
+                self.logger.info('saving tensors with the variational parameters of q_v..')
                 save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
                 save_optimizer(batch_idx, self.save_dirs, self.optimizer_q_v, 'optimizer_q_v')
 

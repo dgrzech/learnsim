@@ -1,6 +1,8 @@
 from datetime import datetime
+from tensorboard.plugins.hparams import api as hp
 
 import matplotlib.pyplot as plt
+import socket
 import torch
 
 from utils import calc_norm, im_flip
@@ -32,10 +34,16 @@ class TensorboardWriter:
         self.step = step
 
     def write_hparams(self, config):
+        hostname = socket.gethostname()
+        no_GPUs = config['n_gpu']
+
+        cfg_data_loader = config['data_loader']['args']
         cfg_data_loss = config['data_loss']
         cfg_reg_loss = config['reg_loss']['args']
-        hparam_dict = {'model/type': cfg_data_loss['type'], 'reg_loss/w_reg': cfg_reg_loss['w_reg']}
-        self.writer.add_hparams(hparam_dict=hparam_dict, metric_dict={})
+
+        hparam_dict = {'hostname': hostname, 'no_GPUs': no_GPUs, 'batch_size': cfg_data_loader['batch_size'],
+                       'model/type': cfg_data_loss['type'], 'reg_loss/w_reg': cfg_reg_loss['w_reg']}
+        self.writer.add_hparams(hparam_dict, dict())
 
     def __getattr__(self, name):
         """

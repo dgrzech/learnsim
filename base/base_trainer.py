@@ -76,6 +76,7 @@ class BaseTrainer:
         self.log_period = int(cfg_trainer['log_period'])
         self.start_epoch, self.step = 1, 0
         self.no_epochs, self.no_iters_q_v = int(cfg_trainer['no_epochs']), int(cfg_trainer['no_iters_q_v'])
+        self.no_batches = len(self.data_loader)
 
         # setup visualization writer instance
         self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
@@ -97,6 +98,7 @@ class BaseTrainer:
             self._enable_gradients_model()
 
         self.logger.info(model)
+        self.logger.info('')
 
         if self.optimize_q_phi:
             self._disable_gradients_model()
