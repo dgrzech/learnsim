@@ -26,10 +26,10 @@ class SVF_2D(TransformationModule):
 
     def __init__(self, dims, no_steps=12):
         super(SVF_2D, self).__init__()
-        self.no_steps = no_steps
-
         identity_grid = init_identity_grid_2D(dims)
+
         self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
+        self.no_steps = no_steps
 
     def forward(self, v):
         """
@@ -54,10 +54,10 @@ class SVF_3D(TransformationModule):
 
     def __init__(self, dims, no_steps=12):
         super(SVF_3D, self).__init__()
-        self.no_steps = no_steps
-
         identity_grid = init_identity_grid_3D(dims)
+
         self.identity_grid = nn.Parameter(identity_grid, requires_grad=False)
+        self.no_steps = no_steps
 
     def forward(self, v):
         """

@@ -54,7 +54,7 @@
 	"optimizer_q_v": {
 		"type": "Adam",
 		"args": {
-			"lr": 2e-3
+			"lr": 3e-3
 		}
 	},
 

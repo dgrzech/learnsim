@@ -106,6 +106,7 @@ class UtilsTestMethods(unittest.TestCase):
         S_z = S.unsqueeze(3).unsqueeze(4)
 
         padding_sz = _s // 2
+        padding = (padding_sz, ) * 6
 
         # velocity fields
         v = torch.zeros([N, 3, D, H, W]).float()  # velocity fields
@@ -143,7 +144,7 @@ class UtilsTestMethods(unittest.TestCase):
                     assert pytest.approx(v_out_1_z, 1e-5) == 27.0
 
         # separable convolution implemented as 3D convolutions
-        v_out = separable_conv_3D(v, S_x, S_y, S_z, padding_sz)
+        v_out = separable_conv_3D(v, S_x, S_y, S_z, padding)
         v_out_size = v_out.shape
 
         assert v_out_size[0] == 2

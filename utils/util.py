@@ -322,10 +322,8 @@ def separable_conv_3D(field, *args):
         kernel_x = args[0]
         kernel_y = args[1]
         kernel_z = args[2]
+        padding = args[3]
 
-        padding_sz = args[3]
-
-        padding = (padding_sz, padding_sz, padding_sz, padding_sz, padding_sz, padding_sz)
         field_out = F.pad(field_out, padding, mode='replicate')
 
         field_out = F.conv3d(field_out, kernel_z, groups=3)
