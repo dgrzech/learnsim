@@ -30,7 +30,10 @@
 	},
 
 	"transformation_module": {
-		"type": "SVF_3D"
+		"type": "SVF_3D",
+		"args": {
+			"no_steps": 12
+		}
 	},
 	"registration_module": {
 		"type": "RegistrationModule"
