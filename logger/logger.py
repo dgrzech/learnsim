@@ -6,6 +6,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 import torch
+import torch.distributed as dist
 from tvtk.api import tvtk, write_data
 
 from utils import read_json
@@ -238,3 +239,5 @@ def save_tensors(im_pair_idxs, save_dirs, var_params_q_v):
         save_tensor(im_pair_idx, mu_v[loop_idx], 'mu_v')
         save_tensor(im_pair_idx, log_var_v[loop_idx], 'log_var_v')
         save_tensor(im_pair_idx, u_v[loop_idx], 'u_v')
+
+    dist.barrier()

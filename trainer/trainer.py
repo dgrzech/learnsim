@@ -5,7 +5,7 @@ import torch
 from base import BaseTrainer
 from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
     save_optimizer, save_sample, save_tensors
-from utils import MetricTracker, SobolevGrad, Sobolev_kernel_1D, \
+from utils import SobolevGrad, Sobolev_kernel_1D, \
     add_noise_uniform, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
 
@@ -14,8 +14,8 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only=False):
-        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, test_only)
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test_only=False):
+        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test)
 
         # optimizers
         self._init_optimizers()
@@ -32,9 +32,6 @@ class Trainer(BaseTrainer):
 
         if self.add_noise_uniform:
             self.alpha = cfg_trainer['uniform_noise']['magnitude']
-
-        # metrics
-        self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
 
         if not self.test_only:
             self.__metrics_init()
@@ -154,7 +151,9 @@ class Trainer(BaseTrainer):
         self.metrics.reset()
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
-            self.logger.info(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
+            if self.rank == 0:
+                print(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
+
             im_pair_idxs = im_pair_idxs.tolist()
 
             self.__batch_init(moving)
@@ -170,7 +169,9 @@ class Trainer(BaseTrainer):
                 self._step_q_v(epoch, im_pair_idxs, moving, var_params_q_v)
                 self._disable_gradients_variational_parameters(var_params_q_v)
 
-                self.logger.info('saving tensors with the variational parameters of q_v..')
+                if self.rank == 0:
+                    print('saving tensors with the variational parameters of q_v..')
+
                 save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
                 save_optimizer(batch_idx, self.save_dirs, self.optimizer_q_v, 'optimizer_q_v')
 
@@ -188,11 +189,15 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def _test(self, no_samples):
-        self.logger.info('')
+        if self.rank == 0:
+            print('')
+
         save_fixed_image(self.save_dirs, self.spacing, self.fixed['im'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
-            self.logger.info(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
+            if self.rank == 0:
+                print(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
+
             im_pair_idxs = im_pair_idxs.tolist()
 
             self.__batch_init(moving)
@@ -230,9 +235,9 @@ class Trainer(BaseTrainer):
     @torch.no_grad()
     def __moving_init(self, moving, var_params_q_v):
         for key in moving:
-            moving[key] = moving[key].to(self.device, non_blocking=True)
+            moving[key] = moving[key].to(self.rank)
         for param_key in var_params_q_v:
-            var_params_q_v[param_key] = var_params_q_v[param_key].to(self.device, non_blocking=True)
+            var_params_q_v[param_key] = var_params_q_v[param_key].to(self.rank)
 
     @torch.no_grad()
     def __metrics_init(self):
@@ -260,9 +265,9 @@ class Trainer(BaseTrainer):
         S = torch.from_numpy(S).float().unsqueeze(0)
         S = torch.stack((S, S, S), 0)
 
-        S_x = S.unsqueeze(2).unsqueeze(2).to(self.device, non_blocking=True)
-        S_y = S.unsqueeze(2).unsqueeze(4).to(self.device, non_blocking=True)
-        S_z = S.unsqueeze(3).unsqueeze(4).to(self.device, non_blocking=True)
+        S_x = S.unsqueeze(2).unsqueeze(2).to(self.rank)
+        S_y = S.unsqueeze(2).unsqueeze(4).to(self.rank)
+        S_z = S.unsqueeze(3).unsqueeze(4).to(self.rank)
 
         self.padding = (padding_sz, ) * 6
         self.S = {'x': S_x, 'y': S_y, 'z': S_z}

@@ -1,11 +1,12 @@
 from abc import abstractmethod
 
 import torch
-from torch import nn
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from logger import TensorboardWriter
 from model.distributions import LowRankMultivariateNormalDistribution
-from utils import get_module_attr
+from utils import MetricTracker, get_module_attr
 
 
 class BaseTrainer:
@@ -13,8 +14,10 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, test_only):
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics,
+                 rank, test_only):
         self.config = config
+        self.logger = config.get_logger('train')
         self.test_only = test_only
 
         self.data_loader = data_loader
@@ -23,62 +26,41 @@ class BaseTrainer:
 
         # setup visualization writer instance
         cfg_trainer = config['trainer']
-        self.logger = config.get_logger('trainer', cfg_trainer['verbosity'])
 
         self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
         self.writer.write_graph(model)
         self.writer.write_hparams(config)
 
-        # setup GPU device if available and move the model and losses into configured device
-        self.device, device_ids = self._prepare_device(config['no_GPUs'])
-
         # optimisers
-        self.optimize_q_v, self.optimize_q_phi = config['optimize_q_v'],  config['optimize_q_phi']
+        self.optimize_q_v, self.optimize_q_phi = config['optimize_q_v'], config['optimize_q_phi']
+
+        # DDP
+        self.rank = rank
 
         # all-to-one registration
-        self.fixed = self.fixed_batch = {k: v.to(self.device, non_blocking=True) for k, v in self.data_loader.fixed.items()}
+        self.fixed = self.fixed_batch = {k: v.to(rank) for k, v in self.data_loader.fixed.items()}
 
         # model and losses
-        self.model = model.to(self.device)
-
-        # losses
-        self.data_loss = losses['data'].to(self.device)
-        self.reg_loss = losses['regularisation'].to(self.device)
-        self.entropy_loss = losses['entropy'].to(self.device)
+        self.model = model
+        self.data_loss, self.reg_loss, self.entropy_loss = losses['data'], losses['regularisation'], losses['entropy']
 
         # transformation and registration modules
-        self.transformation_module = transformation_module.to(self.device)
-        self.registration_module = registration_module.to(self.device)
+        self.transformation_module = transformation_module
+        self.registration_module = registration_module
 
         if self.optimize_q_phi and not self.test_only:
-            log_var_f, u_f = self.data_loader.dataset.init_log_var_f(self.fixed['im'].shape), self.data_loader.dataset.init_u_f(self.fixed['im'].shape)
-            q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f, loc_learnable=False, cov_learnable=True)
-            self.q_f = q_f.to(self.device)
+            log_var_f = self.data_loader.dataset.init_log_var_f(self.fixed['im'].shape)
+            u_f = self.data_loader.dataset.init_u_f(self.fixed['im'].shape)
 
-        # all-to-one registration
-        self.fixed = self.fixed_batch = {k: v.to(self.device, non_blocking=True) for k, v in self.data_loader.fixed.items()}
-        self.var_params_q_f = {k: nn.Parameter(v.to(self.device, non_blocking=True)) for k, v in self.data_loader.var_params_q_f.items()} if self.optimize_q_phi and not self.test_only else dict()
-
-        # resuming
-        if config.resume is not None:
-            self._resume_checkpoint(config.resume)
-
-        # if multiple GPUs in use
-        if len(device_ids) > 1:
-            self.model = nn.DataParallel(model, device_ids=device_ids)
-
-            self.data_loss = nn.DataParallel(losses['data'], device_ids=device_ids)
-            self.reg_loss = nn.DataParallel(losses['regularisation'], device_ids=device_ids)
-            self.entropy_loss = nn.DataParallel(losses['entropy'], device_ids=device_ids)
-
-            self.transformation_module = nn.DataParallel(transformation_module, device_ids=device_ids)
-            self.registration_module = nn.DataParallel(registration_module, device_ids=device_ids)
-
-            if self.optimize_q_phi and not self.test_only:
-                self.q_f = nn.DataParallel(q_f, device_ids=device_ids)
+            q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f,
+                                                        loc_learnable=False, cov_learnable=True).to(rank)
+            self.q_f = DDP(q_f, device_ids=[rank])
 
         # differential operator for use with the transformation Jacobian
         self.diff_op = get_module_attr(self.reg_loss, 'diff_op')
+
+        # metrics
+        self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
 
         # training logic
         self.start_epoch, self.step = 1, 0
@@ -91,14 +73,15 @@ class BaseTrainer:
             self.optimize_q_phi = False
 
         # prints
-        if self.optimize_q_phi:
-            self._enable_gradients_model()
+        if self.rank == 0:
+            if self.optimize_q_phi:
+                self._enable_gradients_model()
 
-        self.logger.info(model)
-        self.logger.info('')
+            print(model)
+            print('')
 
-        if self.optimize_q_phi:
-            self._disable_gradients_model()
+            if self.optimize_q_phi:
+                self._disable_gradients_model()
 
     @abstractmethod
     def _train_epoch(self):
@@ -132,28 +115,6 @@ class BaseTrainer:
 
         self._train_epoch(epoch=1)
         self._test(no_samples=self.no_samples_test)
-
-    def _prepare_device(self, n_gpu_use):
-        """
-        set up GPU device if available and move model into configured device
-        """
-
-        n_gpu = torch.cuda.device_count()
-
-        if n_gpu_use > 0 and n_gpu == 0:
-            self.logger.warning("Warning: There\'s no GPU available on this machine,"
-                                "training will be performed on CPU.")
-            n_gpu_use = 0
-
-        if n_gpu_use > n_gpu:
-            self.logger.warning("Warning: The number of GPU\'s configured to use is {}, but only {} are available "
-                                "on this machine.".format(n_gpu_use, n_gpu))
-            n_gpu_use = n_gpu
-
-        device = torch.device('cuda:0' if n_gpu_use > 0 else 'cpu')
-        list_ids = list(range(n_gpu_use))
-
-        return device, list_ids
 
     @staticmethod
     def _enable_gradients_variational_parameters(var_params):
@@ -196,33 +157,31 @@ class BaseTrainer:
             self._disable_gradients_model()
 
     def _save_checkpoint(self, epoch):
-        filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
-        self.logger.info(f'\nsaving checkpoint: {filename}..')
+        if self.rank == 0:
+            filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
+            print(f'\nsaving checkpoint: {filename}..')
 
-        state = {'epoch': epoch, 'step': self.step, 'config': self.config}
+            state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
         if self.optimize_q_phi:
-            if isinstance(self.q_f, nn.DataParallel):
-                state['q_f'] = self.q_f.module.state_dict()
-            else:
-                state['q_f'] = self.q_f.state_dict()
-
-            if isinstance(self.model, nn.DataParallel):
-                state['model'] = self.model.module.state_dict()
-            else:
-                state['model'] = self.model.state_dict()
-
+            state['q_f'] = self.q_f.state_dict()
             state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
+
+            state['model'] = self.model.state_dict()
             state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
 
-        torch.save(state, filename)
-        self.logger.info('checkpoint saved\n')
+            torch.save(state, filename)
+            print('checkpoint saved\n')
+
+        dist.barrier()
 
     def _resume_checkpoint(self, resume_path):
-        self.logger.info(f'\nloading checkpoint: {resume_path}')
+        if self.rank == 0:
+            print(f'\nloading checkpoint: {resume_path}')
 
+        map_location = {'cuda:%d' % 0: 'cuda:%d' % self.rank}
         resume_path = str(resume_path)
-        checkpoint = torch.load(resume_path)
+        checkpoint = torch.load(resume_path, map_location=map_location)
 
         self.start_epoch = checkpoint['epoch'] + 1 if not self.test_only else 1
         self.step = checkpoint['step'] + 1 if not self.test_only else 0
@@ -230,7 +189,9 @@ class BaseTrainer:
         if self.test_only:
             self.model.load_state_dict(checkpoint['model'])
             self._disable_gradients_model()
-            self.logger.info('checkpoint loaded\n')
+
+            if self.rank == 0:
+                print('checkpoint loaded\n')
 
             return
 
@@ -246,6 +207,9 @@ class BaseTrainer:
             self.model.load_state_dict(checkpoint['model'])
 
             self._disable_gradients_model()
-            self.logger.info('checkpoint loaded\n')
+
+            if self.rank == 0:
+                print('checkpoint loaded\n')
 
             return
+

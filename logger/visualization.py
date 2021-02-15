@@ -33,10 +33,11 @@ class TensorboardWriter:
         self.mode = mode
         self.step = step
 
-    def write_graph(self, model):
-        im_fixed = im_moving = mask = torch.randn([1, 1, 16, 16, 16])
-        inputs = (im_fixed, im_moving, mask)
-        self.writer.add_graph(model, input_to_model=inputs)
+    def write_graph(self, model):  # FIXME
+        # im_fixed = im_moving = mask = torch.randn([1, 1, 16, 16, 16])
+        # inputs = (im_fixed, im_moving, mask)
+        # self.writer.add_graph(model, input_to_model=inputs)
+        pass
 
     def write_hparams(self, config):
         hostname = socket.gethostname()

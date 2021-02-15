@@ -1,18 +1,18 @@
+import logging
+import os
 from datetime import datetime
 from distutils.dir_util import copy_tree
-from functools import reduce, partial
+from functools import partial, reduce
 from operator import getitem
 from pathlib import Path
 
 import model.loss as model_loss
+
+import data_loader.data_loaders as module_data
 import utils.registration as registration
 import utils.transformation as transformation
-
 from logger import setup_logging
 from utils import read_json, write_json
-
-import os
-import logging
 
 
 class ConfigParser:
@@ -167,10 +167,13 @@ class ConfigParser:
         module_args.update(kwargs)
         return partial(getattr(module, module_name), *args, **module_args)
 
-    def init_losses(self):
-        data_loss = self.init_obj('data_loss', model_loss)
-        reg_loss = self.init_obj('reg_loss', model_loss)
-        entropy_loss = self.init_obj('entropy_loss', model_loss)
+    def init_data_loader(self, rank):
+        return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=rank, save_dirs=self.save_dirs)
+
+    def init_losses(self, rank):
+        data_loss = self.init_obj('data_loss', model_loss).to(rank)
+        reg_loss = self.init_obj('reg_loss', model_loss).to(rank)
+        entropy_loss = self.init_obj('entropy_loss', model_loss).to(rank)
 
         return {'data': data_loss, 'regularisation': reg_loss, 'entropy': entropy_loss}
 
@@ -188,17 +191,18 @@ class ConfigParser:
 
         return loss_terms + ASD + DSC + no_non_diffeomorphic_voxels
 
-    def init_transformation_and_registration_modules(self, dims):
-        return self.init_obj('transformation_module', transformation, dims), self.init_obj('registration_module', registration)
+    def init_transformation_and_registration_modules(self, dims, rank):
+        return self.init_obj('transformation_module', transformation, dims).to(rank), self.init_obj('registration_module', registration).to(rank)
 
     def __getitem__(self, name):
         """Access items like ordinary dict."""
         return self.config[name]
 
-    def get_logger(self, name, verbosity=2):
-        msg_verbosity = \
-            'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, self.log_levels.keys())
+    def get_logger(self, name):
+        verbosity = self['trainer']['verbosity']
+        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, self.log_levels.keys())
         assert verbosity in self.log_levels, msg_verbosity
+
         logger = logging.getLogger(name)
         logger.setLevel(self.log_levels[verbosity])
         return logger

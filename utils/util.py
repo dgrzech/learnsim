@@ -187,7 +187,7 @@ def calc_norm(field):
 
 
 def get_module_attr(module, name):
-    if isinstance(module, nn.DataParallel):
+    if isinstance(module, nn.DataParallel) or isinstance(module, nn.parallel.DistributedDataParallel):
         return getattr(module.module, name)
 
     return getattr(module, name)
