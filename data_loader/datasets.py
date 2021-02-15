@@ -35,7 +35,7 @@ class BiobankDataset(Dataset):
         with open(txt_file_path, 'w') as out:
             json.dump(dict(enumerate(self.im_mask_seg_triples)), out, indent=4, sort_keys=True)
 
-        # pre-load the fixed image, the segmentation, the mask, and the parameters of q_f
+        # pre-load the fixed image, the segmentation, and the mask
         fixed_triple = self.im_mask_seg_triples.pop(0)
 
         im_fixed_path = fixed_triple['im']
@@ -46,11 +46,7 @@ class BiobankDataset(Dataset):
         mask_fixed = self._get_mask(mask_fixed_path).unsqueeze(0)
         seg_fixed = self._get_seg(seg_fixed_path).unsqueeze(0)
 
-        log_var_f = self._init_log_var_f(self.dims_im)
-        u_f = self._init_u_f(self.dims_im)
-
         self.fixed = {'im': im_fixed, 'mask': mask_fixed, 'seg': seg_fixed}
-        self.var_params_q_f = {'log_var': log_var_f, 'u': u_f}
 
     def __len__(self):
         return len(self.im_mask_seg_triples)
@@ -61,17 +57,6 @@ class BiobankDataset(Dataset):
             return sorted([path.join(p, f) for f in listdir(p) if path.isfile(path.join(p, f))])
 
         return ['' for _ in range(2)]
-
-    @staticmethod
-    def _init_log_var_f(dims):
-        sigma_f = 0.1
-        var_f = (sigma_f ** 2) * torch.ones(dims)
-
-        return torch.log(var_f)
-
-    @staticmethod
-    def _init_u_f(dims):
-        return torch.zeros(dims)
 
     @staticmethod
     def _init_mu_v(dims):
@@ -111,6 +96,17 @@ class BiobankDataset(Dataset):
             return torch.load(tensor_path)
         else:
             return self._init_u_v(self.dims_v)
+
+    @staticmethod
+    def init_log_var_f(dims):
+        sigma = 0.1
+        var = (sigma ** 2) * torch.ones(dims)
+
+        return torch.log(var)
+
+    @staticmethod
+    def init_u_f(dims):
+        return torch.zeros(dims)
 
     def _get_image(self, im_path):
         im = sitk.ReadImage(im_path, sitk.sitkFloat32)

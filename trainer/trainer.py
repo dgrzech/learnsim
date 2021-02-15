@@ -3,10 +3,10 @@ from os import path
 import torch
 
 from base import BaseTrainer
-from logger import log_fields, log_images, log_q_f, log_model_weights, \
-    save_fixed_image, save_moving_images, save_optimizer, save_sample, save_tensors
+from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
+    save_optimizer, save_sample, save_tensors
 from utils import MetricTracker, SobolevGrad, Sobolev_kernel_1D, \
-    add_noise_uniform, calc_det_J, calc_metrics, sample_q_f, sample_q_v
+    add_noise_uniform, calc_det_J, calc_metrics, sample_q_v
 
 
 class Trainer(BaseTrainer):
@@ -126,7 +126,7 @@ class Trainer(BaseTrainer):
         term1 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=self.fixed_batch['im'])
 
         # draw samples from q_f
-        im_fixed_sample1, im_fixed_sample2 = sample_q_f(self.fixed_batch['im'], self.var_params_q_f, no_samples=2)
+        im_fixed_sample1, im_fixed_sample2 = self.q_f(no_samples=2)
 
         term2 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample1)
         term3 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample2)
@@ -134,16 +134,14 @@ class Trainer(BaseTrainer):
         loss_q_f_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
         loss_q_f_q_phi /= n
 
-        if self.optimize_q_f:
-            self.optimizer_q_f.zero_grad()
         if self.optimize_q_phi:
+            self.optimizer_q_f.zero_grad()
             self.optimizer_q_phi.zero_grad()
 
         loss_q_f_q_phi.backward()  # backprop
 
-        if self.optimize_q_f:
-            self.optimizer_q_f.step()
         if self.optimize_q_phi:
+            self.optimizer_q_f.step()
             self.optimizer_q_phi.step()
 
         # tensorboard
@@ -151,8 +149,8 @@ class Trainer(BaseTrainer):
         self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item())
 
         with torch.no_grad():
-            log_q_f(self.writer, self.var_params_q_f)
             log_model_weights(self.writer, self.model)
+            log_q_f(self.writer, self.q_f)
 
     def _train_epoch(self, epoch=0):
         self.metrics.reset()
@@ -179,21 +177,13 @@ class Trainer(BaseTrainer):
                 save_optimizer(batch_idx, self.save_dirs, self.optimizer_q_v, 'optimizer_q_v')
 
             """
-            q_f and q_phi
+            q_phi
             """
 
-            if self.optimize_q_f or self.optimize_q_phi:
-                if self.optimize_q_f:
-                    self._enable_gradients_variational_parameters(self.var_params_q_f)
-                if self.optimize_q_phi:
-                    self._enable_gradients_model()
-
+            if self.optimize_q_phi:
+                self._enable_gradients_model()
                 self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
-
-                if self.optimize_q_f:
-                    self._disable_gradients_variational_parameters(self.var_params_q_f)
-                if self.optimize_q_phi:
-                    self._disable_gradients_model()
+                self._disable_gradients_model()
 
         if not self.test:
             self._save_checkpoint(epoch)
@@ -251,8 +241,8 @@ class Trainer(BaseTrainer):
             metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], moving['seg'], self.structures_dict, self.spacing)
             self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
-        if self.optimize_q_f:
-            log_q_f(self.writer, self.var_params_q_f)
+        if self.optimize_q_phi:
+            log_q_f(self.writer, self.q_f)
 
     @torch.no_grad()
     def __Sobolev_gradients_init(self):

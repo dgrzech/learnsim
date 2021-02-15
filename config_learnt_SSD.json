@@ -1,9 +1,8 @@
 {
 	"name": "SSD",
-	"n_gpu": 2,
+	"no_GPUs": 2,
 
 	"optimize_q_v": true,
-	"optimize_q_f": true,
 	"optimize_q_phi": true,
 
 	"model": {

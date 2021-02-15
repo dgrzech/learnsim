@@ -3,6 +3,47 @@ import math
 import torch
 from torch import nn
 
+
+class LowRankMultivariateNormalDistribution(nn.Module):
+    def __init__(self, mu=None, log_var=None, u=None, loc_learnable=False, cov_learnable=False):
+        super(LowRankMultivariateNormalDistribution, self).__init__()
+        self.loc_learnable, self.cov_learnable = loc_learnable, cov_learnable
+
+        if mu is None:
+            mu = torch.Tensor([0.0])
+        if log_var is None:
+            log_var = torch.log(torch.Tensor([1.0]))
+        if u is None:
+            u = torch.Tensor([0.0])
+
+        with torch.no_grad():
+            self.mu = nn.Parameter(mu, requires_grad=loc_learnable)
+            self.log_var = nn.Parameter(log_var, requires_grad=cov_learnable)
+            self.u = nn.Parameter(u, requires_grad=cov_learnable)
+
+    def enable_gradients(self):
+        self.mu.requires_grad_(self.loc_learnable)
+        self.log_var.requires_grad_(self.cov_learnable)
+        self.u.requires_grad_(self.cov_learnable)
+
+    def disable_gradients(self):
+        self.mu.requires_grad_(False)
+        self.log_var.requires_grad_(False)
+        self.u.requires_grad_(False)
+
+    def forward(self, no_samples=1):
+        sigma = torch.exp(0.5 * self.log_var)
+
+        eps = torch.randn(sigma.shape, device=sigma.device)
+        x = torch.randn(1, device=self.u.device)
+
+        if no_samples == 1:
+            return self.mu + eps * sigma + x * self.u
+        elif no_samples == 2:
+            return self.mu + (eps * sigma + x * self.u), self.mu - (eps * sigma + x * self.u)
+
+        raise NotImplementedError
+
 """
 Useful distributions
 """

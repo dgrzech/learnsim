@@ -2,10 +2,10 @@ import socket
 from datetime import datetime
 
 import matplotlib.pyplot as plt
-import torch
 import numpy as np
+import torch
 
-from utils import calc_norm, im_flip
+from utils import calc_norm, get_module_attr, im_flip
 from .writer import SummaryWriter
 
 
@@ -40,7 +40,7 @@ class TensorboardWriter:
 
     def write_hparams(self, config):
         hostname = socket.gethostname()
-        no_GPUs = config['n_gpu']
+        no_GPUs = config['no_GPUs']
 
         cfg_data_loader = config['data_loader']['args']
         cfg_data_loss = config['data_loss']
@@ -111,14 +111,14 @@ def var_params_q_f_grid(log_var_f_slices, u_f_slices):
     return fig
 
 
-def log_q_f(writer,  var_params_q_f):
-    log_var_f, u_f = var_params_q_f['log_var'].cpu().numpy(), var_params_q_f['u'].cpu().numpy()
+def log_q_f(writer,  q_f):
+    log_var_f, u_f = get_module_attr(q_f, 'log_var').data.cpu().numpy(), get_module_attr(q_f, 'u').data.cpu().numpy()
     mid_idxs = get_im_or_field_mid_slices_idxs(log_var_f)
 
-    log_var_f = log_var_f[0]
+    log_var_f = log_var_f[0, 0]
     log_var_f_slices = get_slices(log_var_f, mid_idxs)
 
-    u_f = u_f[0]
+    u_f = u_f[0, 0]
     u_f_slices = get_slices(u_f, mid_idxs)
 
     writer.add_figure('q_f', var_params_q_f_grid(log_var_f_slices, u_f_slices))

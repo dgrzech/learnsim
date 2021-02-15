@@ -4,6 +4,7 @@ import torch
 from torch import nn
 
 from logger import TensorboardWriter
+from model.distributions import LowRankMultivariateNormalDistribution
 from utils import get_module_attr
 
 
@@ -28,7 +29,13 @@ class BaseTrainer:
         self.writer.write_hparams(config)
 
         # setup GPU device if available and move the model and losses into configured device
-        self.device, device_ids = self._prepare_device(config['n_gpu'])
+        self.device, device_ids = self._prepare_device(config['no_GPUs'])
+
+        # optimisers
+        self.optimize_q_v, self.optimize_q_phi = config['optimize_q_v'],  config['optimize_q_phi']
+
+        # all-to-one registration
+        self.fixed = self.fixed_batch = {k: v.to(self.device, non_blocking=True) for k, v in self.data_loader.fixed.items()}
 
         # model and losses
         self.model = model.to(self.device)
@@ -42,6 +49,12 @@ class BaseTrainer:
         self.transformation_module = transformation_module.to(self.device)
         self.registration_module = registration_module.to(self.device)
 
+        if self.optimize_q_phi:
+            log_var_f, u_f = self.data_loader.dataset.init_log_var_f(self.fixed['im'].shape), self.data_loader.dataset.init_u_f(self.fixed['im'].shape)
+            q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f,
+                                                        loc_learnable=False, cov_learnable=True)
+            self.q_f = q_f.to(self.device)
+
         # if multiple GPUs in use
         if len(device_ids) > 1:
             self.model = nn.DataParallel(model, device_ids=device_ids)
@@ -53,12 +66,8 @@ class BaseTrainer:
             self.transformation_module = nn.DataParallel(transformation_module, device_ids=device_ids)
             self.registration_module = nn.DataParallel(registration_module, device_ids=device_ids)
 
-        # optimisers
-        self.optimize_q_v, self.optimize_q_f, self.optimize_q_phi = config['optimize_q_v'], config['optimize_q_f'], config['optimize_q_phi']
-
-        # all-to-one registration
-        self.fixed = self.fixed_batch = {k: v.to(self.device, non_blocking=True) for k, v in self.data_loader.fixed.items()}
-        self.var_params_q_f = {k: nn.Parameter(v.to(self.device, non_blocking=True)) for k, v in self.data_loader.var_params_q_f.items()} if self.optimize_q_f else dict()
+            if self.optimize_q_phi:
+                self.q_f = nn.DataParallel(q_f, device_ids=device_ids)
 
         # differential operator for use with the transformation Jacobian
         self.diff_op = get_module_attr(self.reg_loss, 'diff_op')
@@ -74,7 +83,7 @@ class BaseTrainer:
 
         if self.test:
             self._disable_gradients_model()
-            self.optimize_q_f = self.optimize_q_phi = False
+            self.optimize_q_phi = False
 
         # resuming
         if config.resume is not None:
@@ -156,13 +165,15 @@ class BaseTrainer:
             var_params[param_key].requires_grad_(False)
 
     def _enable_gradients_model(self):
+        get_module_attr(self.q_f, 'enable_gradients')()
         get_module_attr(self.model, 'enable_gradients')()
 
     def _disable_gradients_model(self):
+        get_module_attr(self.q_f, 'disable_gradients')
         get_module_attr(self.model, 'disable_gradients')()
 
     def __init_optimizer_q_f(self):
-        trainable_params_q_f = filter(lambda p: p.requires_grad, self.var_params_q_f.values())
+        trainable_params_q_f = filter(lambda p: p.requires_grad, self.q_f.parameters())
         self.optimizer_q_f = self.config.init_obj('optimizer_q_f', torch.optim, trainable_params_q_f)
 
     def __init_optimizer_q_phi(self):
@@ -173,13 +184,9 @@ class BaseTrainer:
         if self.optimize_q_v:
             self.optimizer_q_v = None
 
-        if self.optimize_q_f:
-            self._enable_gradients_variational_parameters(self.var_params_q_f)
-            self.__init_optimizer_q_f()
-            self._disable_gradients_variational_parameters(self.var_params_q_f)
-
         if self.optimize_q_phi:
             self._enable_gradients_model()
+            self.__init_optimizer_q_f()
             self.__init_optimizer_q_phi()
             self._disable_gradients_model()
 
@@ -189,13 +196,10 @@ class BaseTrainer:
 
         state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
-        if self.optimize_q_f:
-            for param_key in self.var_params_q_f:
-                state[param_key] = self.var_params_q_f[param_key]
-
+        if self.optimize_q_phi:
+            state['q_f'] = self.q_f.state_dict()
             state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
 
-        if self.optimize_q_phi:
             state['model'] = self.model.state_dict()
             state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
 
@@ -211,19 +215,17 @@ class BaseTrainer:
         self.start_epoch = checkpoint['epoch'] + 1 if not self.test else 1
         self.step = checkpoint['step'] + 1 if not self.test else 0
 
-        if self.optimize_q_f:
-            for param_key in self.var_params_q_f:
-                self.var_params_q_f[param_key] = checkpoint[param_key]
-
-            self._enable_gradients_variational_parameters(self.var_params_q_f)
-            self.__init_optimizer_q_f()
-            self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
-            self._disable_gradients_variational_parameters(self.var_params_q_f)
-
         if self.optimize_q_phi:
-            self.model.load_state_dict(checkpoint['model'])
             self._enable_gradients_model()
+
+            self._init_optimizer_q_f()
+            self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
+            self.q_f.load_state_dict(checkpoint['q_f'])
+
             self.__init_optimizer_q_phi()
+            self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
+            self.model.load_state_dict(checkpoint['model'])
+
             self._disable_gradients_model()
 
         if self.test:
