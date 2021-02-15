@@ -22,7 +22,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 1.2
+			"w_reg": 1.0
 		}
 	},
 	"entropy_loss": {
@@ -42,7 +42,7 @@
 	"optimizer_q_f": {
 		"type": "Adam",
 		"args": {
-			"lr": 2e-3
+			"lr": 5e-3
 		}
 	},
 	"optimizer_q_phi": {
@@ -80,8 +80,8 @@
 		},
 
 		"no_epochs": 50,
-		"no_iters_q_v": 1536,
-		"log_period": 1536,
+		"no_iters_q_v": 2048,
+		"log_period": 1024,
 
 		"tensorboard": true,
 		"save_dir": "saved/",

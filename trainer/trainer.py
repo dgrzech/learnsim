@@ -148,7 +148,7 @@ class Trainer(BaseTrainer):
 
         # tensorboard
         self.writer.set_step(self.step)
-        self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item(), n=n)
+        self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item())
 
         with torch.no_grad():
             log_q_f(self.writer, self.var_params_q_f)

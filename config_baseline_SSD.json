@@ -20,7 +20,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 1.2
+			"w_reg": 1.0
 		}
 	},
 	"entropy_loss": {
@@ -37,18 +37,6 @@
 		"type": "RegistrationModule"
 	},
 
-	"optimizer_q_f": {
-		"type": "Adam",
-		"args": {
-			"lr": 2e-3
-		}
-	},
-	"optimizer_q_phi": {
-		"type": "Adam",
-		"args": {
-			"lr": 1e-4
-		}
-	},
 	"optimizer_q_v": {
 		"type": "Adam",
 		"args": {
@@ -77,9 +65,9 @@
 			"enabled": false
 		},
 
-		"no_epochs": 4,
-		"no_iters_q_v": 512,
-		"log_period": 256,
+		"no_epochs": 2,
+		"no_iters_q_v": 1024,
+		"log_period": 512,
 
 		"tensorboard": true,
 		"save_dir": "saved/",
