@@ -204,6 +204,10 @@ class Trainer(BaseTrainer):
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             im_pair_idxs = im_pair_idxs.tolist()
+
+            self.__batch_init(moving)
+            self.__moving_init(moving, var_params_q_v)
+
             save_moving_images(im_pair_idxs, self.save_dirs, self.spacing, moving['im'])
 
             for sample_no in range(1, no_samples+1):
