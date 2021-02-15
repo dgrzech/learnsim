@@ -113,6 +113,7 @@ class BaseTrainer:
 
         for epoch in range(self.start_epoch, self.no_epochs+1):
             self._train_epoch(epoch)
+            self.no_iters_q_v = self.no_iters_q_v / 2 if epoch == 3 else self.no_iters_q_v
 
     def eval(self):
         """

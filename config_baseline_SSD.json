@@ -66,8 +66,8 @@
 		},
 
 		"no_epochs": 2,
-		"no_iters_q_v": 1024,
-		"log_period": 512,
+		"no_iters_q_v": 2048,
+		"log_period": 1024,
 
 		"tensorboard": true,
 		"save_dir": "saved/",
