@@ -49,7 +49,7 @@ class CNN_SSD(BaseModel):
                 self.conv1 = nn.Conv3d(1, no_feature_maps, kernel_size=kernel_size, stride=1, padding=s, bias=False, padding_mode='replicate')
                 self.agg = nn.Conv1d(no_feature_maps, 1, kernel_size=1, stride=1, bias=False)
 
-                w1 = self.conv1.weight.abs() * 1e-5
+                w1 = self.conv1.weight * 1e-5
                 w1_init = torch.rand_like(w1[:, :, s, s, s])
                 w1[:, :, s, s, s] = w1_init / w1_init.sum()
 
