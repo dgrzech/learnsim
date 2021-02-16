@@ -190,9 +190,11 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def _test(self, no_samples):
+        self.logger.info('')
         save_fixed_image(self.save_dirs, self.spacing, self.fixed['im'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
+            self.logger.info(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
             im_pair_idxs = im_pair_idxs.tolist()
 
             self.__batch_init(moving)
