@@ -68,6 +68,8 @@
 		"no_iters_q_v": 2048,
 		"log_period": 1024,
 
+		"no_samples_test": 50,
+
 		"tensorboard": true,
 		"save_dir": "saved/",
 		"verbosity": 2

@@ -14,8 +14,8 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test=False):
-        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, test)
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only=False):
+        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, test_only)
 
         # optimizers
         self._init_optimizers()
@@ -36,7 +36,7 @@ class Trainer(BaseTrainer):
         # metrics
         self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
 
-        if not self.test:
+        if not self.test_only:
             self.__metrics_init()
 
     def __calc_sample_loss(self, moving, v_sample_unsmoothed, var_params_q_v, im_fixed_sample=None):
@@ -113,7 +113,7 @@ class Trainer(BaseTrainer):
             metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)
             self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
-            if not self.test:
+            if not self.test_only:
                 log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
                 log_images(self.writer, im_pair_idxs, self.fixed['im'], moving['im'], im_moving_warped1)
 
@@ -185,7 +185,7 @@ class Trainer(BaseTrainer):
                 self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
                 self._disable_gradients_model()
 
-        if not self.test:
+        if not self.test_only:
             self._save_checkpoint(epoch)
 
     @torch.no_grad()

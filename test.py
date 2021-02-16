@@ -33,8 +33,8 @@ def main(config):
     metrics = config.init_metrics(no_samples)  # metrics
 
     # test the model
-    trainer = Trainer(config, data_loader, encoder, losses, transformation_module, registration_module, metrics, test=True)
-    trainer.eval()
+    trainer = Trainer(config, data_loader, encoder, losses, transformation_module, registration_module, metrics, test_only=True)
+    trainer.test()
 
 
 if __name__ == '__main__':

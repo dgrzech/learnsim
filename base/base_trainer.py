@@ -13,10 +13,9 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, test):
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, test_only):
         self.config = config
-        self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
-        self.test = test
+        self.test_only = test_only
 
         self.data_loader = data_loader
         self.spacing, self.structures_dict = self.data_loader.spacing, self.config.structures_dict
@@ -24,6 +23,7 @@ class BaseTrainer:
 
         # setup visualization writer instance
         cfg_trainer = config['trainer']
+        self.logger = config.get_logger('trainer', cfg_trainer['verbosity'])
 
         self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
         self.writer.write_graph(model)
@@ -50,7 +50,7 @@ class BaseTrainer:
         self.transformation_module = transformation_module.to(self.device)
         self.registration_module = registration_module.to(self.device)
 
-        if self.optimize_q_phi and not self.test:
+        if self.optimize_q_phi and not self.test_only:
             log_var_f, u_f = self.data_loader.dataset.init_log_var_f(self.fixed['im'].shape), self.data_loader.dataset.init_u_f(self.fixed['im'].shape)
             q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f, loc_learnable=False, cov_learnable=True)
             self.q_f = q_f.to(self.device)
@@ -66,7 +66,7 @@ class BaseTrainer:
             self.transformation_module = nn.DataParallel(transformation_module, device_ids=device_ids)
             self.registration_module = nn.DataParallel(registration_module, device_ids=device_ids)
 
-            if self.optimize_q_phi and not self.test:
+            if self.optimize_q_phi and not self.test_only:
                 self.q_f = nn.DataParallel(q_f, device_ids=device_ids)
 
         # differential operator for use with the transformation Jacobian
@@ -82,7 +82,8 @@ class BaseTrainer:
         if config.resume is not None:
             self._resume_checkpoint(config.resume)
 
-        if self.test:
+        if self.test_only:
+            self.no_samples_test = cfg_trainer['no_samples_test']
             self.optimize_q_phi = False
 
         # prints
@@ -120,13 +121,13 @@ class BaseTrainer:
             self._train_epoch(epoch)
             self.no_iters_q_v = self.no_iters_q_v / 2 if epoch == 3 else self.no_iters_q_v
 
-    def eval(self):
+    def test(self):
         """
         full testing logic
         """
 
         self._train_epoch(epoch=1)
-        self._test(no_samples=50)
+        self._test(no_samples=self.no_samples_test)
 
     def _prepare_device(self, n_gpu_use):
         """
@@ -161,13 +162,13 @@ class BaseTrainer:
             var_params[param_key].requires_grad_(False)
 
     def _enable_gradients_model(self):
-        if not self.test:
+        if not self.test_only:
             get_module_attr(self.q_f, 'enable_gradients')()
 
         get_module_attr(self.model, 'enable_gradients')()
 
     def _disable_gradients_model(self):
-        if not self.test:
+        if not self.test_only:
             get_module_attr(self.q_f, 'disable_gradients')
 
         get_module_attr(self.model, 'disable_gradients')()
@@ -219,10 +220,10 @@ class BaseTrainer:
         resume_path = str(resume_path)
         checkpoint = torch.load(resume_path)
 
-        self.start_epoch = checkpoint['epoch'] + 1 if not self.test else 1
-        self.step = checkpoint['step'] + 1 if not self.test else 0
+        self.start_epoch = checkpoint['epoch'] + 1 if not self.test_only else 1
+        self.step = checkpoint['step'] + 1 if not self.test_only else 0
 
-        if self.test:
+        if self.test_only:
             self.model.load_state_dict(checkpoint['model'])
             self._disable_gradients_model()
             self.logger.info('checkpoint loaded\n')
