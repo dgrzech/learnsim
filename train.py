@@ -1,9 +1,7 @@
 import argparse
-import os
 
 import torch
 import torch.distributed as dist
-import torch.multiprocessing as mp
 
 import model.model as model
 from parse_config import ConfigParser
@@ -14,21 +12,7 @@ torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = True
 
 
-def setup(rank, world_size):
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-
-    dist.init_process_group('nccl', rank=rank, world_size=world_size)
-
-
-def cleanup():
-    dist.destroy_process_group()
-
-
-def train(rank, world_size, config):
-    # setup DDP
-    setup(rank, world_size)
-
+def train(config, rank):
     # data loader
     data_loader = config.init_data_loader(rank)
 
@@ -52,21 +36,24 @@ def train(rank, world_size, config):
     trainer = Trainer(config, data_loader, similarity_metric, losses, transformation_module, registration_module, metrics, rank)
     trainer.train()
 
-    # DDP
-    cleanup()
-
 
 if __name__ == '__main__':
     # parse arguments
     args = argparse.ArgumentParser(description='LearnSim')
 
     args.add_argument('-c', '--config', default=None, type=str, help='config file path (default: None)')
+    args.add_argument('-l', '--local_rank', default=0, type=int)
     args.add_argument('-r', '--resume', default=None, type=str, help='path to latest checkpoint (default: None)')
-    args.add_argument('-d', '--device', default=None, type=str, help='indices of GPUs to enable (default: all)')
 
     # config
     config = ConfigParser.from_args(args, [])
 
-    # run the training script
-    n = config['no_GPUs']
-    mp.spawn(train, args=(n, config), nprocs=n, join=True)
+    rank = args.local_rank
+    world_size = config['no_GPUs']
+
+    # run training
+    torch.cuda.set_device(rank)
+
+    dist.init_process_group('nccl', init_method='env://', world_size=world_size, rank=rank)
+    train(config, rank)
+    dist.destroy_process_group()
