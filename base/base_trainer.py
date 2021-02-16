@@ -55,6 +55,14 @@ class BaseTrainer:
             q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f, loc_learnable=False, cov_learnable=True)
             self.q_f = q_f.to(self.device)
 
+        # all-to-one registration
+        self.fixed = self.fixed_batch = {k: v.to(self.device, non_blocking=True) for k, v in self.data_loader.fixed.items()}
+        self.var_params_q_f = {k: nn.Parameter(v.to(self.device, non_blocking=True)) for k, v in self.data_loader.var_params_q_f.items()} if self.optimize_q_phi and not self.test_only else dict()
+
+        # resuming
+        if config.resume is not None:
+            self._resume_checkpoint(config.resume)
+
         # if multiple GPUs in use
         if len(device_ids) > 1:
             self.model = nn.DataParallel(model, device_ids=device_ids)
@@ -77,10 +85,6 @@ class BaseTrainer:
         self.no_epochs, self.no_iters_q_v = int(cfg_trainer['no_epochs']), int(cfg_trainer['no_iters_q_v'])
         self.no_batches = len(self.data_loader)
         self.log_period = int(cfg_trainer['log_period'])
-
-        # resuming
-        if config.resume is not None:
-            self._resume_checkpoint(config.resume)
 
         if self.test_only:
             self.no_samples_test = cfg_trainer['no_samples_test']

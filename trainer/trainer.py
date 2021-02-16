@@ -6,7 +6,7 @@ from base import BaseTrainer
 from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
     save_optimizer, save_sample, save_tensors
 from utils import MetricTracker, SobolevGrad, Sobolev_kernel_1D, \
-    add_noise_uniform, calc_det_J, calc_metrics, sample_q_v
+    add_noise_uniform, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
 
 class Trainer(BaseTrainer):
@@ -95,12 +95,10 @@ class Trainer(BaseTrainer):
                 self.metrics.update('loss/q_v', loss_q_v.item(), n=n)
 
                 with torch.no_grad():
-                    nabla = self.diff_op(transformation1, transformation=True)
-                    log_det_J_transformation = torch.log(calc_det_J(nabla))
-                    no_non_diffeomorphic_voxels = torch.isnan(log_det_J_transformation)
+                    no_non_diffeomorphic_voxels, log_det_J_transformation = calc_no_non_diffeomorphic_voxels(transformation1, self.diff_op)
 
                     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].sum().item()
+                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].item()
                         self.metrics.update('no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
 
         # tensorboard cont.
@@ -209,6 +207,12 @@ class Trainer(BaseTrainer):
 
                 im_moving_warped = self.registration_module(moving['im'], transformation)
                 segs_moving_warped = self.registration_module(moving['seg'], transformation)
+
+                no_non_diffeomorphic_voxels, _ = calc_no_non_diffeomorphic_voxels(transformation, self.diff_op)
+
+                for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+                    no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].item()
+                    self.metrics.update('test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
 
                 # metrics
                 metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)

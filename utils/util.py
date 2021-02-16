@@ -167,6 +167,12 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
     return metrics
 
 
+def calc_no_non_diffeomorphic_voxels(transformation, diff_op):
+    nabla = diff_op(transformation, transformation=True)
+    log_det_J_transformation = torch.log(calc_det_J(nabla))
+    return torch.sum(torch.isnan(log_det_J_transformation), dim=(1, 2, 3)), log_det_J_transformation
+
+
 def calc_norm(field):
     """
     calculate the voxel-wise norm of vectors in a batch of 3D fields
