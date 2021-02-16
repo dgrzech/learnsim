@@ -21,7 +21,7 @@ torch.autograd.set_detect_anomaly(True)
 
 
 test_config_str = '{' \
-                  '"name": "test", "optimize_q_f": false, "optimize_q_phi": false, "optimize_q_v": false,' \
+                  '"name": "test", "optimize_q_phi": false, "optimize_q_v": false,' \
                   '"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_02", "dims": [64, 64, 64], ' \
                   '"trainer": {"save_dir": "./temp"}' \
                   '}'
