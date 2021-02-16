@@ -186,12 +186,12 @@ optimizers
 """
 
 
-def save_optimizer(batch_idx, save_dirs, optimizer, optimizer_name):
+def save_optimizer(batch_idx, rank, save_dirs, optimizer, optimizer_name):
     """
     save an optimiser state to a .pth file
     """
 
-    optimizer_path = path.join(save_dirs['optimizers'], optimizer_name + '_' + str(batch_idx) + '.pt')
+    optimizer_path = path.join(save_dirs['optimizers'], optimizer_name + '_' + str(rank) + '_' + str(batch_idx) + '.pt')
     state_dict = optimizer.state_dict()
     torch.save(state_dict, optimizer_path)
 

@@ -173,7 +173,7 @@ class Trainer(BaseTrainer):
                     print('saving tensors with the variational parameters of q_v..')
 
                 save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
-                save_optimizer(batch_idx, self.save_dirs, self.optimizer_q_v, 'optimizer_q_v')
+                save_optimizer(batch_idx, self.rank, self.save_dirs, self.optimizer_q_v, 'optimizer_q_v')
 
             """
             q_phi
@@ -279,7 +279,7 @@ class Trainer(BaseTrainer):
         trainable_params_q_v = filter(lambda p: p.requires_grad, var_params_q_v.values())
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
 
-        optimizer_path = path.join(self.save_dirs['optimizers'], 'optimizer_q_v_' + str(batch_idx) + '.pt')
+        optimizer_path = path.join(self.save_dirs['optimizers'], 'optimizer_q_v_' + + str(self.rank) + '_' + str(batch_idx) + '.pt')
 
         if path.exists(optimizer_path):
             checkpoint = torch.load(optimizer_path)
