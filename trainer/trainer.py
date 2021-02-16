@@ -14,8 +14,8 @@ class Trainer(BaseTrainer):
     trainer class
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test_only=False):
-        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test_only)
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only=False):
+        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only)
 
         # optimizers
         self._init_optimizers()
@@ -83,7 +83,7 @@ class Trainer(BaseTrainer):
             self.optimizer_q_v.step()
 
             # tensorboard
-            if iter_no == 1 or iter_no % self.log_period == 0:
+            if self.rank == 0 and (iter_no == 1 or iter_no % self.log_period == 0):
                 self.writer.set_step(self.step)
 
                 self.metrics.update('loss/data_term', data_term.item(), n=n)
@@ -98,19 +98,20 @@ class Trainer(BaseTrainer):
                         no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].item()
                         self.metrics.update('no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
 
-        # tensorboard cont.
-        with torch.no_grad():
-            self.writer.set_step(epoch)
+        if self.rank == 0:
+            # tensorboard cont.
+            with torch.no_grad():
+                self.writer.set_step(epoch)
 
-            var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
-            segs_moving_warped = self.registration_module(moving['seg'], transformation1)
+                var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
+                segs_moving_warped = self.registration_module(moving['seg'], transformation1)
 
-            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)
-            self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)
+                self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
-            if not self.test_only:
-                log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
-                log_images(self.writer, im_pair_idxs, self.fixed['im'], moving['im'], im_moving_warped1)
+                if not self.test_only:
+                    log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
+                    log_images(self.writer, im_pair_idxs, self.fixed['im'], moving['im'], im_moving_warped1)
 
     def _step_q_f_q_phi(self, im_pair_idxs, moving, var_params_q_v):
         self.step += 1
@@ -140,15 +141,17 @@ class Trainer(BaseTrainer):
             self.optimizer_q_phi.step()
 
         # tensorboard
-        self.writer.set_step(self.step)
-        self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item())
+        if self.rank == 0:
+            self.writer.set_step(self.step)
+            self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item())
 
-        with torch.no_grad():
-            log_model_weights(self.writer, self.model)
-            log_q_f(self.writer, self.q_f)
+            with torch.no_grad():
+                log_model_weights(self.writer, self.model)
+                log_q_f(self.writer, self.q_f)
 
     def _train_epoch(self, epoch=0):
-        self.metrics.reset()
+        if self.rank == 0:
+            self.metrics.reset()
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             if self.rank == 0:
@@ -184,15 +187,14 @@ class Trainer(BaseTrainer):
                 self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
                 self._disable_gradients_model()
 
-        if not self.test_only:
+        if self.rank == 0 and not self.test_only:
             self._save_checkpoint(epoch)
 
     @torch.no_grad()
     def _test(self, no_samples):
         if self.rank == 0:
             print('')
-
-        save_fixed_image(self.save_dirs, self.spacing, self.fixed['im'])
+            save_fixed_image(self.save_dirs, self.spacing, self.fixed['im'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             if self.rank == 0:
@@ -203,7 +205,8 @@ class Trainer(BaseTrainer):
             self.__batch_init(moving)
             self.__moving_init(moving, var_params_q_v)
 
-            save_moving_images(im_pair_idxs, self.save_dirs, self.spacing, moving['im'])
+            if self.rank == 0:
+                save_moving_images(im_pair_idxs, self.save_dirs, self.spacing, moving['im'])
 
             for sample_no in range(1, no_samples+1):
                 v_sample = sample_q_v(var_params_q_v, no_samples=1)
@@ -213,19 +216,20 @@ class Trainer(BaseTrainer):
                 im_moving_warped = self.registration_module(moving['im'], transformation)
                 segs_moving_warped = self.registration_module(moving['seg'], transformation)
 
-                no_non_diffeomorphic_voxels, _ = calc_no_non_diffeomorphic_voxels(transformation, self.diff_op)
+                if self.rank == 0:
+                    no_non_diffeomorphic_voxels, _ = calc_no_non_diffeomorphic_voxels(transformation, self.diff_op)
 
-                for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-                    no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].item()
-                    self.metrics.update('test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
+                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].item()
+                        self.metrics.update('test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
 
-                # metrics
-                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)
-                self.writer.set_step(sample_no)
-                self.metrics.update_ASD_and_DSC(metrics_im_pairs, test=True)
+                    # metrics
+                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)
+                    self.writer.set_step(sample_no)
+                    self.metrics.update_ASD_and_DSC(metrics_im_pairs, test=True)
 
-                # .nii.gz/.vtk
-                save_sample(im_pair_idxs, self.save_dirs, self.spacing, sample_no, im_moving_warped, displacement)
+                    # .nii.gz/.vtk
+                    save_sample(im_pair_idxs, self.save_dirs, self.spacing, sample_no, im_moving_warped, displacement)
 
     @torch.no_grad()
     def __batch_init(self, moving):
@@ -241,6 +245,9 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def __metrics_init(self):
+        if not self.rank == 0:
+            return
+
         self.writer.set_step(self.step)
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
@@ -279,7 +286,7 @@ class Trainer(BaseTrainer):
         trainable_params_q_v = filter(lambda p: p.requires_grad, var_params_q_v.values())
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
 
-        optimizer_path = path.join(self.save_dirs['optimizers'], 'optimizer_q_v_' + + str(self.rank) + '_' + str(batch_idx) + '.pt')
+        optimizer_path = path.join(self.save_dirs['optimizers'], 'optimizer_q_v_' + str(self.rank) + '_' + str(batch_idx) + '.pt')
 
         if path.exists(optimizer_path):
             checkpoint = torch.load(optimizer_path)

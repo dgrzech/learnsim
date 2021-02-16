@@ -13,10 +13,12 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test_only):
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only):
         self.config = config
-        self.logger = config.get_logger('train')
+        self.rank = config.rank
         self.test_only = test_only
+
+        self.logger = config.get_logger('train')
 
         self.data_loader = data_loader
         self.spacing, self.structures_dict = self.data_loader.spacing, self.config.structures_dict
@@ -25,40 +27,41 @@ class BaseTrainer:
         # setup visualization writer instance
         cfg_trainer = config['trainer']
 
-        self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
-        self.writer.write_graph(model)
-        self.writer.write_hparams(config)
+        if self.rank == 0:
+            self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
+            self.writer.write_graph(model)
+            self.writer.write_hparams(config)
 
         # optimisers
         self.optimize_q_v, self.optimize_q_phi = config['optimize_q_v'], config['optimize_q_phi']
 
         # all-to-one registration
-        self.rank = rank  # DDP
-        self.fixed = self.fixed_batch = {k: v.to(rank) for k, v in self.data_loader.fixed.items()}
+        self.fixed = self.fixed_batch = {k: v.to(self.rank) for k, v in self.data_loader.fixed.items()}
 
         # model and losses
-        model = model.to(rank)
-        self.model = DDP(model, device_ids=[rank])
+        model = model.to(self.rank)
+        self.model = DDP(model, device_ids=[self.rank])
 
         if self.optimize_q_phi and not self.test_only:
             import model.distributions as distr
 
-            q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(rank)
-            self.q_f = DDP(q_f, device_ids=[rank])
+            q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
+            self.q_f = DDP(q_f, device_ids=[self.rank])
 
-        self.data_loss = losses['data'].to(rank)
-        self.reg_loss = losses['regularisation'].to(rank)
-        self.entropy_loss = losses['entropy'].to(rank())
+        self.data_loss = losses['data'].to(self.rank)
+        self.reg_loss = losses['regularisation'].to(self.rank)
+        self.entropy_loss = losses['entropy'].to(self.rank)
 
         # transformation and registration modules
-        self.transformation_module = transformation_module.to(rank)
-        self.registration_module = registration_module.to(rank)
+        self.transformation_module = transformation_module.to(self.rank)
+        self.registration_module = registration_module.to(self.rank)
 
         # differential operator for use with the transformation Jacobian
         self.diff_op = self.reg_loss.diff_op
 
         # metrics
-        self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
+        if self.rank == 0:
+            self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
 
         # training logic
         self.start_epoch, self.step = 1, 0
@@ -124,13 +127,15 @@ class BaseTrainer:
         for param_key in var_params:
             var_params[param_key].requires_grad_(False)
 
-    def _enable_gradients_model(self):
-        self.q_f.enable_gradients()
-        self.model.enable_gradients()
+    def _enable_gradients_model(self):  # FIXME
+        # self.q_f.enable_gradients()
+        # self.model.enable_gradients()
+        pass
 
-    def _disable_gradients_model(self):
-        self.q_f.disable_gradients()
-        self.model.disable_gradients()
+    def _disable_gradients_model(self):  # FIXME
+        # self.q_f.disable_gradients()
+        # self.model.disable_gradients()
+        pass
 
     def __init_optimizer_q_f(self):
         trainable_params_q_f = filter(lambda p: p.requires_grad, self.q_f.parameters())
@@ -151,11 +156,10 @@ class BaseTrainer:
             self._disable_gradients_model()
 
     def _save_checkpoint(self, epoch):
-        if self.rank == 0:
-            filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
-            print(f'\nsaving checkpoint: {filename}..')
+        filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
+        print(f'\nsaving checkpoint: {filename}..')
 
-            state = {'epoch': epoch, 'step': self.step, 'config': self.config}
+        state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
         if self.optimize_q_phi:
             state['q_f'] = self.q_f.state_dict()
@@ -164,8 +168,8 @@ class BaseTrainer:
             state['model'] = self.model.state_dict()
             state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
 
-            torch.save(state, filename)
-            print('checkpoint saved\n')
+        torch.save(state, filename)
+        print('checkpoint saved\n')
 
         dist.barrier()
 

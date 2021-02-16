@@ -1,5 +1,4 @@
 import logging
-import os
 from datetime import datetime
 from distutils.dir_util import copy_tree
 from functools import partial, reduce
@@ -15,7 +14,7 @@ from utils import read_json, write_json
 
 
 class ConfigParser:
-    def __init__(self, config, resume=None, modification=None, run_id=None, test=False):
+    def __init__(self, config, local_rank, resume=None, modification=None, run_id=None, test=False):
         """
         class to parse configuration json file
         handles hyperparameters for training, initializations of modules, checkpoint saving and logging module
@@ -27,6 +26,8 @@ class ConfigParser:
         """
         # load config file and apply modification
         self._config = _update_config(config, modification)
+
+        self.rank = local_rank
         self.resume = resume
         self.test = test
 
@@ -61,32 +62,35 @@ class ConfigParser:
         self._norms_dir = dir / 'norms'
 
         # make directory for saving checkpoints and log.
-        exist_ok = run_id == ''
+        if local_rank == 0:
+            exist_ok = run_id == ''
 
-        self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.optimizers_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.tensors_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.optimizers_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.tensors_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.grids_dir.mkdir(parents=True, exist_ok=exist_ok)
-        self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.grids_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
 
-        # copy values of variational parameters
-        if self.resume is not None and not self.test:
-            print('copying previous values of variational parameters..')
-            copy_tree((self.resume.parent.parent / 'optimizers').absolute().as_posix(), self._optimizers_dir.absolute().as_posix())
-            copy_tree((self.resume.parent.parent / 'tensors').absolute().as_posix(), self._tensors_dir.absolute().as_posix())
-            print('done!\n')
+            # copy values of variational parameters
+            if self.resume is not None and not self.test:
+                print('copying previous values of variational parameters..')
+                copy_tree((self.resume.parent.parent / 'optimizers').absolute().as_posix(), self._optimizers_dir.absolute().as_posix())
+                copy_tree((self.resume.parent.parent / 'tensors').absolute().as_posix(), self._tensors_dir.absolute().as_posix())
+                print('done!\n')
 
-        # save updated config file to the checkpoint dir
-        write_json(self.config, dir / 'config.json')
+            # save updated config file to the checkpoint dir
+            write_json(self.config, dir / 'config.json')
 
         # configure logging module
-        setup_logging(self.log_dir)
+        if local_rank == 0:
+            setup_logging(self.log_dir)
+
         self.log_levels = {
             0: logging.WARNING,
             1: logging.INFO,
@@ -110,8 +114,6 @@ class ConfigParser:
         if not isinstance(args, tuple):
             args = args.parse_args()
 
-        if args.device is not None:
-            os.environ["CUDA_VISIBLE_DEVICES"] = args.device
         if args.resume is not None:
             resume = Path(args.resume)
             cfg_fname = resume.parent.parent / 'config.json'
@@ -126,8 +128,10 @@ class ConfigParser:
             # update new config for fine-tuning
             config.update(read_json(args.config))
 
+        local_rank = args.local_rank
         modification = {opt.target: getattr(args, _get_opt_name(opt.flags)) for opt in options}
-        return cls(config, resume, modification, test=test)
+
+        return cls(config, local_rank, resume=resume, modification=modification, test=test)
 
     def init_obj(self, name, module, *args, **kwargs):
         """
@@ -166,8 +170,8 @@ class ConfigParser:
         module_args.update(kwargs)
         return partial(getattr(module, module_name), *args, **module_args)
 
-    def init_data_loader(self, rank):
-        return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=rank, save_dirs=self.save_dirs)
+    def init_data_loader(self):
+        return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=self.rank, save_dirs=self.save_dirs)
 
     def init_losses(self):
         data_loss = self.init_obj('data_loss', model_loss)

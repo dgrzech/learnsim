@@ -7,7 +7,7 @@ class LearnSimDataLoader(BaseDataLoader):
         self.data_dir = data_dir
         self.save_dirs = save_dirs
 
-        dataset = BiobankDataset(data_dir, save_dirs, dims)
+        dataset = BiobankDataset(data_dir, save_dirs, dims, rank)
         super().__init__(batch_size, dataset, no_GPUs, num_workers, rank)
 
     @property
