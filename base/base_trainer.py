@@ -16,6 +16,7 @@ class BaseTrainer:
     def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, test):
         self.config = config
         self.logger = config.get_logger('trainer', config['trainer']['verbosity'])
+        self.test = test
 
         self.data_loader = data_loader
         self.spacing, self.structures_dict = self.data_loader.spacing, self.config.structures_dict
@@ -49,10 +50,9 @@ class BaseTrainer:
         self.transformation_module = transformation_module.to(self.device)
         self.registration_module = registration_module.to(self.device)
 
-        if self.optimize_q_phi:
+        if self.optimize_q_phi and not self.test:
             log_var_f, u_f = self.data_loader.dataset.init_log_var_f(self.fixed['im'].shape), self.data_loader.dataset.init_u_f(self.fixed['im'].shape)
-            q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f,
-                                                        loc_learnable=False, cov_learnable=True)
+            q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f, loc_learnable=False, cov_learnable=True)
             self.q_f = q_f.to(self.device)
 
         # if multiple GPUs in use
@@ -66,7 +66,7 @@ class BaseTrainer:
             self.transformation_module = nn.DataParallel(transformation_module, device_ids=device_ids)
             self.registration_module = nn.DataParallel(registration_module, device_ids=device_ids)
 
-            if self.optimize_q_phi:
+            if self.optimize_q_phi and not self.test:
                 self.q_f = nn.DataParallel(q_f, device_ids=device_ids)
 
         # differential operator for use with the transformation Jacobian
@@ -78,16 +78,12 @@ class BaseTrainer:
         self.no_batches = len(self.data_loader)
         self.log_period = int(cfg_trainer['log_period'])
 
-        # testing
-        self.test = test
-
-        if self.test:
-            self._disable_gradients_model()
-            self.optimize_q_phi = False
-
         # resuming
         if config.resume is not None:
             self._resume_checkpoint(config.resume)
+
+        if self.test:
+            self.optimize_q_phi = False
 
         # prints
         if self.optimize_q_phi:
@@ -165,11 +161,15 @@ class BaseTrainer:
             var_params[param_key].requires_grad_(False)
 
     def _enable_gradients_model(self):
-        get_module_attr(self.q_f, 'enable_gradients')()
+        if not self.test:
+            get_module_attr(self.q_f, 'enable_gradients')()
+
         get_module_attr(self.model, 'enable_gradients')()
 
     def _disable_gradients_model(self):
-        get_module_attr(self.q_f, 'disable_gradients')
+        if not self.test:
+            get_module_attr(self.q_f, 'disable_gradients')
+
         get_module_attr(self.model, 'disable_gradients')()
 
     def __init_optimizer_q_f(self):
@@ -197,10 +197,17 @@ class BaseTrainer:
         state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
         if self.optimize_q_phi:
-            state['q_f'] = self.q_f.state_dict()
-            state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
+            if isinstance(self.q_f, nn.DataParallel):
+                state['q_f'] = self.q_f.module.state_dict()
+            else:
+                state['q_f'] = self.q_f.state_dict()
 
-            state['model'] = self.model.state_dict()
+            if isinstance(self.model, nn.DataParallel):
+                state['model'] = self.model.module.state_dict()
+            else:
+                state['model'] = self.model.state_dict()
+
+            state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
             state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
 
         torch.save(state, filename)
@@ -215,10 +222,17 @@ class BaseTrainer:
         self.start_epoch = checkpoint['epoch'] + 1 if not self.test else 1
         self.step = checkpoint['step'] + 1 if not self.test else 0
 
+        if self.test:
+            self.model.load_state_dict(checkpoint['model'])
+            self._disable_gradients_model()
+            self.logger.info('checkpoint loaded\n')
+
+            return
+
         if self.optimize_q_phi:
             self._enable_gradients_model()
 
-            self._init_optimizer_q_f()
+            self.__init_optimizer_q_f()
             self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
             self.q_f.load_state_dict(checkpoint['q_f'])
 
@@ -227,8 +241,6 @@ class BaseTrainer:
             self.model.load_state_dict(checkpoint['model'])
 
             self._disable_gradients_model()
+            self.logger.info('checkpoint loaded\n')
 
-        if self.test:
-            self.model.load_state_dict(checkpoint['model'])
-
-        self.logger.info('checkpoint loaded\n')
+            return
