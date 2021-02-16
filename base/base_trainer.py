@@ -14,7 +14,7 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics,
+    def __init__(self, config, data_loader, model, q_f, losses, transformation_module, registration_module, metrics,
                  rank, test_only):
         self.config = config
         self.logger = config.get_logger('train')
@@ -42,19 +42,18 @@ class BaseTrainer:
 
         # model and losses
         self.model = model
+
+        if self.optimize_q_phi and not self.test_only:
+            import model.distributions as distr
+
+            q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(rank)
+            self.q_f = DDP(q_f, device_ids=[rank])
+
         self.data_loss, self.reg_loss, self.entropy_loss = losses['data'], losses['regularisation'], losses['entropy']
 
         # transformation and registration modules
         self.transformation_module = transformation_module
         self.registration_module = registration_module
-
-        if self.optimize_q_phi and not self.test_only:
-            log_var_f = self.data_loader.dataset.init_log_var_f(self.fixed['im'].shape)
-            u_f = self.data_loader.dataset.init_u_f(self.fixed['im'].shape)
-
-            q_f = LowRankMultivariateNormalDistribution(mu=self.fixed['im'], log_var=log_var_f, u=u_f,
-                                                        loc_learnable=False, cov_learnable=True).to(rank)
-            self.q_f = DDP(q_f, device_ids=[rank])
 
         # differential operator for use with the transformation Jacobian
         self.diff_op = get_module_attr(self.reg_loss, 'diff_op')

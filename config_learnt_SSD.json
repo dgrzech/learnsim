@@ -14,6 +14,14 @@
 	    }
     },
 
+	"q_f": {
+		"type": "LowRankMultivariateNormalDistribution",
+		"args": {
+			"loc_learnable": false,
+			"cov_learnable": true
+		}
+	},
+
 	"data_loss": {
 		"type": "SSD"
 	},

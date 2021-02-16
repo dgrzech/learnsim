@@ -97,17 +97,6 @@ class BiobankDataset(Dataset):
         else:
             return self._init_u_v(self.dims_v)
 
-    @staticmethod
-    def init_log_var_f(dims):
-        sigma = 0.1
-        var = (sigma ** 2) * torch.ones(dims)
-
-        return torch.log(var)
-
-    @staticmethod
-    def init_u_f(dims):
-        return torch.zeros(dims)
-
     def _get_image(self, im_path):
         im = sitk.ReadImage(im_path, sitk.sitkFloat32)
         im_arr = np.transpose(sitk.GetArrayFromImage(im), (2, 1, 0))
