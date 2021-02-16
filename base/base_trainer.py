@@ -5,8 +5,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from logger import TensorboardWriter
-from model.distributions import LowRankMultivariateNormalDistribution
-from utils import MetricTracker, get_module_attr
+from utils import MetricTracker
 
 
 class BaseTrainer:
@@ -14,8 +13,7 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, config, data_loader, model, q_f, losses, transformation_module, registration_module, metrics,
-                 rank, test_only):
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test_only):
         self.config = config
         self.logger = config.get_logger('train')
         self.test_only = test_only
@@ -34,14 +32,13 @@ class BaseTrainer:
         # optimisers
         self.optimize_q_v, self.optimize_q_phi = config['optimize_q_v'], config['optimize_q_phi']
 
-        # DDP
-        self.rank = rank
-
         # all-to-one registration
+        self.rank = rank  # DDP
         self.fixed = self.fixed_batch = {k: v.to(rank) for k, v in self.data_loader.fixed.items()}
 
         # model and losses
-        self.model = model
+        model = model.to(rank)
+        self.model = DDP(model, device_ids=[rank])
 
         if self.optimize_q_phi and not self.test_only:
             import model.distributions as distr
@@ -49,14 +46,16 @@ class BaseTrainer:
             q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(rank)
             self.q_f = DDP(q_f, device_ids=[rank])
 
-        self.data_loss, self.reg_loss, self.entropy_loss = losses['data'], losses['regularisation'], losses['entropy']
+        self.data_loss = losses['data'].to(rank)
+        self.reg_loss = losses['regularisation'].to(rank)
+        self.entropy_loss = losses['entropy'].to(rank())
 
         # transformation and registration modules
-        self.transformation_module = transformation_module
-        self.registration_module = registration_module
+        self.transformation_module = transformation_module.to(rank)
+        self.registration_module = registration_module.to(rank)
 
         # differential operator for use with the transformation Jacobian
-        self.diff_op = get_module_attr(self.reg_loss, 'diff_op')
+        self.diff_op = self.reg_loss.diff_op
 
         # metrics
         self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
@@ -126,16 +125,12 @@ class BaseTrainer:
             var_params[param_key].requires_grad_(False)
 
     def _enable_gradients_model(self):
-        if not self.test_only:
-            get_module_attr(self.q_f, 'enable_gradients')()
-
-        get_module_attr(self.model, 'enable_gradients')()
+        self.q_f.enable_gradients()
+        self.model.enable_gradients()
 
     def _disable_gradients_model(self):
-        if not self.test_only:
-            get_module_attr(self.q_f, 'disable_gradients')
-
-        get_module_attr(self.model, 'disable_gradients')()
+        self.q_f.disable_gradients()
+        self.model.disable_gradients()
 
     def __init_optimizer_q_f(self):
         trainable_params_q_f = filter(lambda p: p.requires_grad, self.q_f.parameters())

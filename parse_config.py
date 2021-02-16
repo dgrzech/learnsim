@@ -6,9 +6,8 @@ from functools import partial, reduce
 from operator import getitem
 from pathlib import Path
 
-import model.loss as model_loss
-
 import data_loader.data_loaders as module_data
+import model.loss as model_loss
 import utils.registration as registration
 import utils.transformation as transformation
 from logger import setup_logging
@@ -170,10 +169,10 @@ class ConfigParser:
     def init_data_loader(self, rank):
         return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=rank, save_dirs=self.save_dirs)
 
-    def init_losses(self, rank):
-        data_loss = self.init_obj('data_loss', model_loss).to(rank)
-        reg_loss = self.init_obj('reg_loss', model_loss).to(rank)
-        entropy_loss = self.init_obj('entropy_loss', model_loss).to(rank)
+    def init_losses(self):
+        data_loss = self.init_obj('data_loss', model_loss)
+        reg_loss = self.init_obj('reg_loss', model_loss)
+        entropy_loss = self.init_obj('entropy_loss', model_loss)
 
         return {'data': data_loss, 'regularisation': reg_loss, 'entropy': entropy_loss}
 
@@ -191,8 +190,8 @@ class ConfigParser:
 
         return loss_terms + ASD + DSC + no_non_diffeomorphic_voxels
 
-    def init_transformation_and_registration_modules(self, dims, rank):
-        return self.init_obj('transformation_module', transformation, dims).to(rank), self.init_obj('registration_module', registration).to(rank)
+    def init_transformation_and_registration_modules(self, dims):
+        return self.init_obj('transformation_module', transformation, dims), self.init_obj('registration_module', registration)
 
     def __getitem__(self, name):
         """Access items like ordinary dict."""

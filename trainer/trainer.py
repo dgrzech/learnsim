@@ -15,7 +15,7 @@ class Trainer(BaseTrainer):
     """
 
     def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test_only=False):
-        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test)
+        super().__init__(config, data_loader, model, losses, transformation_module, registration_module, metrics, rank, test_only)
 
         # optimizers
         self._init_optimizers()

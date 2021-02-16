@@ -4,7 +4,6 @@ import os
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 import model.model as model
 from parse_config import ConfigParser
@@ -38,14 +37,13 @@ def train(rank, world_size, config):
     no_samples = data_loader.no_samples
 
     # model
-    similarity_metric = config.init_obj('model', model).to(rank)
-    similarity_metric = DDP(similarity_metric, device_ids=[rank])
+    similarity_metric = config.init_obj('model', model)
 
     # losses
-    losses = config.init_losses(rank)
+    losses = config.init_losses()
 
     # transformation and registration modules
-    transformation_module, registration_module = config.init_transformation_and_registration_modules(dims, rank)
+    transformation_module, registration_module = config.init_transformation_and_registration_modules(dims)
 
     # metrics
     metrics = config.init_metrics(no_samples)
@@ -68,7 +66,6 @@ if __name__ == '__main__':
 
     # config
     config = ConfigParser.from_args(args, [])
-    logger = config.get_logger('train')
 
     # run the training script
     n = config['no_GPUs']
