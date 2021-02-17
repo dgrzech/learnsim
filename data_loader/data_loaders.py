@@ -23,5 +23,5 @@ class LearnSimDataLoader(BaseDataLoader):
         return len(self.dataset)
 
     @property
-    def spacing(self):  # TODO (DG): change the name to "voxel_spacing"
-        return self.dataset.spacing
+    def im_spacing(self):
+        return self.dataset.im_spacing

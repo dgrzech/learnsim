@@ -17,7 +17,7 @@ class BiobankDataset(Dataset):
         self.save_paths = save_paths
 
         self.dims, self.dims_im, self.dims_v = dims, (1, *dims), (3, *dims)
-        self.padding, self.spacing = None, None
+        self.padding, self.im_spacing = None, None
 
         # image filenames
         im_filenames = self._get_filenames(im_paths)
@@ -102,8 +102,8 @@ class BiobankDataset(Dataset):
         im = sitk.ReadImage(im_path, sitk.sitkFloat32)
         im_arr = np.transpose(sitk.GetArrayFromImage(im), (2, 1, 0))
 
-        if self.spacing is None:
-            self.spacing = torch.tensor(max(im_arr.shape) / np.asarray(self.dims), dtype=torch.float32)
+        if self.im_spacing is None:
+            self.im_spacing = torch.tensor(max(im_arr.shape) / np.asarray(self.dims), dtype=torch.float32)
         if self.padding is None:
             padding = (max(im_arr.shape) - np.asarray(im_arr.shape)) // 2
             self.padding = ((padding[0], padding[0]), (padding[1], padding[1]), (padding[2], padding[2]))

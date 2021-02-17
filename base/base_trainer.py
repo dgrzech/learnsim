@@ -21,7 +21,7 @@ class BaseTrainer:
         self.logger = config.get_logger('train')
 
         self.data_loader = data_loader
-        self.spacing, self.structures_dict = self.data_loader.spacing, self.config.structures_dict
+        self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.config.structures_dict
         self.save_dirs = self.data_loader.save_dirs
 
         # setup visualization writer instance

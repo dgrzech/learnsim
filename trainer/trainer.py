@@ -106,7 +106,7 @@ class Trainer(BaseTrainer):
                 var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
                 segs_moving_warped = self.registration_module(moving['seg'], transformation1)
 
-                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)
+                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
                 self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
                 if not self.test_only:
@@ -192,7 +192,7 @@ class Trainer(BaseTrainer):
     def _test(self, no_samples):
         if self.rank == 0:
             print('')
-            save_fixed_image(self.save_dirs, self.spacing, self.fixed['im'])
+            save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             if self.rank == 0:
@@ -204,7 +204,7 @@ class Trainer(BaseTrainer):
             self.__moving_init(moving, var_params_q_v)
 
             if self.rank == 0:
-                save_moving_images(im_pair_idxs, self.save_dirs, self.spacing, moving['im'])
+                save_moving_images(im_pair_idxs, self.save_dirs, self.im_spacing, moving['im'])
 
             for sample_no in range(1, no_samples+1):
                 v_sample = sample_q_v(var_params_q_v, no_samples=1)
@@ -222,12 +222,12 @@ class Trainer(BaseTrainer):
                         self.metrics.update('test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
 
                     # metrics
-                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.spacing)
+                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
                     self.writer.set_step(sample_no)
                     self.metrics.update_ASD_and_DSC(metrics_im_pairs, test=True)
 
                     # .nii.gz/.vtk
-                    save_sample(im_pair_idxs, self.save_dirs, self.spacing, sample_no, im_moving_warped, displacement)
+                    save_sample(im_pair_idxs, self.save_dirs, self.im_spacing, sample_no, im_moving_warped, displacement)
 
     @torch.no_grad()
     def __batch_init(self, moving):
@@ -254,7 +254,7 @@ class Trainer(BaseTrainer):
             self.__batch_init(moving)
             self.__moving_init(moving, var_params_q_v)
 
-            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], moving['seg'], self.structures_dict, self.spacing)
+            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], moving['seg'], self.structures_dict, self.im_spacing)
             self.metrics.update_ASD_and_DSC(metrics_im_pairs)
 
         if self.optimize_q_phi:

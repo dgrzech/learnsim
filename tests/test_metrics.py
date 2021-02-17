@@ -49,7 +49,7 @@ class MetricsTestMethods(unittest.TestCase):
         dims = (64, 64, 64)
 
         dataset = BiobankDataset(im_paths, save_paths, dims)
-        spacing = dataset.spacing
+        spacing = dataset.im_spacing
 
         fixed = dataset.fixed
         _, moving, var_params_q_v = dataset[0]
