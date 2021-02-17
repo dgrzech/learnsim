@@ -75,14 +75,8 @@ class BaseTrainer:
 
         # prints
         if self.rank == 0:
-            if self.optimize_q_phi:
-                self._enable_gradients_model()
-
             print(model)
             print('')
-
-            if self.optimize_q_phi:
-                self._disable_gradients_model()
 
     @abstractmethod
     def _train_epoch(self):
@@ -127,16 +121,6 @@ class BaseTrainer:
         for param_key in var_params:
             var_params[param_key].requires_grad_(False)
 
-    def _enable_gradients_model(self):  # FIXME
-        # self.q_f.enable_gradients()
-        # self.model.enable_gradients()
-        pass
-
-    def _disable_gradients_model(self):  # FIXME
-        # self.q_f.disable_gradients()
-        # self.model.disable_gradients()
-        pass
-
     def __init_optimizer_q_f(self):
         trainable_params_q_f = filter(lambda p: p.requires_grad, self.q_f.parameters())
         self.optimizer_q_f = self.config.init_obj('optimizer_q_f', torch.optim, trainable_params_q_f)
@@ -150,10 +134,8 @@ class BaseTrainer:
             self.optimizer_q_v = None
 
         if self.optimize_q_phi:
-            self._enable_gradients_model()
             self.__init_optimizer_q_f()
             self.__init_optimizer_q_phi()
-            self._disable_gradients_model()
 
     def _save_checkpoint(self, epoch):
         if self.rank == 0:
@@ -187,7 +169,6 @@ class BaseTrainer:
 
         if self.test_only:
             self.model.load_state_dict(checkpoint['model'])
-            self._disable_gradients_model()
 
             if self.rank == 0:
                 print('checkpoint loaded\n')
@@ -195,8 +176,6 @@ class BaseTrainer:
             return
 
         if self.optimize_q_phi:
-            self._enable_gradients_model()
-
             self.__init_optimizer_q_f()
             self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
             self.q_f.load_state_dict(checkpoint['q_f'])
@@ -204,8 +183,6 @@ class BaseTrainer:
             self.__init_optimizer_q_phi()
             self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
             self.model.load_state_dict(checkpoint['model'])
-
-            self._disable_gradients_model()
 
             if self.rank == 0:
                 print('checkpoint loaded\n')

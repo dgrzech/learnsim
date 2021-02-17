@@ -183,9 +183,7 @@ class Trainer(BaseTrainer):
             """
 
             if self.optimize_q_phi:
-                self._enable_gradients_model()
                 self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
-                self._disable_gradients_model()
 
         if not self.test_only:
             self._save_checkpoint(epoch)

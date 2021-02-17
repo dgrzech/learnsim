@@ -21,14 +21,6 @@ class BaseModel(nn.Module):
     def print_weights(self):
         pass
 
-    def enable_gradients(self):
-        for param in self.parameters():
-            param.requires_grad_(True)
-
-    def disable_gradients(self):
-        for param in self.parameters():
-            param.requires_grad_(False)
-
     def forward(self, im_fixed, im_moving, mask):
         """
         forward pass logic

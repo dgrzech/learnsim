@@ -17,16 +17,6 @@ class LowRankMultivariateNormalDistribution(nn.Module):
             self.log_var = nn.Parameter(log_var, requires_grad=cov_learnable)
             self.u = nn.Parameter(u, requires_grad=cov_learnable)
 
-    def enable_gradients(self):
-        self.mu.requires_grad_(self.loc_learnable)
-        self.log_var.requires_grad_(self.cov_learnable)
-        self.u.requires_grad_(self.cov_learnable)
-
-    def disable_gradients(self):
-        self.mu.requires_grad_(False)
-        self.log_var.requires_grad_(False)
-        self.u.requires_grad_(False)
-
     def forward(self, no_samples=1):
         sigma = torch.exp(0.5 * self.log_var)
 
