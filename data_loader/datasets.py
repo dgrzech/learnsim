@@ -116,9 +116,6 @@ class BiobankDataset(Dataset):
         return rescale_im(im)
 
     def _get_mask(self, mask_path):
-        if mask_path is '':
-            return torch.ones_like(self.im_fixed).bool()
-
         mask = sitk.ReadImage(mask_path, sitk.sitkFloat32)
         mask_arr = np.transpose(sitk.GetArrayFromImage(mask), (2, 1, 0))
 
@@ -129,9 +126,6 @@ class BiobankDataset(Dataset):
         return F.interpolate(mask, size=self.dims, mode='nearest').bool().squeeze(0)
 
     def _get_seg(self, seg_path):
-        if seg_path is '':
-            return torch.ones_like(self.im_fixed).short()
-
         seg = sitk.ReadImage(seg_path, sitk.sitkFloat32)
         seg_arr = np.transpose(sitk.GetArrayFromImage(seg), (2, 1, 0))
 

@@ -100,8 +100,11 @@ def var_params_q_f_grid(log_var_f_slices, u_f_slices):
         ax.set_title(col)
 
     for ax, row in zip(axs[:, 0], rows):
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
+        ax.set_xticks([], minor=False)
+        ax.set_xticks([], minor=True)
+
+        ax.set_yticks([], minor=False)
+        ax.set_yticks([], minor=True)
 
         ax.set_ylabel(row, rotation=90, size='large')
 
@@ -144,8 +147,11 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
         ax.set_title(col)
 
     for ax, row in zip(axs[:, 0], rows):
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
+        ax.set_xticks([], minor=False)
+        ax.set_xticks([], minor=True)
+
+        ax.set_yticks([], minor=False)
+        ax.set_yticks([], minor=True)
 
         ax.set_ylabel(row, rotation=90, size='large')
 
@@ -210,8 +216,11 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
         ax.set_title(col)
 
     for ax, row in zip(axs[:, 0], rows):
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
+        ax.set_xticks([], minor=False)
+        ax.set_xticks([], minor=True)
+
+        ax.set_yticks([], minor=False)
+        ax.set_yticks([], minor=True)
 
         ax.set_ylabel(row, rotation=90, size='large')
 
@@ -273,8 +282,11 @@ def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices
         ax.set_title(col)
 
     for ax, row in zip(axs[:, 0], rows):
-        ax.set_xticks([], [])
-        ax.set_yticks([], [])
+        ax.set_xticks([], minor=False)
+        ax.set_xticks([], minor=True)
+
+        ax.set_yticks([], minor=False)
+        ax.set_yticks([], minor=True)
 
         ax.set_ylabel(row, rotation=90, size='large')
 
