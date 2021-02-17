@@ -156,20 +156,21 @@ class BaseTrainer:
             self._disable_gradients_model()
 
     def _save_checkpoint(self, epoch):
-        filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
-        print(f'\nsaving checkpoint: {filename}..')
+        if self.rank == 0:
+            filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
+            print(f'\nsaving checkpoint: {filename}..')
 
-        state = {'epoch': epoch, 'step': self.step, 'config': self.config}
+            state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
-        if self.optimize_q_phi:
-            state['q_f'] = self.q_f.state_dict()
-            state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
+            if self.optimize_q_phi:
+                state['q_f'] = self.q_f.state_dict()
+                state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
 
-            state['model'] = self.model.state_dict()
-            state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
+                state['model'] = self.model.state_dict()
+                state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
 
-        torch.save(state, filename)
-        print('checkpoint saved\n')
+            torch.save(state, filename)
+            print('checkpoint saved\n')
 
         dist.barrier()
 
@@ -210,4 +211,3 @@ class BaseTrainer:
                 print('checkpoint loaded\n')
 
             return
-

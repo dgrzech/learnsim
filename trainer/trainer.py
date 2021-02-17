@@ -187,7 +187,7 @@ class Trainer(BaseTrainer):
                 self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
                 self._disable_gradients_model()
 
-        if self.rank == 0 and not self.test_only:
+        if not self.test_only:
             self._save_checkpoint(epoch)
 
     @torch.no_grad()
