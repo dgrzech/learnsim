@@ -154,7 +154,7 @@ class BaseTrainer:
             torch.save(state, filename)
             print('checkpoint saved\n')
 
-        dist.barrier()
+        dist.barrier()  # NOTE (DG): not really needed cause other processes don't read the file
 
     def _resume_checkpoint(self, resume_path):
         if self.rank == 0:
