@@ -40,13 +40,13 @@ class BaseTrainer:
 
         # model and losses
         model = model.to(self.rank)
-        self.model = DDP(model, device_ids=[self.rank])
+        self.model = DDP(model, device_ids=[self.rank], find_unused_parameters=True)
 
         if self.optimize_q_phi and not self.test_only:
             import model.distributions as distr
 
             q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
-            self.q_f = DDP(q_f, device_ids=[self.rank])
+            self.q_f = DDP(q_f, device_ids=[self.rank], find_unused_parameters=True)
 
         self.data_loss = losses['data'].to(self.rank)
         self.reg_loss = losses['regularisation'].to(self.rank)
