@@ -123,7 +123,7 @@ class BiobankDataset(Dataset):
         mask_arr_padded = np.pad(mask_arr, self.padding, mode='minimum')
         mask = torch.from_numpy(mask_arr_padded).unsqueeze(0).unsqueeze(0)
 
-        return F.interpolate(mask, size=self.dims, mode='nearest').bool().squeeze(0)
+        return F.interpolate(mask, size=self.dims, mode='nearest').bool().squeeze(0)  # NOTE (DG): no align_corners cause short
 
     def _get_seg(self, seg_path):
         seg = sitk.ReadImage(seg_path, sitk.sitkFloat32)
@@ -133,7 +133,7 @@ class BiobankDataset(Dataset):
         seg_arr_padded = np.pad(seg_arr, self.padding, mode='minimum')
         seg = torch.from_numpy(seg_arr_padded).unsqueeze(0).unsqueeze(0)
 
-        return F.interpolate(seg, size=self.dims, mode='nearest').short().squeeze(0)
+        return F.interpolate(seg, size=self.dims, mode='nearest').short().squeeze(0)  # NOTE (DG): no align_corners cause short
 
     def __getitem__(self, idx):
         im_moving_path = self.im_mask_seg_triples[idx]['im']
