@@ -4,7 +4,8 @@ from datetime import datetime
 from functools import partial, reduce
 from operator import getitem
 from pathlib import Path
-from shutil import copy, copytree
+from shutil import copy, copytree, rmtree
+
 import torch.distributed as dist
 
 import data_loader.data_loaders as module_data
@@ -82,9 +83,9 @@ class ConfigParser:
             # copy values of variational parameters
             if self.resume is not None and not self.test:
                 print('copying previous values of variational parameters..')
-                copytree(self.resume.parent.parent / 'optimizers', self.optimizers_dir)
-                copytree(self.resume.parent.parent / 'tensors', self.tensors_dir)
-                print('done!\n')
+                copytree(self.resume.parent.parent / 'optimizers', self.optimizers_dir, dirs_exist_ok=True)
+                copytree(self.resume.parent.parent / 'tensors', self.tensors_dir, dirs_exist_ok=True)
+                print('done!')
 
             # save updated config file to the checkpoint dir
             write_json(self.config, dir / 'config.json')
@@ -124,10 +125,9 @@ class ConfigParser:
             assert args.config is not None, msg_no_cfg
             resume = None
             cfg_fname = Path(args.config)
-        
+
         config = read_json(cfg_fname)
         if args.config and resume:
-            # update new config for fine-tuning
             config.update(read_json(args.config))
 
         local_rank = args.local_rank
@@ -235,6 +235,58 @@ class ConfigParser:
 
                 if os.path.isfile(f_path):
                     copy(f_path, tensors_backup_path)
+
+        dist.barrier()
+
+    def copy_var_params_from_backup_dirs(self, resume_epoch):
+        dist.barrier()
+
+        if self.rank == 0:
+            optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
+            var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
+
+            def find_last_backup_epoch_dirs():
+                for epoch in reversed(range(1, resume_epoch + 1)):
+                    resume_epoch_str = 'epoch_' + str(epoch).zfill(4)
+
+                    if resume_epoch_str in optimisers_backup_dirs and resume_epoch_str in var_params_backup_dirs:
+                        return resume_epoch_str
+
+                raise ValueError
+
+            last_backup_epoch = find_last_backup_epoch_dirs()
+
+            def copy_backup_to_current_dir():
+                optimisers_backup_dir = os.path.join(self.optimizers_dir, last_backup_epoch)
+                var_params_backup_dir = os.path.join(self.tensors_dir, last_backup_epoch)
+
+                for f in os.listdir(optimisers_backup_dir):
+                    f_path = os.path.join(optimisers_backup_dir, f)
+                    copy(f_path, self.optimizers_dir)
+
+                for f in os.listdir(var_params_backup_dir):
+                    f_path = os.path.join(var_params_backup_dir, f)
+                    copy(f_path, self.tensors_dir)
+
+            copy_backup_to_current_dir()
+
+        dist.barrier()
+
+    def remove_backup_dirs(self):
+        dist.barrier()
+
+        if self.rank == 0:
+            print('removing backup directories..')
+
+            optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
+            var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
+
+            for f in optimisers_backup_dirs:
+                f_path = os.path.join(self.optimizers_dir, f)
+                rmtree(f_path)
+            for f in var_params_backup_dirs:
+                f_path = os.path.join(self.tensors_dir, f)
+                rmtree(f_path)
 
         dist.barrier()
 

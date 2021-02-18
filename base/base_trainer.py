@@ -48,6 +48,18 @@ class BaseTrainer:
             q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
             self.q_f = DDP(q_f, device_ids=[self.rank], find_unused_parameters=True)
 
+        # training logic
+        self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
+        self.step, self.no_iters_q_v =  0, int(cfg_trainer['no_iters_q_v'])
+        self.no_batches = len(self.data_loader)
+
+        self.log_period = int(cfg_trainer['log_period'])
+        self.var_params_backup_period = int(cfg_trainer['var_params_backup_period'])
+
+        # resuming
+        if config.resume is not None:
+            self._resume_checkpoint(config.resume)
+
         self.data_loss = losses['data'].to(self.rank)
         self.reg_loss = losses['regularisation'].to(self.rank)
         self.entropy_loss = losses['entropy'].to(self.rank)
@@ -62,14 +74,6 @@ class BaseTrainer:
         # metrics
         if self.rank == 0:
             self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
-
-        # training logic
-        self.start_epoch, self.step = 1, 0
-        self.no_epochs, self.no_iters_q_v = int(cfg_trainer['no_epochs']), int(cfg_trainer['no_iters_q_v'])
-        self.no_batches = len(self.data_loader)
-
-        self.log_period = int(cfg_trainer['log_period'])
-        self.var_params_backup_period = int(cfg_trainer['var_params_backup_period'])
 
         if self.test_only:
             self.no_samples_test = cfg_trainer['no_samples_test']
@@ -101,7 +105,7 @@ class BaseTrainer:
         full training logic
         """
 
-        for epoch in range(self.start_epoch, self.no_epochs+1):
+        for epoch in range(self.start_epoch, self.no_epochs + 1):
             self._train_epoch(epoch)
             self.no_iters_q_v = self.no_iters_q_v // 2 if epoch == 2 else self.no_iters_q_v
 
@@ -169,7 +173,8 @@ class BaseTrainer:
         resume_path = str(resume_path)
         checkpoint = torch.load(resume_path, map_location=map_location)
 
-        self.start_epoch = checkpoint['epoch'] + 1 if not self.test_only else 1
+        resume_epoch = checkpoint['epoch']
+        self.start_epoch = resume_epoch + 1 if not self.test_only else 1
         self.step = checkpoint['step'] + 1 if not self.test_only else 0
 
         if self.test_only:
@@ -178,6 +183,7 @@ class BaseTrainer:
             if self.rank == 0:
                 print('checkpoint loaded\n')
 
+            dist.barrier()
             return
 
         if self.optimize_q_phi:
@@ -189,7 +195,8 @@ class BaseTrainer:
             self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
             self.model.load_state_dict(checkpoint['model'])
 
+            self.config.copy_var_params_from_backup_dirs(resume_epoch)
+            self.config.remove_backup_dirs()
+
             if self.rank == 0:
                 print('checkpoint loaded\n')
-
-            return
