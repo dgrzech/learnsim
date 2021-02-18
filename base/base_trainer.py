@@ -67,7 +67,9 @@ class BaseTrainer:
         self.start_epoch, self.step = 1, 0
         self.no_epochs, self.no_iters_q_v = int(cfg_trainer['no_epochs']), int(cfg_trainer['no_iters_q_v'])
         self.no_batches = len(self.data_loader)
+
         self.log_period = int(cfg_trainer['log_period'])
+        self.var_params_backup_period = int(cfg_trainer['var_params_backup_period'])
 
         if self.test_only:
             self.no_samples_test = cfg_trainer['no_samples_test']
@@ -102,6 +104,9 @@ class BaseTrainer:
         for epoch in range(self.start_epoch, self.no_epochs+1):
             self._train_epoch(epoch)
             self.no_iters_q_v = self.no_iters_q_v // 2 if epoch == 2 else self.no_iters_q_v
+
+            if epoch % self.var_params_backup_period == 0:
+                self.config.copy_var_params_to_backup_dirs(epoch)
 
     def test(self):
         """
@@ -154,7 +159,7 @@ class BaseTrainer:
             torch.save(state, filename)
             print('checkpoint saved\n')
 
-        dist.barrier()  # NOTE (DG): not really needed cause other processes don't read the file
+        # dist.barrier()  # NOTE (DG): not really needed cause other processes don't read the file
 
     def _resume_checkpoint(self, resume_path):
         if self.rank == 0:

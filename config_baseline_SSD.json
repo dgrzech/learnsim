@@ -67,6 +67,7 @@
 		"no_epochs": 1,
 		"no_iters_q_v": 2048,
 		"log_period": 1024,
+		"var_params_backup_period": 5,
 
 		"no_samples_test": 50,
 

@@ -1,9 +1,11 @@
 import logging
+import os
 from datetime import datetime
-from distutils.dir_util import copy_tree
 from functools import partial, reduce
 from operator import getitem
 from pathlib import Path
+from shutil import copy, copytree
+import torch.distributed as dist
 
 import data_loader.data_loaders as module_data
 import model.loss as model_loss
@@ -80,8 +82,8 @@ class ConfigParser:
             # copy values of variational parameters
             if self.resume is not None and not self.test:
                 print('copying previous values of variational parameters..')
-                copy_tree((self.resume.parent.parent / 'optimizers').absolute().as_posix(), self._optimizers_dir.absolute().as_posix())
-                copy_tree((self.resume.parent.parent / 'tensors').absolute().as_posix(), self._tensors_dir.absolute().as_posix())
+                copytree(self.resume.parent.parent / 'optimizers', self.optimizers_dir)
+                copytree(self.resume.parent.parent / 'tensors', self.tensors_dir)
                 print('done!\n')
 
             # save updated config file to the checkpoint dir
@@ -209,6 +211,32 @@ class ConfigParser:
         logger = logging.getLogger(name)
         logger.setLevel(self.log_levels[verbosity])
         return logger
+
+    def copy_var_params_to_backup_dirs(self, epoch):
+        dist.barrier()
+
+        if self.rank == 0:
+            epoch_str = 'epoch_' + str(epoch).zfill(4)
+
+            optimizers_backup_path = self.optimizers_dir / epoch_str
+            tensors_backup_path = self.tensors_dir / epoch_str
+
+            optimizers_backup_path.mkdir(parents=True, exist_ok=True)
+            tensors_backup_path.mkdir(parents=True, exist_ok=True)
+
+            for f in os.listdir(self.optimizers_dir):
+                f_path = os.path.join(self.optimizers_dir, f)
+
+                if os.path.isfile(f_path):
+                    copy(f_path, optimizers_backup_path)
+
+            for f in os.listdir(self.tensors_dir):
+                f_path = os.path.join(self.tensors_dir, f)
+
+                if os.path.isfile(f_path):
+                    copy(f_path, tensors_backup_path)
+
+        dist.barrier()
 
     # setting read-only attributes
     @property
