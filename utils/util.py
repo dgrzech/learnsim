@@ -48,12 +48,12 @@ def add_noise_Langevin(field, sigma, tau):
 
 
 def get_noise_uniform(field, alpha):
-    epsilon = -2.0 * alpha * torch.rand(field.shape, device=field.device) + alpha
+    epsilon = -2.0 * alpha * torch.rand_like(field) + alpha
     return transform_coordinates(epsilon)
 
 
 def get_noise_Langevin(sigma, tau):
-    eps = torch.randn(sigma.shape, device=sigma.device)
+    eps = torch.randn_like(sigma)
     return math.sqrt(2.0 * tau) * sigma * eps
 
 

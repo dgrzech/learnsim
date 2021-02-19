@@ -20,7 +20,7 @@ class LowRankMultivariateNormalDistribution(nn.Module):
     def forward(self, no_samples=1):
         sigma = torch.exp(0.5 * self.log_var)
 
-        eps = torch.randn(sigma.shape, device=sigma.device)
+        eps = torch.randn_like(sigma)
         x = torch.randn(1, device=self.u.device)
 
         if no_samples == 1:
