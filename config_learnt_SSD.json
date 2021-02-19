@@ -9,8 +9,8 @@
         "type": "CNN_SSD",
         "args": {
 			"learnable": true,
-			"no_feature_maps": 4,
-			"s": 2
+			"no_feature_maps": 8,
+			"s": 1
 	    }
     },
 

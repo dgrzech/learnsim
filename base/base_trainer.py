@@ -107,7 +107,11 @@ class BaseTrainer:
 
         for epoch in range(self.start_epoch, self.no_epochs + 1):
             self._train_epoch(epoch)
-            self.no_iters_q_v = self.no_iters_q_v // 2 if epoch == 2 else self.no_iters_q_v
+
+            if epoch % 10 == 2:
+                self.no_iters_q_v = self.no_iters_q_v // 2
+            elif epoch % 10 == 0:
+                self.no_iters_q_v = self.no_iters_q_v * 2
 
             if epoch % self.var_params_backup_period == 0:
                 self.config.copy_var_params_to_backup_dirs(epoch)
