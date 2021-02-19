@@ -32,7 +32,7 @@ class LCC(DataLoss):
         super(LCC, self).__init__()
 
     def forward(self, z):
-        return -1.0 * torch.sum(z)
+        return -1.0 * torch.sum(z, dim=0, keepdim=True)
 
 
 class SSD(DataLoss):
@@ -44,7 +44,7 @@ class SSD(DataLoss):
         super(SSD, self).__init__()
 
     def forward(self, z):
-        return 0.5 * torch.sum(z)
+        return 0.5 * torch.sum(z, dim=0, keepdim=True)
 
 
 """
