@@ -88,10 +88,14 @@ class LossTestMethods(unittest.TestCase):
 
         # get the residual
         z = self.encoder_SSD(im_fixed, im_moving, mask)
-        assert torch.allclose((im_fixed - im_moving) ** 2 * mask, z, atol=0.01)
+
+        res_sq = (im_fixed - im_moving) ** 2
+        res_sq_masked = res_sq[mask]
+
+        assert torch.allclose(res_sq_masked, z, atol=0.01)
 
         # get the loss value
         loss = self.loss_SSD(z)
-        loss_true = self.loss_SSD((im_fixed - im_moving) ** 2 * mask)
+        loss_true = self.loss_SSD(res_sq_masked)
 
         assert torch.allclose(loss_true, loss, atol=0.01)

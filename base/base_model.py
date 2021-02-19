@@ -29,7 +29,7 @@ class BaseModel(nn.Module):
         """
 
         z = self.encode(im_fixed, im_moving)
-        return z * mask
+        return z[mask]
 
     def __str__(self):
         """

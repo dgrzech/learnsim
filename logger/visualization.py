@@ -34,7 +34,8 @@ class TensorboardWriter:
         self.step = step
 
     def write_graph(self, model):  # FIXME
-        # im_fixed = im_moving = mask = torch.randn([1, 1, 16, 16, 16])
+        # im_fixed = im_moving = torch.randn([1, 1, 16, 16, 16])
+        # mask = torch.ones_like(im_fixed).bool()
         # inputs = (im_fixed, im_moving, mask)
         # self.writer.add_graph(model, input_to_model=inputs)
         pass
