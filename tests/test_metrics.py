@@ -21,7 +21,7 @@ torch.autograd.set_detect_anomaly(True)
 
 
 test_config_str = '{' \
-                  '"name": "test", "optimize_q_phi": false, "optimize_q_v": false,' \
+                  '"name": "test", "no_GPUs": 0, "optimize_q_phi": false, "optimize_q_v": false,' \
                   '"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_02", "dims": [64, 64, 64], ' \
                   '"trainer": {"save_dir": "./temp"}' \
                   '}'
@@ -30,6 +30,7 @@ test_config_str = '{' \
 class MetricsTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName + '\n')
+        self.local_rank = 0
 
     def tearDown(self):
         save_path = './temp/test'
@@ -41,14 +42,14 @@ class MetricsTestMethods(unittest.TestCase):
 
     def test_DSC(self):
         test_config_json = json.loads(test_config_str)
-        cfg = ConfigParser(test_config_json)
+        cfg = ConfigParser(test_config_json, self.local_rank)
         structures_dict = cfg.structures_dict
 
         im_paths = cfg['data_dir']
         save_paths = cfg.save_dirs
         dims = (64, 64, 64)
 
-        dataset = BiobankDataset(im_paths, save_paths, dims)
+        dataset = BiobankDataset(im_paths, save_paths, dims, rank=0)
         spacing = dataset.im_spacing
 
         fixed = dataset.fixed
