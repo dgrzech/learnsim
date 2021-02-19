@@ -19,7 +19,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 1.0
+			"w_reg": 1.4
 		}
 	},
 	"entropy_loss": {
@@ -61,7 +61,8 @@
 
 	"trainer": {
 		"uniform_noise": {
-			"enabled": false
+			"enabled": true,
+			"magnitude": 0.1
 		},
 
 		"no_epochs": 1,
