@@ -1,6 +1,7 @@
 from os import path
 
 import torch
+import torch.distributed as dist
 
 from base import BaseTrainer
 from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
@@ -58,9 +59,13 @@ class Trainer(BaseTrainer):
         return data_term, reg_term, entropy_term, transformation, displacement, im_moving_warped
 
     def _step_q_v(self, epoch, im_pair_idxs, moving, var_params_q_v):
+        im_pair_idxs_local = im_pair_idxs
+
+        n = len(im_pair_idxs_local)
+        total_no_samples = n * self.world_size
+
         for iter_no in range(1, self.no_iters_q_v + 1):
             self.step += 1
-            n = len(im_pair_idxs)
 
             # get samples from q_v
             v_sample1_unsmoothed, v_sample2_unsmoothed = sample_q_v(var_params_q_v, no_samples=2)
@@ -82,40 +87,62 @@ class Trainer(BaseTrainer):
             loss_q_v.backward()
             self.optimizer_q_v.step()
 
-            # tensorboard
-            if self.rank == 0 and (iter_no == 1 or iter_no % self.log_period == 0):
-                self.writer.set_step(self.step)
+            with torch.no_grad():
+                im_pair_idxs_tensor = torch.tensor(im_pair_idxs, device=self.rank)
+                im_pair_idxs_tensor_list = [torch.zeros_like(im_pair_idxs_tensor) for _ in range(self.world_size)]
+                dist.all_gather(im_pair_idxs_tensor_list, im_pair_idxs_tensor)
 
-                self.metrics.update('loss/data_term', data_term.item(), n=n)
-                self.metrics.update('loss/reg_term', reg_term.item(), n=n)
-                self.metrics.update('loss/entropy_term', entropy_term.item(), n=n)
-                self.metrics.update('loss/q_v', loss_q_v.item(), n=n)
+                no_non_diffeomorphic_voxels, log_det_J_transformation = calc_no_non_diffeomorphic_voxels(transformation1, self.diff_op)
+                no_non_diffeomorphic_voxels_list = [torch.zeros_like(no_non_diffeomorphic_voxels) for _ in range(self.world_size)]
+                dist.all_gather(no_non_diffeomorphic_voxels_list, no_non_diffeomorphic_voxels)
 
-                with torch.no_grad():
-                    no_non_diffeomorphic_voxels, log_det_J_transformation = calc_no_non_diffeomorphic_voxels(transformation1, self.diff_op)
+                dist.reduce(data_term, 0, op=dist.ReduceOp.SUM)
+                dist.reduce(reg_term, 0, op=dist.ReduceOp.SUM)
+                dist.reduce(entropy_term, 0, op=dist.ReduceOp.SUM)
+                dist.reduce(loss_q_v, 0, op=dist.ReduceOp.SUM)
 
-                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].item()
+                # tensorboard
+                if self.rank == 0 and (iter_no == 1 or iter_no % self.log_period == 0):
+                    self.writer.set_step(self.step)
+
+                    self.metrics.update('loss/data_term', data_term.item(), n=total_no_samples)
+                    self.metrics.update('loss/reg_term', reg_term.item(), n=total_no_samples)
+                    self.metrics.update('loss/entropy_term', entropy_term.item(), n=total_no_samples)
+                    self.metrics.update('loss/q_v', loss_q_v.item(), n=total_no_samples)
+
+                    im_pair_idxs_list = torch.cat(im_pair_idxs_tensor_list, dim=0).view(-1).tolist()
+                    no_non_diffeomorphic_voxels = torch.cat(no_non_diffeomorphic_voxels_list, dim=0).view(-1).tolist()
+
+                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs_list):
+                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx]
                         self.metrics.update('no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
 
-        if self.rank == 0:
-            # tensorboard cont.
-            with torch.no_grad():
+        # tensorboard cont.
+        with torch.no_grad():
+            segs_moving_warped = self.registration_module(moving['seg'], transformation1)
+            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
+
+            ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
+            DSC_list = [torch.zeros_like(DSC) for _ in range(self.world_size)]
+
+            dist.all_gather(ASD_list, ASD)
+            dist.all_gather(DSC_list, DSC)
+
+            if self.rank == 0:
                 self.writer.set_step(epoch)
-
-                var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
-                segs_moving_warped = self.registration_module(moving['seg'], transformation1)
-
-                metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
-                self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+                self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list)
 
                 if not self.test_only:
-                    log_fields(self.writer, im_pair_idxs, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
-                    log_images(self.writer, im_pair_idxs, self.fixed['im'], moving['im'], im_moving_warped1)
+                    var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
+
+                    log_fields(self.writer, im_pair_idxs_local, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
+                    log_images(self.writer, im_pair_idxs_local, self.fixed['im'], moving['im'], im_moving_warped1)
 
     def _step_q_f_q_phi(self, im_pair_idxs, moving, var_params_q_v):
         self.step += 1
+
         n = len(im_pair_idxs)
+        total_no_samples = self.world_size
 
         # draw a sample from q_v
         v_sample = sample_q_v(var_params_q_v, no_samples=1)
@@ -140,10 +167,12 @@ class Trainer(BaseTrainer):
             self.optimizer_q_f.step()
             self.optimizer_q_phi.step()
 
+        dist.reduce(loss_q_f_q_phi, 0, op=dist.ReduceOp.SUM)
+
         # tensorboard
         if self.rank == 0:
             self.writer.set_step(self.step)
-            self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item())
+            self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item(), n=total_no_samples)
 
             with torch.no_grad():
                 log_model_weights(self.writer, self.model)
@@ -243,21 +272,30 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def __metrics_init(self):
-        if not self.rank == 0:
-            return
-
-        self.writer.set_step(self.step)
-
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
-            im_pair_idxs = im_pair_idxs.tolist()
+            im_pair_idxs_local = im_pair_idxs.tolist()
 
             self.__batch_init(moving)
             self.__moving_init(moving, var_params_q_v)
 
-            metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], moving['seg'], self.structures_dict, self.im_spacing)
-            self.metrics.update_ASD_and_DSC(metrics_im_pairs)
+            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed_batch['seg'], moving['seg'], self.structures_dict, self.im_spacing)
 
-        if self.optimize_q_phi:
+            im_pair_idxs_tensor = torch.tensor(im_pair_idxs_local, device=self.rank)
+            im_pair_idxs_tensor_list = [torch.zeros_like(im_pair_idxs_tensor) for _ in range(self.world_size)]
+            dist.all_gather(im_pair_idxs_tensor_list, im_pair_idxs_tensor)
+
+            ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
+            DSC_list = [torch.zeros_like(DSC) for _ in range(self.world_size)]
+
+            dist.all_gather(ASD_list, ASD)
+            dist.all_gather(DSC_list, DSC)
+
+            if self.rank == 0:
+                self.writer.set_step(self.step)
+                im_pair_idxs_list = torch.cat(im_pair_idxs_tensor_list, dim=0).view(-1).tolist()
+                self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list)
+
+        if self.rank == 0 and self.optimize_q_phi:
             log_q_f(self.writer, self.q_f)
 
     @torch.no_grad()

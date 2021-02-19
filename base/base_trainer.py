@@ -15,10 +15,11 @@ class BaseTrainer:
 
     def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only):
         self.config = config
-        self.rank = config.rank
+        self.logger = config.get_logger('train')
         self.test_only = test_only
 
-        self.logger = config.get_logger('train')
+        self.rank = dist.get_rank()
+        self.world_size = dist.get_world_size()
 
         self.data_loader = data_loader
         self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.config.structures_dict

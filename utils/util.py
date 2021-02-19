@@ -113,8 +113,10 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
     calculate average surface distances and Dice scores
     """
 
-    metrics = dict()
     hausdorff_distance_filter = sitk.HausdorffDistanceImageFilter()
+
+    ASD, DSC = torch.zeros(len(im_pair_idxs), len(structures_dict), device=seg_fixed.device), \
+               torch.zeros(len(im_pair_idxs), len(structures_dict), device=seg_fixed.device)
 
     if GPU:
         DSCs = calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict)
@@ -138,10 +140,9 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         seg_moving_arr = seg_moving[loop_idx].squeeze()
-        metrics_im_pair = {'ASD': dict(), 'DSC': dict()}
 
-        for structure in structures_dict:
-            label = structures_dict[structure]
+        for structure_idx, structure_name in enumerate(structures_dict):
+            label = structures_dict[structure_name]
 
             seg_fixed_structure = np.where(seg_fixed_arr == label, 1, 0)
             seg_moving_structure = np.where(seg_moving_arr == label, 1, 0)
@@ -153,18 +154,16 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
             seg_moving_im.SetSpacing(spacing)
 
             try:
-                metrics_im_pair['ASD'][structure] = calc_ASD(seg_fixed_im, seg_moving_im)
+                ASD[loop_idx, structure_idx] = calc_ASD(seg_fixed_im, seg_moving_im)
             except:
-                metrics_im_pair['ASD'][structure] = np.inf
+                ASD[loop_idx, structure_idx] = np.inf
 
             if GPU:
-                metrics_im_pair['DSC'][structure] = DSCs[im_pair_idx][structure]
+                DSC[loop_idx, structure_idx] = DSCs[im_pair_idx][structure_name]
             else:
-                metrics_im_pair['DSC'][structure] = calc_DSC(seg_fixed_im, seg_moving_im)
+                DSC[loop_idx, structure_idx] = calc_DSC(seg_fixed_im, seg_moving_im)
 
-        metrics[im_pair_idx] = metrics_im_pair
-
-    return metrics
+    return ASD, DSC
 
 
 def calc_no_non_diffeomorphic_voxels(transformation, diff_op):
@@ -402,17 +401,24 @@ class MetricTracker:
         self._data.counts[key] += n
         self._data.average[key] = self._data.total[key] / self._data.counts[key]
 
-    def update_ASD_and_DSC(self, metrics_im_pairs, test=False):
-        for im_pair_idx in metrics_im_pairs:
-            ASDs = metrics_im_pairs[im_pair_idx]['ASD']
-            DSCs = metrics_im_pairs[im_pair_idx]['DSC']
+    def update_ASD_and_DSC(self, im_pair_idxs, structures_dict, ASD_list, DSC_list, test=False):
+        ASD = torch.cat(ASD_list, dim=0).view(len(im_pair_idxs), len(structures_dict))
+        DSC = torch.cat(DSC_list, dim=0).view(len(im_pair_idxs), len(structures_dict))
 
-            for structure in ASDs:
-                name = 'ASD/im_pair_' + str(im_pair_idx) + '/' + structure if not test else 'test/ASD/im_pair_' + str(im_pair_idx) + '/' + structure
-                self.update(name, ASDs[structure])
-            for structure in DSCs:
-                name = 'DSC/im_pair_' + str(im_pair_idx) + '/' + structure if not test else 'test/DSC/im_pair_' + str(im_pair_idx) + '/' + structure
-                self.update(name, DSCs[structure])
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+            ASDs_im_pair = ASD[loop_idx]
+            DSCs_im_pair = DSC[loop_idx]
+
+            for structure_idx, structure in enumerate(structures_dict):
+                name_ASD = 'ASD/im_pair_' + str(im_pair_idx) + '/' + structure
+                name_DSC = 'DSC/im_pair_' + str(im_pair_idx) + '/' + structure
+
+                if test:
+                    name_ASD = 'test/' + name_ASD
+                    name_DSC = 'test/' + name_DSC
+
+                self.update(name_ASD, ASDs_im_pair[structure_idx])
+                self.update(name_DSC, DSCs_im_pair[structure_idx])
 
     def avg(self, key):
         return self._data.average[key]
