@@ -51,7 +51,7 @@ class BaseTrainer:
 
         # training logic
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
-        self.step, self.no_iters_q_v =  0, int(cfg_trainer['no_iters_q_v'])
+        self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
         self.no_batches = len(self.data_loader)
 
         self.log_period = int(cfg_trainer['log_period'])
@@ -107,12 +107,8 @@ class BaseTrainer:
         """
 
         for epoch in range(self.start_epoch, self.no_epochs + 1):
+            self._no_iters_q_v_scheduler(epoch)
             self._train_epoch(epoch)
-
-            if epoch % 10 == 2:
-                self.no_iters_q_v = self.no_iters_q_v // 2
-            elif epoch % 10 == 0:
-                self.no_iters_q_v = self.no_iters_q_v * 2
 
             if epoch % self.var_params_backup_period == 0:
                 self.config.copy_var_params_to_backup_dirs(epoch)
@@ -150,6 +146,18 @@ class BaseTrainer:
         if self.optimize_q_phi:
             self.__init_optimizer_q_f()
             self.__init_optimizer_q_phi()
+
+    def _no_iters_q_v_scheduler(self, epoch):
+        """
+        scheduler for the no. of iterations in an epoch
+        """
+
+        cfg_trainer = self.config['trainer']
+
+        if epoch % 2 == 1:
+            self.no_iters_q_v = int(cfg_trainer['no_iters_q_v'])
+        elif epoch % 2 == 0:
+            self.no_iters_q_v = int(cfg_trainer['no_iters_q_v']) // 2
 
     def _save_checkpoint(self, epoch):
         if self.rank == 0:
