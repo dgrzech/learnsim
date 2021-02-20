@@ -193,15 +193,17 @@ class BaseTrainer:
 
         if self.optimize_q_phi:
             self.__init_optimizer_q_f()
-            self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
+            # self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
             self.q_f.load_state_dict(checkpoint['q_f'])
 
             self.__init_optimizer_q_phi()
-            self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
+            # self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
             self.model.load_state_dict(checkpoint['model'])
 
-            self.config.copy_var_params_from_backup_dirs(resume_epoch)
-            self.config.remove_backup_dirs()
-
             if self.rank == 0:
+                self.config.copy_var_params_from_backup_dirs(resume_epoch)
+                self.config.remove_backup_dirs()
                 print('checkpoint loaded\n')
+
+            dist.barrier()
+            return

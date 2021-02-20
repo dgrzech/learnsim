@@ -213,82 +213,67 @@ class ConfigParser:
         return logger
 
     def copy_var_params_to_backup_dirs(self, epoch):
-        dist.barrier()
+        epoch_str = 'epoch_' + str(epoch).zfill(4)
 
-        if self.rank == 0:
-            epoch_str = 'epoch_' + str(epoch).zfill(4)
+        optimizers_backup_path = self.optimizers_dir / epoch_str
+        tensors_backup_path = self.tensors_dir / epoch_str
 
-            optimizers_backup_path = self.optimizers_dir / epoch_str
-            tensors_backup_path = self.tensors_dir / epoch_str
+        optimizers_backup_path.mkdir(parents=True, exist_ok=True)
+        tensors_backup_path.mkdir(parents=True, exist_ok=True)
 
-            optimizers_backup_path.mkdir(parents=True, exist_ok=True)
-            tensors_backup_path.mkdir(parents=True, exist_ok=True)
+        for f in os.listdir(self.optimizers_dir):
+            f_path = os.path.join(self.optimizers_dir, f)
 
-            for f in os.listdir(self.optimizers_dir):
-                f_path = os.path.join(self.optimizers_dir, f)
+            if os.path.isfile(f_path):
+                copy(f_path, optimizers_backup_path)
 
-                if os.path.isfile(f_path):
-                    copy(f_path, optimizers_backup_path)
+        for f in os.listdir(self.tensors_dir):
+            f_path = os.path.join(self.tensors_dir, f)
 
-            for f in os.listdir(self.tensors_dir):
-                f_path = os.path.join(self.tensors_dir, f)
-
-                if os.path.isfile(f_path):
-                    copy(f_path, tensors_backup_path)
-
-        dist.barrier()
+            if os.path.isfile(f_path):
+                copy(f_path, tensors_backup_path)
 
     def copy_var_params_from_backup_dirs(self, resume_epoch):
-        dist.barrier()
+        optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
+        var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
 
-        if self.rank == 0:
-            optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
-            var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
+        def find_last_backup_epoch_dirs():
+            for epoch in reversed(range(1, resume_epoch + 1)):
+                resume_epoch_str = 'epoch_' + str(epoch).zfill(4)
 
-            def find_last_backup_epoch_dirs():
-                for epoch in reversed(range(1, resume_epoch + 1)):
-                    resume_epoch_str = 'epoch_' + str(epoch).zfill(4)
+                if resume_epoch_str in optimisers_backup_dirs and resume_epoch_str in var_params_backup_dirs:
+                    return resume_epoch_str
 
-                    if resume_epoch_str in optimisers_backup_dirs and resume_epoch_str in var_params_backup_dirs:
-                        return resume_epoch_str
+            raise ValueError
 
-                raise ValueError
+        last_backup_epoch = find_last_backup_epoch_dirs()
 
-            last_backup_epoch = find_last_backup_epoch_dirs()
+        def copy_backup_to_current_dir():
+            optimisers_backup_dir = os.path.join(self.optimizers_dir, last_backup_epoch)
+            var_params_backup_dir = os.path.join(self.tensors_dir, last_backup_epoch)
 
-            def copy_backup_to_current_dir():
-                optimisers_backup_dir = os.path.join(self.optimizers_dir, last_backup_epoch)
-                var_params_backup_dir = os.path.join(self.tensors_dir, last_backup_epoch)
+            for f in os.listdir(optimisers_backup_dir):
+                f_path = os.path.join(optimisers_backup_dir, f)
+                copy(f_path, self.optimizers_dir)
 
-                for f in os.listdir(optimisers_backup_dir):
-                    f_path = os.path.join(optimisers_backup_dir, f)
-                    copy(f_path, self.optimizers_dir)
+            for f in os.listdir(var_params_backup_dir):
+                f_path = os.path.join(var_params_backup_dir, f)
+                copy(f_path, self.tensors_dir)
 
-                for f in os.listdir(var_params_backup_dir):
-                    f_path = os.path.join(var_params_backup_dir, f)
-                    copy(f_path, self.tensors_dir)
-
-            copy_backup_to_current_dir()
-
-        dist.barrier()
+        copy_backup_to_current_dir()
 
     def remove_backup_dirs(self):
-        dist.barrier()
+        print('removing backup directories..')
 
-        if self.rank == 0:
-            print('removing backup directories..')
+        optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
+        var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
 
-            optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
-            var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
-
-            for f in optimisers_backup_dirs:
-                f_path = os.path.join(self.optimizers_dir, f)
-                rmtree(f_path)
-            for f in var_params_backup_dirs:
-                f_path = os.path.join(self.tensors_dir, f)
-                rmtree(f_path)
-
-        dist.barrier()
+        for f in optimisers_backup_dirs:
+            f_path = os.path.join(self.optimizers_dir, f)
+            rmtree(f_path)
+        for f in var_params_backup_dirs:
+            f_path = os.path.join(self.tensors_dir, f)
+            rmtree(f_path)
 
     # setting read-only attributes
     @property
