@@ -167,10 +167,10 @@ class BaseTrainer:
             state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
             if self.optimize_q_phi:
-                state['q_f'] = self.q_f.state_dict()
+                state['q_f'] = self.q_f.module.state_dict() if isinstance(self.q_f, DDP) else self.q_f.state_dict()
                 state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
 
-                state['model'] = self.model.state_dict()
+                state['model'] = self.model.module.state_dict() if isinstance(self.model, DDP) else self.model.state_dict()
                 state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
 
             torch.save(state, filename)
@@ -201,11 +201,11 @@ class BaseTrainer:
 
         if self.optimize_q_phi:
             self.__init_optimizer_q_f()
-            # self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
+            self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
             self.q_f.load_state_dict(checkpoint['q_f'])
 
             self.__init_optimizer_q_phi()
-            # self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
+            self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
             self.model.load_state_dict(checkpoint['model'])
 
             if self.rank == 0:
