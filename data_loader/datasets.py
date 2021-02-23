@@ -12,9 +12,10 @@ from utils import rescale_im
 
 
 class BiobankDataset(Dataset):
-    def __init__(self, im_paths, save_paths, dims, rank):
+    def __init__(self, dims, im_paths, save_paths, rescale_im=False, rank=0):
         self.im_paths = im_paths
         self.save_paths = save_paths
+        self.rescale_im = rescale_im
 
         self.dims, self.dims_im, self.dims_v = dims, (1, *dims), (3, *dims)
         self.padding, self.im_spacing = None, None
@@ -112,6 +113,9 @@ class BiobankDataset(Dataset):
         im_arr_padded = np.pad(im_arr, self.padding, mode='minimum')
         im_tensor = torch.from_numpy(im_arr_padded).unsqueeze(0).unsqueeze(0)
         im = F.interpolate(im_tensor, size=self.dims, mode='trilinear', align_corners=True).squeeze(0)
+
+        if not self.rescale_im:
+            return im
 
         return rescale_im(im)
 

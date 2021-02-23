@@ -3,11 +3,11 @@ from .datasets import BiobankDataset
 
 
 class LearnSimDataLoader(BaseDataLoader):
-    def __init__(self, batch_size, data_dir, dims, num_workers, no_GPUs=1, rank=0, save_dirs=None):
+    def __init__(self, batch_size, dims, num_workers, data_dir, save_dirs, rescale_im=False, no_GPUs=1, rank=0):
         self.data_dir = data_dir
         self.save_dirs = save_dirs
 
-        dataset = BiobankDataset(data_dir, save_dirs, dims, rank)
+        dataset = BiobankDataset(dims, data_dir, save_dirs, rescale_im, rank)
         super().__init__(batch_size, dataset, no_GPUs, num_workers, rank)
 
     @property

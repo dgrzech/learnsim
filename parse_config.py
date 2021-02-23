@@ -173,7 +173,8 @@ class ConfigParser:
         return partial(getattr(module, module_name), *args, **module_args)
 
     def init_data_loader(self):
-        return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=self.rank, save_dirs=self.save_dirs)
+        self['data_loader']['args']['save_dirs'] = self.save_dirs
+        return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=self.rank)
 
     def init_losses(self):
         data_loss = self.init_obj('data_loss', model_loss)

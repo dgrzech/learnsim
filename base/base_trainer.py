@@ -40,14 +40,16 @@ class BaseTrainer:
         self.fixed = self.fixed_batch = {k: v.to(self.rank) for k, v in self.data_loader.fixed.items()}
 
         # model and losses
-        model = model.to(self.rank)
-        self.model = DDP(model, device_ids=[self.rank], find_unused_parameters=True)
+        self.model = model.to(self.rank)
+
+        if not self.test_only:
+            self.model = DDP(self.model, device_ids=[self.rank], find_unused_parameters=True)
 
         if self.optimize_q_phi and not self.test_only:
             import model.distributions as distr
 
-            q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
-            self.q_f = DDP(q_f, device_ids=[self.rank], find_unused_parameters=True)
+            self.q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
+            self.q_f = DDP(self.q_f, device_ids=[self.rank], find_unused_parameters=True)
 
         # training logic
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
