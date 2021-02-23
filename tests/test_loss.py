@@ -29,14 +29,14 @@ class LossTestMethods(unittest.TestCase):
         self.entropy = EntropyMultivariateNormal().to('cuda:0')
 
         # LCC
-        self.s_LCC = 1
+        self.s_LCC = 2
 
         self.encoder_LCC = CNN_LCC(learnable=False, s=self.s_LCC).to('cuda:0')
         self.loss_LCC = LCC().to('cuda:0')
 
         # SSD
-        self.s_SSD = 1
-        self.no_feature_maps_SSD = 8
+        self.s_SSD = 2
+        self.no_feature_maps_SSD = 12
 
         self.encoder_SSD = CNN_SSD(learnable=False, s=self.s_SSD, no_feature_maps=self.no_feature_maps_SSD).to('cuda:0')
         self.loss_SSD = SSD().to('cuda:0')
