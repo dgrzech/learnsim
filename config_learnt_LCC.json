@@ -1,0 +1,101 @@
+{
+	"name": "LCC",
+	"no_GPUs": 2,
+
+	"optimize_q_v": true,
+	"optimize_q_phi": true,
+
+	"model": {
+        "type": "CNN_LCC",
+        "args": {
+			"learnable": true,
+			"no_feature_maps": 8,
+			"s": 2
+	    }
+    },
+
+	"q_f": {
+		"type": "LowRankMultivariateNormalDistribution",
+		"args": {
+			"loc_learnable": false,
+			"cov_learnable": true
+		}
+	},
+
+	"data_loss": {
+		"type": "SSD"
+	},
+	"reg_loss": {
+		"type": "RegLoss_L2",
+		"args": {
+			"diff_op": "GradientOperator",
+			"w_reg": 1.0
+		}
+	},
+	"entropy_loss": {
+		"type": "EntropyMultivariateNormal"
+	},
+
+	"transformation_module": {
+		"type": "SVF_3D",
+		"args": {
+			"no_steps": 12
+		}
+	},
+	"registration_module": {
+		"type": "RegistrationModule"
+	},
+
+	"optimizer_q_f": {
+		"type": "Adam",
+		"args": {
+			"lr": 2e-4
+		}
+	},
+	"optimizer_q_phi": {
+		"type": "Adam",
+		"args": {
+			"lr": 1e-4
+		}
+	},
+	"optimizer_q_v": {
+		"type": "Adam",
+		"args": {
+			"lr": 3e-3
+		}
+	},
+
+	"data_loader": {
+		"type": "LearnSimDataLoader",
+		"args": {
+			"batch_size": 6,
+			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
+			"dims": [128, 128, 128],
+			"num_workers": 4
+		}
+	},
+
+	"Sobolev_grad": {
+		"enabled": true,
+		"s": 7,
+		"lambda": 5e-1
+	},
+
+	"trainer": {
+		"uniform_noise": {
+			"enabled": true,
+			"magnitude": 0.1
+		},
+
+		"no_epochs": 100,
+		"no_iters_q_v": 2048,
+		"log_period": 1024,
+		"var_params_backup_period": 5,
+
+		"no_samples_test": 50,
+
+		"tensorboard": true,
+		"save_dir": "saved/",
+		"verbosity": 2
+	}
+}
