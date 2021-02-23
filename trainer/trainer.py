@@ -224,16 +224,15 @@ class Trainer(BaseTrainer):
             save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
+            im_pair_idxs = im_pair_idxs.tolist()
+            im_pair_idxs_local = im_pair_idxs
+
             if self.rank == 0:
                 print(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
 
-            im_pair_idxs = im_pair_idxs.tolist()
-
             self.__batch_init(moving)
             self.__moving_init(moving, var_params_q_v)
-
-            if self.rank == 0:
-                save_moving_images(im_pair_idxs, self.save_dirs, self.im_spacing, moving['im'])
+            save_moving_images(im_pair_idxs_local, self.save_dirs, self.im_spacing, moving['im'])
 
             for sample_no in range(1, no_samples+1):
                 v_sample = sample_q_v(var_params_q_v, no_samples=1)
@@ -242,21 +241,35 @@ class Trainer(BaseTrainer):
 
                 im_moving_warped = self.registration_module(moving['im'], transformation)
                 segs_moving_warped = self.registration_module(moving['seg'], transformation)
+                save_sample(im_pair_idxs_local, self.save_dirs, self.im_spacing, sample_no, im_moving_warped, displacement)
+
+                im_pair_idxs_tensor = torch.tensor(im_pair_idxs, device=self.rank)
+                im_pair_idxs_tensor_list = [torch.zeros_like(im_pair_idxs_tensor) for _ in range(self.world_size)]
+                dist.all_gather(im_pair_idxs_tensor_list, im_pair_idxs_tensor)
+
+                no_non_diffeomorphic_voxels, _ = calc_no_non_diffeomorphic_voxels(transformation, self.diff_op)
+                no_non_diffeomorphic_voxels_list = [torch.zeros_like(no_non_diffeomorphic_voxels) for _ in range(self.world_size)]
+                dist.all_gather(no_non_diffeomorphic_voxels_list, no_non_diffeomorphic_voxels)
+
+                ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
+
+                ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
+                DSC_list = [torch.zeros_like(DSC) for _ in range(self.world_size)]
+
+                dist.all_gather(ASD_list, ASD)
+                dist.all_gather(DSC_list, DSC)
 
                 if self.rank == 0:
-                    no_non_diffeomorphic_voxels, _ = calc_no_non_diffeomorphic_voxels(transformation, self.diff_op)
+                    im_pair_idxs_list = torch.cat(im_pair_idxs_tensor_list, dim=0).view(-1).tolist()
+                    no_non_diffeomorphic_voxels = torch.cat(no_non_diffeomorphic_voxels_list, dim=0).view(-1).tolist()
 
-                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx].item()
-                        self.metrics.update('test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
-
-                    # metrics
-                    metrics_im_pairs = calc_metrics(im_pair_idxs, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
                     self.writer.set_step(sample_no)
-                    self.metrics.update_ASD_and_DSC(metrics_im_pairs, test=True)
 
-                    # .nii.gz/.vtk
-                    save_sample(im_pair_idxs, self.save_dirs, self.im_spacing, sample_no, im_moving_warped, displacement)
+                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs_list):
+                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx]
+
+                        self.metrics.update('no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
+                        self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list, test=True)
 
     @torch.no_grad()
     def __batch_init(self, moving):
