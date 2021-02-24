@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 
 import torch
 import torch.distributed as dist
@@ -51,10 +52,12 @@ if __name__ == '__main__':
     torch.cuda.set_device(rank)
 
     # config
-    config = ConfigParser.from_args(parser)
-    world_size = config['no_GPUs']
+    timestamp = datetime.now().strftime(r'%m%d_%H%M%S')
+    config = ConfigParser.from_args(parser, timestamp=timestamp)
 
     # run training
+    world_size = config['no_GPUs']
     dist.init_process_group('nccl', init_method='env://', world_size=world_size, rank=rank)
+
     train(config)
     dist.destroy_process_group()

@@ -1,12 +1,9 @@
 import logging
 import os
-from datetime import datetime
 from functools import partial, reduce
 from operator import getitem
 from pathlib import Path
 from shutil import copy, copytree, rmtree
-
-import torch.distributed as dist
 
 import data_loader.data_loaders as module_data
 import model.loss as model_loss
@@ -17,7 +14,7 @@ from utils import read_json, write_json
 
 
 class ConfigParser:
-    def __init__(self, config, local_rank, resume=None, modification=None, run_id=None, test=False):
+    def __init__(self, config, local_rank, resume=None, modification=None, timestamp=None, test=False):
         """
         class to parse configuration json file
         handles hyperparameters for training, initializations of modules, checkpoint saving and logging module
@@ -35,20 +32,13 @@ class ConfigParser:
         self.test = test
 
         # set save_dir where trained model and log will be saved.
+        run_id = 'learnt_' + timestamp if config['optimize_q_phi'] else 'baseline_' + timestamp
+
+        if self.test:
+            run_id = 'test_' + run_id
+
         save_dir = Path(self.config['trainer']['save_dir'])
         exper_name = self.config['name']
-
-        if run_id is None:  # use timestamp as default run-id
-            timestamp = datetime.now().strftime(r'%m%d_%H%M%S')
-
-            if config['optimize_q_phi']:
-                run_id = 'learnt_' + timestamp
-            else:
-                run_id = 'baseline_' + timestamp
-
-            if self.test:
-                run_id = 'test_' + run_id
-
         dir = save_dir / exper_name / run_id
 
         self._dir = dir
@@ -108,7 +98,7 @@ class ConfigParser:
                                 'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
 
     @classmethod
-    def from_args(cls, args, options='', test=False):
+    def from_args(cls, args, options='', timestamp=None, test=False):
         """
         initialize this class from some cli arguments; used in train, test
         """
@@ -133,7 +123,7 @@ class ConfigParser:
         local_rank = args.local_rank
         modification = {opt.target: getattr(args, _get_opt_name(opt.flags)) for opt in options}
 
-        return cls(config, local_rank, resume=resume, modification=modification, test=test)
+        return cls(config, local_rank, resume=resume, modification=modification, timestamp=timestamp, test=test)
 
     def init_obj(self, name, module, *args, **kwargs):
         """

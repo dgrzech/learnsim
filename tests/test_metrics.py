@@ -1,6 +1,7 @@
 import json
 import shutil
 import unittest
+from datetime import datetime
 
 import numpy as np
 import pytest
@@ -42,7 +43,9 @@ class MetricsTestMethods(unittest.TestCase):
 
     def test_DSC(self):
         test_config_json = json.loads(test_config_str)
-        cfg = ConfigParser(test_config_json, self.local_rank)
+        timestamp = datetime.now().strftime(r'%m%d_%H%M%S')
+
+        cfg = ConfigParser(test_config_json, self.local_rank, timestamp=timestamp)
         structures_dict = cfg.structures_dict
 
         im_paths = cfg['data_dir']
