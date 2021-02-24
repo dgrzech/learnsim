@@ -20,7 +20,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 1.0
+			"w_reg": 2.2
 		}
 	},
 	"entropy_loss": {
