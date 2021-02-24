@@ -49,7 +49,7 @@ class MetricsTestMethods(unittest.TestCase):
         save_paths = cfg.save_dirs
         dims = (64, 64, 64)
 
-        dataset = BiobankDataset(im_paths, save_paths, dims, rank=0)
+        dataset = BiobankDataset(dims, im_paths, save_paths, rescale_im=False, rank=0)
         spacing = dataset.im_spacing
 
         fixed = dataset.fixed
@@ -63,12 +63,12 @@ class MetricsTestMethods(unittest.TestCase):
         for key in var_params_q_v:
             var_params_q_v[key] = var_params_q_v[key].to('cuda:0', non_blocking=True)
 
-        metrics_im_pairs_CPU, metrics_im_pairs_GPU = calc_metrics(im_pair_idxs, fixed['seg'], moving['seg'], structures_dict, spacing, GPU=False), \
-                                                     calc_metrics(im_pair_idxs, fixed['seg'], moving['seg'], structures_dict, spacing, GPU=True)
+        ASD, DSC_CPU = calc_metrics(im_pair_idxs, fixed['seg'], moving['seg'], structures_dict, spacing, GPU=False)
+        ASD, DSC_GPU = calc_metrics(im_pair_idxs, fixed['seg'], moving['seg'], structures_dict, spacing, GPU=True)
 
         for im_pair_idx in im_pair_idxs:
-            DSC_CPU, DSC_GPU = metrics_im_pairs_CPU[im_pair_idx]['DSC'], metrics_im_pairs_GPU[im_pair_idx]['DSC']
+            DSC_CPU, DSC_GPU = DSC_CPU[im_pair_idx], DSC_GPU[im_pair_idx]
 
-            for structure in structures_dict:
-                val_CPU, val_GPU = DSC_CPU[structure], DSC_GPU[structure]
+            for structure_idx, structure in enumerate(structures_dict):
+                val_CPU, val_GPU = DSC_CPU[structure_idx].cpu(), DSC_GPU[structure_idx].cpu()
                 assert pytest.approx(val_CPU, 1e-4) == val_GPU

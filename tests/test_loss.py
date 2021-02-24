@@ -21,7 +21,7 @@ class LossTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName + '\n')
 
-        n = 4
+        n = 8
         self.dim_x = self.dim_y = self.dim_z = n
         self.dims = (n, n, n)
 
@@ -30,15 +30,16 @@ class LossTestMethods(unittest.TestCase):
 
         # LCC
         self.s_LCC = 2
+        self.no_feature_maps_LCC = 8
 
-        self.encoder_LCC = CNN_LCC(learnable=False, s=self.s_LCC).to('cuda:0')
+        self.encoder_LCC = CNN_LCC(learnable=True, s=self.s_LCC, no_feature_maps=self.no_feature_maps_LCC).to('cuda:0')
         self.loss_LCC = LCC().to('cuda:0')
 
         # SSD
         self.s_SSD = 2
         self.no_feature_maps_SSD = 12
 
-        self.encoder_SSD = CNN_SSD(learnable=False, s=self.s_SSD, no_feature_maps=self.no_feature_maps_SSD).to('cuda:0')
+        self.encoder_SSD = CNN_SSD(learnable=True, s=self.s_SSD, no_feature_maps=self.no_feature_maps_SSD).to('cuda:0')
         self.loss_SSD = SSD().to('cuda:0')
 
     def tearDown(self):
