@@ -23,7 +23,7 @@
 	},
 
 	"data_loss": {
-		"type": "SSD"
+		"type": "LCC"
 	},
 	"reg_loss": {
 		"type": "RegLoss_L2",
