@@ -13,12 +13,13 @@ from utils import calc_metrics
 
 # fix random seeds for reproducibility
 SEED = 123
-torch.manual_seed(SEED)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+
 np.random.seed(SEED)
+torch.manual_seed(SEED)
 
 torch.autograd.set_detect_anomaly(True)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 
 test_config_str = '{' \
@@ -31,7 +32,9 @@ test_config_str = '{' \
 class MetricsTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName + '\n')
-        self.local_rank = 0
+        self.atol = 1e-5
+        self.device = 'cuda:0'
+        self.rank = 0
 
     def tearDown(self):
         save_path = './temp/test'
@@ -45,7 +48,7 @@ class MetricsTestMethods(unittest.TestCase):
         test_config_json = json.loads(test_config_str)
         timestamp = datetime.now().strftime(r'%m%d_%H%M%S')
 
-        cfg = ConfigParser(test_config_json, self.local_rank, timestamp=timestamp)
+        cfg = ConfigParser(test_config_json, self.rank, timestamp=timestamp)
         structures_dict = cfg.structures_dict
 
         im_paths = cfg['data_dir']
@@ -60,11 +63,11 @@ class MetricsTestMethods(unittest.TestCase):
         im_pair_idxs = [0]
 
         for key in fixed:
-            fixed[key] = fixed[key].to('cuda:0', non_blocking=True)
+            fixed[key] = fixed[key].to(self.device, non_blocking=True)
         for key in moving:
-            moving[key] = moving[key].to('cuda:0', non_blocking=True)
+            moving[key] = moving[key].to(self.device, non_blocking=True)
         for key in var_params_q_v:
-            var_params_q_v[key] = var_params_q_v[key].to('cuda:0', non_blocking=True)
+            var_params_q_v[key] = var_params_q_v[key].to(self.device, non_blocking=True)
 
         ASD, DSC_CPU = calc_metrics(im_pair_idxs, fixed['seg'], moving['seg'], structures_dict, spacing, GPU=False)
         ASD, DSC_GPU = calc_metrics(im_pair_idxs, fixed['seg'], moving['seg'], structures_dict, spacing, GPU=True)
@@ -74,4 +77,4 @@ class MetricsTestMethods(unittest.TestCase):
 
             for structure_idx, structure in enumerate(structures_dict):
                 val_CPU, val_GPU = DSC_CPU[structure_idx].cpu(), DSC_GPU[structure_idx].cpu()
-                assert pytest.approx(val_CPU, 1e-4) == val_GPU
+                assert pytest.approx(val_CPU, self.atol) == val_GPU
