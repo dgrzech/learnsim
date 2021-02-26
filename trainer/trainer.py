@@ -7,7 +7,7 @@ from base import BaseTrainer
 from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
     save_optimizer, save_sample, save_tensors
 from utils import SobolevGrad, Sobolev_kernel_1D, \
-    add_noise_uniform, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
+    add_noise_uniform_field, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
 
 class Trainer(BaseTrainer):
@@ -42,7 +42,7 @@ class Trainer(BaseTrainer):
         transformation, displacement = self.transformation_module(v_sample)
 
         if self.add_noise_uniform:
-            transformation = add_noise_uniform(transformation, self.alpha)
+            transformation = add_noise_uniform_field(transformation, self.alpha)
 
         im_fixed = self.fixed_batch['im'] if im_fixed_sample is None else im_fixed_sample
         im_moving_warped = self.registration_module(moving['im'], transformation)

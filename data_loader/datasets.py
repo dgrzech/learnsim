@@ -114,10 +114,10 @@ class BiobankDataset(Dataset):
         im_tensor = torch.from_numpy(im_arr_padded).unsqueeze(0).unsqueeze(0)
         im = F.interpolate(im_tensor, size=self.dims, mode='trilinear', align_corners=True).squeeze(0)
 
-        if not self.rescale_im:
-            return im
+        if self.rescale_im:
+            im = rescale_im(im)
 
-        return rescale_im(im)
+        return im
 
     def _get_mask(self, mask_path):
         mask = sitk.ReadImage(mask_path, sitk.sitkFloat32)
