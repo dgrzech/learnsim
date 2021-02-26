@@ -40,15 +40,15 @@ def inf_loop(data_loader):
 
 
 def add_noise_uniform_field(field, alpha):
-    return field + transform_coordinates(get_noise_uniform(field.shape, alpha))
+    return field + transform_coordinates(get_noise_uniform(field.shape, field.device, alpha))
 
 
 def add_noise_Langevin(field, sigma, tau):
     return field + get_noise_Langevin(sigma, tau)
 
 
-def get_noise_uniform(shape, alpha):
-    return -2.0 * alpha * torch.rand(shape) + alpha
+def get_noise_uniform(shape, device, alpha):
+    return -2.0 * alpha * torch.rand(shape, device=device) + alpha
 
 
 def get_noise_Langevin(sigma, tau):

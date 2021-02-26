@@ -29,11 +29,11 @@ class CNN_LCC(BaseModel):
 
                 # add noise
                 alpha = 1e-5
-                epsilon = get_noise_uniform(self.conv1.weight.shape, alpha)
+                epsilon = get_noise_uniform(self.conv1.weight.shape, self.conv1.weight.device, alpha)
                 self.conv1.weight = nn.Parameter(self.conv1.weight + epsilon)
 
                 alpha = 1e-3
-                epsilon = get_noise_uniform(self.kernel.weight.shape, alpha)
+                epsilon = get_noise_uniform(self.kernel.weight.shape, self.kernel.weight.device, alpha)
                 self.kernel.weight = nn.Parameter(self.kernel.weight + epsilon)
 
     def print_weights(self):
@@ -84,7 +84,7 @@ class CNN_SSD(BaseModel):
 
                 # add noise
                 alpha = 1e-5
-                epsilon = get_noise_uniform(self.conv1.weight.shape, alpha)
+                epsilon = get_noise_uniform(self.conv1.weight.shape, self.conv1.weight.device, alpha)
                 self.conv1.weight = nn.Parameter(self.conv1.weight + epsilon)
 
     def print_weights(self):
