@@ -184,11 +184,19 @@ def calc_norm(field):
     return norms
 
 
+def get_log_path_from_run_ID(save_path, run_ID):
+    return save_path + '/' + run_ID + '/log'
+
+
 def get_module_attr(module, name):
     if isinstance(module, nn.DataParallel) or isinstance(module, nn.parallel.DistributedDataParallel):
         return getattr(module.module, name)
 
     return getattr(module, name)
+
+
+def get_samples_path_from_run_ID(save_path, run_ID):
+    return save_path + '/' + run_ID + '/samples'
 
 
 def im_flip(array):
