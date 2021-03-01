@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from base import BaseModel
 from utils import get_noise_uniform
@@ -21,16 +22,12 @@ class CNN_LCC(BaseModel):
             with torch.no_grad():
                 self.conv1 = nn.Conv3d(1, no_feature_maps, kernel_size=kernel_size, stride=1, padding=s, bias=False, padding_mode='replicate')
                 self.agg = nn.Conv1d(no_feature_maps, 1, kernel_size=1, stride=1, bias=False)
-                
-                nn.init.dirac_(self.conv1.weight, groups=no_feature_maps)
+
+                w1 = self.conv1.weight * 1e-5
+                w1[..., s, s, s] = F.normalize(torch.rand_like(w1[..., s, s, s]), p=1, dim=0)
+
+                self.conv1.weight = nn.Parameter(w1)
                 nn.init.ones_(self.agg.weight)
-
-                self.conv1.weight /= no_feature_maps
-
-                # add noise
-                alpha = 1e-5
-                epsilon = get_noise_uniform(self.conv1.weight.shape, self.conv1.weight.device, alpha)
-                self.conv1.weight = nn.Parameter(self.conv1.weight + epsilon)
 
                 alpha = 1e-3
                 epsilon = get_noise_uniform(self.kernel.weight.shape, self.kernel.weight.device, alpha)
@@ -77,15 +74,11 @@ class CNN_SSD(BaseModel):
                 self.conv1 = nn.Conv3d(1, no_feature_maps, kernel_size=kernel_size, stride=1, padding=s, bias=False, padding_mode='replicate')
                 self.agg = nn.Conv1d(no_feature_maps, 1, kernel_size=1, stride=1, bias=False)
 
-                nn.init.dirac_(self.conv1.weight, groups=no_feature_maps)
-                nn.init.ones_(self.agg.weight)
-                
-                self.conv1.weight /= no_feature_maps
+                w1 = self.conv1.weight * 1e-5
+                w1[..., s, s, s] = F.normalize(torch.rand_like(w1[..., s, s, s]), p=1, dim=0)
 
-                # add noise
-                alpha = 1e-5
-                epsilon = get_noise_uniform(self.conv1.weight.shape, self.conv1.weight.device, alpha)
-                self.conv1.weight = nn.Parameter(self.conv1.weight + epsilon)
+                self.conv1.weight = nn.Parameter(w1)
+                nn.init.ones_(self.agg.weight)
 
     def print_weights(self):
         print(self.conv1.weight)
