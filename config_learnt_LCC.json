@@ -49,13 +49,13 @@
 	"optimizer_q_f": {
 		"type": "Adam",
 		"args": {
-			"lr": 2e-4
+			"lr": 1.0
 		}
 	},
 	"optimizer_q_phi": {
 		"type": "Adam",
 		"args": {
-			"lr": 1e-4
+			"lr": 1e-3
 		}
 	},
 	"optimizer_q_v": {
