@@ -5,7 +5,7 @@ import torch.distributed as dist
 
 from base import BaseTrainer
 from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
-    save_optimizer, save_sample, save_tensors
+    save_sample, save_tensors
 from utils import SobolevGrad, Sobolev_kernel_1D, \
     add_noise_uniform_field, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
@@ -205,7 +205,6 @@ class Trainer(BaseTrainer):
                     print('saving tensors with the variational parameters of q_v..')
 
                 save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
-                save_optimizer(batch_idx, self.rank, self.save_dirs, self.optimizer_q_v, 'optimizer_q_v')
 
             """
             q_phi
@@ -334,9 +333,3 @@ class Trainer(BaseTrainer):
     def __init_optimizer_q_v(self, batch_idx, var_params_q_v):
         trainable_params_q_v = filter(lambda p: p.requires_grad, var_params_q_v.values())
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
-
-        optimizer_path = path.join(self.save_dirs['optimizers'], 'optimizer_q_v_' + str(self.rank) + '_' + str(batch_idx) + '.pt')
-
-        if path.exists(optimizer_path):
-            checkpoint = torch.load(optimizer_path)
-            self.optimizer_q_v.load_state_dict(checkpoint)

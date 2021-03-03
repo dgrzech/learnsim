@@ -182,21 +182,6 @@ def save_moving_images(im_pair_idxs, save_dirs, spacing, im_moving_batch):
 
 
 """
-optimizers
-"""
-
-
-def save_optimizer(batch_idx, rank, save_dirs, optimizer, optimizer_name):
-    """
-    save an optimiser state to a .pth file
-    """
-
-    optimizer_path = path.join(save_dirs['optimizers'], optimizer_name + '_' + str(rank) + '_' + str(batch_idx) + '.pt')
-    state_dict = optimizer.state_dict()
-    torch.save(state_dict, optimizer_path)
-
-
-"""
 samples
 """
 

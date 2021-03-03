@@ -42,12 +42,11 @@ class ConfigParser:
         dir = save_dir / exper_name / run_id
 
         self._dir = dir
-        self._save_dir = dir / 'checkpoints'
-        self._optimizers_dir = dir / 'optimizers'
-        self._tensors_dir = dir / 'tensors'
-        self._samples_dir = dir / 'samples'
 
         self._log_dir = dir / 'log'
+        self._save_dir = dir / 'checkpoints'
+        self._tensors_dir = dir / 'tensors'
+        self._samples_dir = dir / 'samples'
 
         self._im_dir = dir / 'images'
         self._fields_dir = dir / 'fields'
@@ -58,12 +57,10 @@ class ConfigParser:
         if local_rank == 0:
             exist_ok = run_id == ''
 
+            self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
             self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.optimizers_dir.mkdir(parents=True, exist_ok=exist_ok)
             self.tensors_dir.mkdir(parents=True, exist_ok=exist_ok)
             self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
-
-            self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
 
             self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
             self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
@@ -73,7 +70,6 @@ class ConfigParser:
             # copy values of variational parameters
             if self.resume is not None and not self.test:
                 print('copying previous values of variational parameters..')
-                copytree(self.resume.parent.parent / 'optimizers', self.optimizers_dir, dirs_exist_ok=True)
                 copytree(self.resume.parent.parent / 'tensors', self.tensors_dir, dirs_exist_ok=True)
                 print('done!')
 
@@ -206,17 +202,8 @@ class ConfigParser:
     def copy_var_params_to_backup_dirs(self, epoch):
         epoch_str = 'epoch_' + str(epoch).zfill(4)
 
-        optimizers_backup_path = self.optimizers_dir / epoch_str
         tensors_backup_path = self.tensors_dir / epoch_str
-
-        optimizers_backup_path.mkdir(parents=True, exist_ok=True)
         tensors_backup_path.mkdir(parents=True, exist_ok=True)
-
-        for f in os.listdir(self.optimizers_dir):
-            f_path = os.path.join(self.optimizers_dir, f)
-
-            if os.path.isfile(f_path):
-                copy(f_path, optimizers_backup_path)
 
         for f in os.listdir(self.tensors_dir):
             f_path = os.path.join(self.tensors_dir, f)
@@ -225,14 +212,13 @@ class ConfigParser:
                 copy(f_path, tensors_backup_path)
 
     def copy_var_params_from_backup_dirs(self, resume_epoch):
-        optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
         var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
 
         def find_last_backup_epoch_dirs():
             for epoch in reversed(range(1, resume_epoch + 1)):
                 resume_epoch_str = 'epoch_' + str(epoch).zfill(4)
 
-                if resume_epoch_str in optimisers_backup_dirs and resume_epoch_str in var_params_backup_dirs:
+                if resume_epoch_str in var_params_backup_dirs:
                     return resume_epoch_str
 
             raise ValueError
@@ -240,12 +226,7 @@ class ConfigParser:
         last_backup_epoch = find_last_backup_epoch_dirs()
 
         def copy_backup_to_current_dir():
-            optimisers_backup_dir = os.path.join(self.optimizers_dir, last_backup_epoch)
             var_params_backup_dir = os.path.join(self.tensors_dir, last_backup_epoch)
-
-            for f in os.listdir(optimisers_backup_dir):
-                f_path = os.path.join(optimisers_backup_dir, f)
-                copy(f_path, self.optimizers_dir)
 
             for f in os.listdir(var_params_backup_dir):
                 f_path = os.path.join(var_params_backup_dir, f)
@@ -255,13 +236,8 @@ class ConfigParser:
 
     def remove_backup_dirs(self):
         print('removing backup directories..')
-
-        optimisers_backup_dirs = [f for f in os.listdir(self.optimizers_dir) if not os.path.isfile(os.path.join(self.optimizers_dir, f))]
         var_params_backup_dirs = [f for f in os.listdir(self.tensors_dir) if not os.path.isfile(os.path.join(self.tensors_dir, f))]
 
-        for f in optimisers_backup_dirs:
-            f_path = os.path.join(self.optimizers_dir, f)
-            rmtree(f_path)
         for f in var_params_backup_dirs:
             f_path = os.path.join(self.tensors_dir, f)
             rmtree(f_path)
@@ -276,12 +252,12 @@ class ConfigParser:
         return self._dir
 
     @property
-    def save_dir(self):
-        return self._save_dir
+    def log_dir(self):
+        return self._log_dir
 
     @property
-    def optimizers_dir(self):
-        return self._optimizers_dir
+    def save_dir(self):
+        return self._save_dir
 
     @property
     def tensors_dir(self):
@@ -290,10 +266,6 @@ class ConfigParser:
     @property
     def samples_dir(self):
         return self._samples_dir
-
-    @property
-    def log_dir(self):
-        return self._log_dir
 
     @property
     def im_dir(self):
@@ -313,7 +285,7 @@ class ConfigParser:
 
     @property
     def save_dirs(self):
-        return {'dir': self.dir, 'optimizers': self.optimizers_dir, 'tensors': self.tensors_dir, 'samples': self.samples_dir,
+        return {'dir': self.dir, 'tensors': self.tensors_dir, 'samples': self.samples_dir,
                 'images': self.im_dir, 'fields': self.fields_dir, 'grids': self.grids_dir, 'norms': self.norms_dir}
 
 

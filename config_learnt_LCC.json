@@ -71,7 +71,8 @@
 			"batch_size": 6,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
 			"dims": [128, 128, 128],
-			"num_workers": 4
+			"num_workers": 4,
+			"shuffle": true
 		}
 	},
 
