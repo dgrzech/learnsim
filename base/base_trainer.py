@@ -48,7 +48,9 @@ class BaseTrainer:
         if self.optimize_q_phi and not self.test_only:
             import model.distributions as distr
 
-            self.q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
+            model_type = config['data_loss']['type']
+
+            self.q_f = self.config.init_obj('q_f', distr, model_type, self.fixed['im']).to(self.rank)
             self.q_f = DDP(self.q_f, device_ids=[self.rank], find_unused_parameters=True)
 
         # training logic
