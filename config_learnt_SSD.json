@@ -73,7 +73,7 @@
 			"dims": [128, 128, 128],
 			"num_workers": 4,
 			"shuffle": true,
-			"rescale_im" true
+			"rescale_im": true
 		}
 	},
 
