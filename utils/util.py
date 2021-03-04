@@ -277,7 +277,7 @@ def pixel_to_normalised_3D(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     return x, y, z
 
 
-def rescale_im(im, range_min=-1.0, range_max=1.0):
+def rescale_im(im, range_min=0.0, range_max=1.0):
     """
     rescale the intensity of image pixels/voxels to a given range
     """

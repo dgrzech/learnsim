@@ -20,7 +20,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 2.2
+			"w_reg": 2.0
 		}
 	},
 	"entropy_loss": {
@@ -50,7 +50,8 @@
 			"batch_size": 6,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
 			"dims": [128, 128, 128],
-			"num_workers": 4
+			"num_workers": 4,
+			"rescale_im": true
 		}
 	},
 

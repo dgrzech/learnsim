@@ -34,13 +34,13 @@ class LossTestMethods(unittest.TestCase):
         self.entropy = EntropyMultivariateNormal().to(self.device)
 
         # LCC
-        self.s_LCC, self.no_feature_maps_LCC = 2, 8
-        self.encoder_LCC = CNN_LCC(learnable=True, s=self.s_LCC, no_feature_maps=self.no_feature_maps_LCC).to(self.device)
+        self.s_LCC, self.no_features_LCC = 2, [8, 16, 16]
+        self.encoder_LCC = CNN_LCC(learnable=True, s=self.s_LCC, no_features=self.no_features_LCC).to(self.device)
         self.loss_LCC = LCC().to(self.device)
 
         # SSD
-        self.s_SSD, self.no_feature_maps_SSD = 2, 12
-        self.encoder_SSD = CNN_SSD(learnable=True, s=self.s_SSD, no_feature_maps=self.no_feature_maps_SSD).to(self.device)
+        self.no_features_SSD = [8, 16, 16]
+        self.encoder_SSD = CNN_SSD(learnable=True, no_features=self.no_features_SSD).to(self.device)
         self.loss_SSD = SSD().to(self.device)
 
     def tearDown(self):
@@ -71,7 +71,7 @@ class LossTestMethods(unittest.TestCase):
 
     def test_LCC(self):
         # initialise the images
-        im_fixed = torch.randn((1, 1, *self.dims), device=self.device)
+        im_fixed = torch.rand((1, 1, *self.dims), device=self.device)
         im_moving = 4.0 * im_fixed
 
         mask = torch.ones_like(im_fixed).bool()
@@ -85,8 +85,8 @@ class LossTestMethods(unittest.TestCase):
 
     def test_SSD(self):
         # initialise the images
-        im_fixed = torch.randn((1, 1, *self.dims), device=self.device)
-        im_moving = torch.randn_like(im_fixed)
+        im_fixed = torch.rand((1, 1, *self.dims), device=self.device)
+        im_moving = torch.rand_like(im_fixed)
 
         mask = torch.ones_like(im_fixed).bool()
 
@@ -101,5 +101,4 @@ class LossTestMethods(unittest.TestCase):
         # get the loss value
         loss = self.loss_SSD(z)
         loss_true = self.loss_SSD(res_sq_masked)
-        
         assert torch.allclose(loss_true, loss, rtol=self.rtol)

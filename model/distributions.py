@@ -5,13 +5,8 @@ from torch import nn
 
 
 class LowRankMultivariateNormalDistribution(nn.Module):
-    def __init__(self, model, mu, loc_learnable=False, cov_learnable=False):
+    def __init__(self, mu, loc_learnable=False, cov_learnable=False):
         super(LowRankMultivariateNormalDistribution, self).__init__()
-
-        if model not in ['LCC', 'SSD']:
-            raise NotImplementedError
-
-        self.model = model
         self.loc_learnable, self.cov_learnable = loc_learnable, cov_learnable
 
         with torch.no_grad():
@@ -23,10 +18,9 @@ class LowRankMultivariateNormalDistribution(nn.Module):
             self.u = nn.Parameter(u, requires_grad=cov_learnable)
 
     def forward(self, no_samples=1):
-        if self.model == 'SSD':
-            with torch.no_grad():
-                self.log_var.clamp_(max=4.0)
-                self.u.clamp_(min=-2.0, max=2.0)
+        with torch.no_grad():
+            self.log_var.clamp_(max=0.0)
+            self.u.clamp_(min=-1.0, max=1.0)
 
         sigma = torch.exp(0.5 * self.log_var)
 
