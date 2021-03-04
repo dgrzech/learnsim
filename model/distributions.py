@@ -25,8 +25,8 @@ class LowRankMultivariateNormalDistribution(nn.Module):
     def forward(self, no_samples=1):
         if self.model == 'SSD':
             with torch.no_grad():
-                self.log_var.clamp_(max=0.0)
-                self.u.clamp_(min=-1.0, max=0.0)
+                self.log_var.clamp_(max=4.0)
+                self.u.clamp_(min=-2.0, max=2.0)
 
         sigma = torch.exp(0.5 * self.log_var)
 
