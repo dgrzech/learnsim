@@ -122,6 +122,8 @@ class BaseTrainer:
     def _enable_gradients_model(self):
         assert not self.test_only  # only to be used in training
 
+        delattr(self.model, 'im_fixed')
+
         self.model.enable_grads()
         self.model = DDP(self.model, device_ids=[self.rank], find_unused_parameters=True)
         self.__init_optimizer_q_phi()

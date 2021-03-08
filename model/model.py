@@ -58,9 +58,18 @@ class CNN_SSD(BaseModel):
 
     def encode(self, im_fixed, im_moving):
         if self.learnable:
-            z_fixed = self.enc(im_fixed)
-            N, C, D, H, W = z_fixed.shape
-            im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+            if self.training:
+                z_fixed = self.enc(im_fixed)
+                N, C, D, H, W = z_fixed.shape
+                im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+            else:
+                if hasattr(self, 'im_fixed'):
+                    im_fixed = self.im_fixed
+                else:
+                    z_fixed = self.enc(im_fixed)
+                    N, C, D, H, W = z_fixed.shape
+                    im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+                    self.register_buffer('im_fixed', im_fixed, persistent=False)
 
             z_moving = self.enc(im_moving)
             N, C, D, H, W = z_moving.shape
@@ -98,9 +107,18 @@ class CNN_LCC(BaseModel):
 
     def encode(self, im_fixed, im_moving):
         if self.learnable:
-            z_fixed = self.enc(im_fixed)
-            N, C, D, H, W = z_fixed.shape
-            im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+            if self.training:
+                z_fixed = self.enc(im_fixed)
+                N, C, D, H, W = z_fixed.shape
+                im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+            else:
+                if hasattr(self, 'im_fixed'):
+                    im_fixed = self.im_fixed
+                else:
+                    z_fixed = self.enc(im_fixed)
+                    N, C, D, H, W = z_fixed.shape
+                    im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+                    self.register_buffer('im_fixed', im_fixed, persistent=False)
 
             z_moving = self.enc(im_moving)
             N, C, D, H, W = z_moving.shape
