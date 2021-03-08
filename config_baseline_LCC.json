@@ -2,9 +2,6 @@
 	"name": "LCC",
 	"no_GPUs": 2,
 
-	"optimize_q_v": true,
-	"optimize_q_phi": false,
-
 	"model": {
         "type": "CNN_LCC",
         "args": {
