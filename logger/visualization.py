@@ -91,11 +91,11 @@ q_f
 """
 
 
-def var_params_q_f_grid(log_var_f_slices, u_f_slices):
+def var_params_q_f_grid(sigma_f_slices, u_f_slices):
     fig, axs = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['axial', 'coronal', 'sagittal']
-    rows = ['log_var_f', 'u_f']
+    rows = ['sigma_f', 'u_f']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -110,23 +110,24 @@ def var_params_q_f_grid(log_var_f_slices, u_f_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(log_var_f_slices[i]))
-        axs[1, i].imshow(im_flip(u_f_slices[i]))
+        axs[0, i].imshow(im_flip(sigma_f_slices[i]), cmap='gray')
+        axs[1, i].imshow(im_flip(u_f_slices[i]), cmap='gray')
 
     return fig
 
 
 def log_q_f(writer,  q_f):
-    log_var_f, u_f = get_module_attr(q_f, 'log_var').data.cpu().numpy(), get_module_attr(q_f, 'u').data.cpu().numpy()
-    mid_idxs = get_im_or_field_mid_slices_idxs(log_var_f)
+    log_var_f, u_f = get_module_attr(q_f, 'log_var'), get_module_attr(q_f, 'u').data.cpu().numpy()
+    sigma_f = torch.exp(0.5 * log_var_f).data.cpu().numpy()
+    mid_idxs = get_im_or_field_mid_slices_idxs(sigma_f)
 
-    log_var_f = log_var_f[0, 0]
-    log_var_f_slices = get_slices(log_var_f, mid_idxs)
+    sigma_f = sigma_f[0, 0]
+    sigma_f_slices = get_slices(sigma_f, mid_idxs)
 
     u_f = u_f[0, 0]
     u_f_slices = get_slices(u_f, mid_idxs)
 
-    writer.add_figure('q_f', var_params_q_f_grid(log_var_f_slices, u_f_slices))
+    writer.add_figure('q_f', var_params_q_f_grid(sigma_f_slices, u_f_slices))
 
 
 """
@@ -157,9 +158,9 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(im_fixed_slices[i]))
-        axs[1, i].imshow(im_flip(im_moving_slices[i]))
-        axs[2, i].imshow(im_flip(im_moving_warped_slices[i]))
+        axs[0, i].imshow(im_flip(im_fixed_slices[i]), cmap='gray')
+        axs[1, i].imshow(im_flip(im_moving_slices[i]), cmap='gray')
+        axs[2, i].imshow(im_flip(im_moving_warped_slices[i]), cmap='gray')
 
     return fig
 
@@ -226,10 +227,10 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(mu_v_norm_slices[i]))
-        axs[1, i].imshow(im_flip(displacement_norm_slices[i]))
-        axs[2, i].imshow(im_flip(sigma_v_norm_slices[i]))
-        axs[3, i].imshow(im_flip(u_v_norm_slices[i]))
+        axs[0, i].imshow(im_flip(mu_v_norm_slices[i]), cmap='hot')
+        axs[1, i].imshow(im_flip(displacement_norm_slices[i]), cmap='hot')
+        axs[2, i].imshow(im_flip(sigma_v_norm_slices[i]), cmap='hot')
+        axs[3, i].imshow(im_flip(u_v_norm_slices[i]), cmap='hot')
         axs[4, i].imshow(im_flip(log_det_J_slices[i]))
 
     return fig
@@ -292,9 +293,9 @@ def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(im_moving_warped_slices[i]))
-        axs[1, i].imshow(im_flip(v_norm_slices[i]))
-        axs[2, i].imshow(im_flip(displacement_norm_slices[i]))
+        axs[0, i].imshow(im_flip(im_moving_warped_slices[i]), cmap='gray')
+        axs[1, i].imshow(im_flip(v_norm_slices[i]), cmap='hot')
+        axs[2, i].imshow(im_flip(displacement_norm_slices[i]), cmap='hot')
         axs[3, i].imshow(im_flip(log_det_J_slices[i]))
 
     return fig

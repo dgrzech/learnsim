@@ -38,6 +38,8 @@ class LossTestMethods(unittest.TestCase):
         self.encoder_LCC = CNN_LCC(learnable=True, s=self.s_LCC, no_features=self.no_features_LCC).to(self.device)
         self.loss_LCC = LCC().to(self.device)
 
+        self.encoder_LCC_true = CNN_LCC(learnable=False, s=self.s_LCC).to(self.device)
+
         # SSD
         self.no_features_SSD = [8, 16, 16]
         self.encoder_SSD = CNN_SSD(learnable=True, no_features=self.no_features_SSD).to(self.device)
@@ -70,7 +72,7 @@ class LossTestMethods(unittest.TestCase):
         assert pytest.approx(val, self.atol) == val_true
 
     def test_LCC(self):
-        # initialise the images
+        # initialise the images (perfect correlation)
         im_fixed = torch.rand((1, 1, *self.dims), device=self.device)
         im_moving = 4.0 * im_fixed
 
@@ -80,6 +82,22 @@ class LossTestMethods(unittest.TestCase):
         z = self.encoder_LCC(im_fixed, im_moving, mask)
         loss = self.loss_LCC(z).item()
         loss_true = -1.0 * self.dim_x * self.dim_y * self.dim_z
+        
+        assert pytest.approx(loss, self.atol) == loss_true
+
+        self.encoder_LCC.disable_grads()
+        self.encoder_LCC.enable_grads()
+
+        # initialise the images (correlated)
+        im_fixed = torch.rand((1, 1, *self.dims), device=self.device)
+        im_moving = im_fixed + torch.rand_like(im_fixed) * 0.1
+
+        # calculate the loss value
+        z = self.encoder_LCC(im_fixed, im_moving, mask)
+        loss = self.loss_LCC(z).item()
+        
+        z_true = self.encoder_LCC_true(im_fixed, im_moving, mask)
+        loss_true = self.loss_LCC(z_true).item()
         
         assert pytest.approx(loss, self.atol) == loss_true
 

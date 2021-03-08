@@ -8,12 +8,12 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, s=1):
         super().__init__()
 
-        self.main = nn.Conv3d(in_channels, out_channels, 2 * s + 1, stride=1, padding=s, padding_mode='replicate')
+        self.main = nn.Conv3d(in_channels, out_channels, kernel_size=2*s+1, stride=1, padding=s, padding_mode='replicate')
         self.activation = nn.LeakyReLU(0.2)
 
         with torch.no_grad():
             epsilon = self.main.weight * 1e-5
-            nn.init.dirac_(self.main.weight, groups=2)
+            nn.init.dirac_(self.main.weight)
             nn.init.zeros_(self.main.bias)
 
             self.main.weight = nn.Parameter(self.main.weight + epsilon)
@@ -28,25 +28,17 @@ class UNetEncoder(nn.Module):
         super(UNetEncoder, self).__init__()
         self.enc = nn.ModuleList()
         self.no_features = no_features
-        prev_no_features = 2
+        prev_no_features = 1
 
         for no_features in self.no_features:
             self.enc.append(ConvBlock(prev_no_features, no_features, s=s))
             prev_no_features = no_features
 
-        self.mid_feature_idx = self.no_features[-1] // 2 + 1
-
-    def forward(self, im_fixed, im_moving):
-        x = torch.cat([im_fixed.expand_as(im_moving), im_moving], dim=1)
-        x_enc = x
-
+    def forward(self, im):
         for layer in self.enc:
-            x_enc = layer(x_enc)
-        
-        z_fixed = torch.cat([x_enc[:, 0].unsqueeze(1), x_enc[:, self.mid_feature_idx:]], dim=1)
-        z_moving = x_enc[:, 1:self.mid_feature_idx]
+            im = layer(im)
 
-        return z_fixed, z_moving
+        return im
 
 
 class CNN_SSD(BaseModel):
@@ -60,21 +52,22 @@ class CNN_SSD(BaseModel):
             with torch.no_grad():
                 w = self.agg.weight * 1e-5
                 w[0, 0] = 1.0
-                w[0, 1] = -1.0
                 self.agg.weight = nn.Parameter(w)
         
         self.disable_grads()
 
     def encode(self, im_fixed, im_moving):
         if self.learnable:
-            z_fixed, z_moving = self.enc(im_fixed, im_moving)
-            z = torch.cat([z_fixed, z_moving], dim=1)
-            N, C, D, H, W = z.shape
-            z = self.agg(z.view(N, C, -1)).view(N, 1, D, H, W)
-        else:
-            z = im_fixed - im_moving
+            z_fixed = self.enc(im_fixed)
+            N, C, D, H, W = z_fixed.shape
+            im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
 
-        return z ** 2
+            z_moving = self.enc(im_moving)
+            N, C, D, H, W = z_moving.shape
+            im_moving = self.agg(z_moving.view(N, C, -1)).view(N, 1, D, H, W)
+
+        z = (im_fixed - im_moving) ** 2
+        return z
 
 
 class CNN_LCC(BaseModel):
@@ -94,7 +87,7 @@ class CNN_LCC(BaseModel):
 
             self.no_features = no_features
             self.enc = UNetEncoder(no_features)
-            self.agg = nn.Conv1d(no_features[-1] // 2, 1, kernel_size=1, stride=1, bias=False)
+            self.agg = nn.Conv1d(no_features[-1], 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():
                 w = self.agg.weight * 1e-5
@@ -105,10 +98,12 @@ class CNN_LCC(BaseModel):
 
     def encode(self, im_fixed, im_moving):
         if self.learnable:
-            z_fixed, z_moving = self.enc(im_fixed, im_moving)
+            z_fixed = self.enc(im_fixed)
             N, C, D, H, W = z_fixed.shape
-
             im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+
+            z_moving = self.enc(im_moving)
+            N, C, D, H, W = z_moving.shape
             im_moving = self.agg(z_moving.view(N, C, -1)).view(N, 1, D, H, W)
 
         u_F = self.kernel(im_fixed) / self.sz
