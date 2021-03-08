@@ -32,10 +32,13 @@ class ConfigParser:
         self.test = test
 
         # set save_dir where trained model and log will be saved.
-        run_id = 'learnt_' + timestamp if config['optimize_q_phi'] else 'baseline_' + timestamp
+        run_id = timestamp
 
         if self.test:
-            run_id = 'test_' + run_id
+            if resume is None:
+                run_id = 'test_baseline_' + run_id
+            else:
+                run_id = 'test_learnt_' + run_id
 
         save_dir = Path(self.config['trainer']['save_dir'])
         exper_name = self.config['name']

@@ -157,15 +157,13 @@ class Trainer(BaseTrainer):
         loss_q_f_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
         loss_q_f_q_phi /= n
 
-        if self.optimize_q_phi:
-            self.optimizer_q_f.zero_grad()
-            self.optimizer_q_phi.zero_grad()
+        self.optimizer_q_f.zero_grad()
+        self.optimizer_q_phi.zero_grad()
 
         loss_q_f_q_phi.backward()  # backprop
 
-        if self.optimize_q_phi:
-            self.optimizer_q_f.step()
-            self.optimizer_q_phi.step()
+        self.optimizer_q_f.step()
+        self.optimizer_q_phi.step()
 
         dist.reduce(loss_q_f_q_phi, 0, op=dist.ReduceOp.SUM)
 
@@ -195,23 +193,24 @@ class Trainer(BaseTrainer):
             q_v
             """
 
-            if self.optimize_q_v:
-                self._enable_gradients_variational_parameters(var_params_q_v)
-                self.__init_optimizer_q_v(batch_idx, var_params_q_v)
-                self._step_q_v(epoch, im_pair_idxs, moving, var_params_q_v)
-                self._disable_gradients_variational_parameters(var_params_q_v)
+            self._enable_gradients_variational_parameters(var_params_q_v)
+            self.__init_optimizer_q_v(batch_idx, var_params_q_v)
+            self._step_q_v(epoch, im_pair_idxs, moving, var_params_q_v)
+            self._disable_gradients_variational_parameters(var_params_q_v)
 
-                if self.rank == 0:
-                    print('saving tensors with the variational parameters of q_v..')
+            if self.rank == 0:
+                print('saving tensors with the variational parameters of q_v..')
 
-                save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
+            save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
 
             """
             q_phi
             """
-
-            if self.optimize_q_phi:
+            
+            if not self.test_only:
+                self._enable_gradients_model()
                 self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
+                self._disable_gradients_model()
 
         if not self.test_only:
             self._save_checkpoint(epoch)
@@ -307,7 +306,7 @@ class Trainer(BaseTrainer):
                 im_pair_idxs_list = torch.cat(im_pair_idxs_tensor_list, dim=0).view(-1).tolist()
                 self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list)
 
-        if self.rank == 0 and self.optimize_q_phi:
+        if self.rank == 0 and not self.test_only:
             log_q_f(self.writer, self.q_f)
 
     @torch.no_grad()

@@ -13,6 +13,18 @@ class BaseModel(nn.Module):
         super(BaseModel, self).__init__()
         self.learnable = learnable
 
+    def enable_grads(self):
+        for param in self.parameters():
+            param.requires_grad_(True)
+
+        self.train()
+
+    def disable_grads(self):
+        for param in self.parameters():
+            param.requires_grad_(False)
+
+        self.eval()
+
     @abstractmethod
     def encode(self, im_fixed, im_moving):
         pass
@@ -36,6 +48,6 @@ class BaseModel(nn.Module):
         model prints with number of trainable parameters
         """
 
-        model_parameters = filter(lambda p: p.requires_grad, self.parameters())
+        model_parameters = list(self.parameters())
         params = sum([np.prod(p.size()) for p in model_parameters])
-        return super().__str__() + '\nTrainable parameters: {}'.format(params)
+        return super().__str__() + '\ntrainable parameters: {}'.format(params)

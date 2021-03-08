@@ -4,6 +4,7 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+import model.distributions as distr
 from logger import TensorboardWriter
 from utils import MetricTracker
 
@@ -33,9 +34,6 @@ class BaseTrainer:
             self.writer.write_graph(model)
             self.writer.write_hparams(config)
 
-        # optimisers
-        self.optimize_q_v, self.optimize_q_phi = config['optimize_q_v'], config['optimize_q_phi']
-
         # all-to-one registration
         self.fixed = self.fixed_batch = {k: v.to(self.rank) for k, v in self.data_loader.fixed.items()}
 
@@ -43,13 +41,12 @@ class BaseTrainer:
         self.model = model.to(self.rank)
 
         if not self.test_only:
-            self.model = DDP(self.model, device_ids=[self.rank], find_unused_parameters=True)
-
-        if self.optimize_q_phi and not self.test_only:
-            import model.distributions as distr
-
             self.q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
             self.q_f = DDP(self.q_f, device_ids=[self.rank], find_unused_parameters=True)
+
+        self.data_loss = losses['data'].to(self.rank)
+        self.reg_loss = losses['regularisation'].to(self.rank)
+        self.entropy_loss = losses['entropy'].to(self.rank)
 
         # training logic
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
@@ -63,10 +60,6 @@ class BaseTrainer:
         if config.resume is not None:
             self._resume_checkpoint(config.resume)
 
-        self.data_loss = losses['data'].to(self.rank)
-        self.reg_loss = losses['regularisation'].to(self.rank)
-        self.entropy_loss = losses['entropy'].to(self.rank)
-
         # transformation and registration modules
         self.transformation_module = transformation_module.to(self.rank)
         self.registration_module = registration_module.to(self.rank)
@@ -74,16 +67,9 @@ class BaseTrainer:
         # differential operator for use with the transformation Jacobian
         self.diff_op = self.reg_loss.diff_op
 
-        # metrics
+        # metrics and prints
         if self.rank == 0:
             self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
-
-        if self.test_only:
-            self.no_samples_test = cfg_trainer['no_samples_test']
-            self.optimize_q_phi = False
-
-        # prints
-        if self.rank == 0:
             print(model)
             print('')
 
@@ -133,21 +119,40 @@ class BaseTrainer:
         for param_key in var_params:
             var_params[param_key].requires_grad_(False)
 
+    def _enable_gradients_model(self):
+        assert not self.test_only  # only to be used in training
+
+        self.model.enable_grads()
+        self.model = DDP(self.model, device_ids=[self.rank], find_unused_parameters=True)
+        self.__init_optimizer_q_phi()
+        dist.barrier()
+
+    def _disable_gradients_model(self):
+        assert not self.test_only  # only to be used in training 
+        
+        self.model = self.model.module
+        self.model.disable_grads()
+        dist.barrier()
+
+    def _init_optimizers(self):
+        self.optimizer_q_v = None
+
+        if not self.test_only:
+            self.__init_optimizer_q_f()
+            self.optimizer_q_phi = None
+
     def __init_optimizer_q_f(self):
         trainable_params_q_f = filter(lambda p: p.requires_grad, self.q_f.parameters())
         self.optimizer_q_f = self.config.init_obj('optimizer_q_f', torch.optim, trainable_params_q_f)
 
     def __init_optimizer_q_phi(self):
         trainable_params_q_phi = filter(lambda p: p.requires_grad, self.model.parameters())
-        self.optimizer_q_phi = self.config.init_obj('optimizer_q_phi', torch.optim, trainable_params_q_phi)
+        optimizer_q_phi = self.config.init_obj('optimizer_q_phi', torch.optim, trainable_params_q_phi)
+        
+        if self.optimizer_q_phi is not None:
+            optimizer_q_phi.load_state_dict(self.optimizer_q_phi.state_dict())
 
-    def _init_optimizers(self):
-        if self.optimize_q_v:
-            self.optimizer_q_v = None
-
-        if self.optimize_q_phi:
-            self.__init_optimizer_q_f()
-            self.__init_optimizer_q_phi()
+        self.optimizer_q_phi = optimizer_q_phi
 
     def _no_iters_q_v_scheduler(self, epoch):
         """
@@ -168,17 +173,16 @@ class BaseTrainer:
 
             state = {'epoch': epoch, 'step': self.step, 'config': self.config}
 
-            if self.optimize_q_phi:
-                state['q_f'] = self.q_f.module.state_dict() if isinstance(self.q_f, DDP) else self.q_f.state_dict()
-                state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
+            state['q_f'] = self.q_f.module.state_dict() if isinstance(self.q_f, DDP) else self.q_f.state_dict()
+            state['model'] = self.model.module.state_dict() if isinstance(self.model, DDP) else self.model.state_dict()
 
-                state['model'] = self.model.module.state_dict() if isinstance(self.model, DDP) else self.model.state_dict()
-                state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
+            state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
+            state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
 
             torch.save(state, filename)
             print('checkpoint saved\n')
 
-        # dist.barrier()  # NOTE (DG): not really needed cause other processes don't read the file
+        dist.barrier()
 
     def _resume_checkpoint(self, resume_path):
         if self.rank == 0:
@@ -197,23 +201,18 @@ class BaseTrainer:
 
             if self.rank == 0:
                 print('checkpoint loaded\n')
-
-            dist.barrier()
-            return
-
-        if self.optimize_q_phi:
+        else:
             self.__init_optimizer_q_f()
             self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
             self.q_f.load_state_dict(checkpoint['q_f'])
-
+    
             self.__init_optimizer_q_phi()
             self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
             self.model.load_state_dict(checkpoint['model'])
-
+    
             if self.rank == 0:
                 self.config.copy_var_params_from_backup_dirs(resume_epoch)
                 self.config.remove_backup_dirs()
                 print('checkpoint loaded\n')
-
-            dist.barrier()
-            return
+    
+        dist.barrier()
