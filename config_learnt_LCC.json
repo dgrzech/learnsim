@@ -7,7 +7,7 @@
         "args": {
 			"learnable": true,
 			"s": 2,
-			"no_features": [8, 16, 16]
+			"no_features": [10]
 	    }
     },
 

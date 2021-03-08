@@ -6,7 +6,7 @@
         "type": "CNN_SSD",
         "args": {
 			"learnable": true,
-			"no_features": [8, 16, 16]
+			"no_features": [12]
 	    }
     },
 
