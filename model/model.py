@@ -37,7 +37,7 @@ class UNetEncoder(nn.Module):
         self.mid_feature_idx = self.no_features[-1] // 2 + 1
 
     def forward(self, im_fixed, im_moving):
-        x = torch.cat([im_fixed, im_moving], dim=1)
+        x = torch.cat([im_fixed.expand_as(im_moving), im_moving], dim=1)
         x_enc = x
 
         for layer in self.enc:
@@ -58,9 +58,12 @@ class CNN_SSD(BaseModel):
             self.agg = nn.Conv1d(no_features[-1], 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():
-                nn.init.zeros_(self.agg.weight)
-                self.agg.weight[0, 0] = 1.0
-                self.agg.weight[0, 1] = -1.0
+                w = self.agg.weight * 1e-5
+                w[0, 0] = 1.0
+                w[0, 1] = -1.0
+                self.agg.weight = nn.Parameter(w)
+        
+        self.disable_grads()
 
     def encode(self, im_fixed, im_moving):
         if self.learnable:
@@ -94,8 +97,11 @@ class CNN_LCC(BaseModel):
             self.agg = nn.Conv1d(no_features[-1] // 2, 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():
-                nn.init.zeros_(self.agg.weight)
-                self.agg.weight[0, 0] = 1.0
+                w = self.agg.weight * 1e-5
+                w[0, 0] = 1.0
+                self.agg.weight = nn.Parameter(w)
+        
+        self.disable_grads()
 
     def encode(self, im_fixed, im_moving):
         if self.learnable:
