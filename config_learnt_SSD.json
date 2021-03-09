@@ -6,7 +6,13 @@
         "type": "CNN_SSD",
         "args": {
 			"learnable": true,
-			"no_features": [12]
+			"no_features": [4, 8],
+			"activation": {
+				"type": "LeakyReLU",
+				"args": {
+					"negative_slope": 0.2
+				}
+			}
 	    }
     },
 
@@ -27,7 +33,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 1.2
+			"w_reg": 1.4
 		}
 	},
 	"entropy_loss": {

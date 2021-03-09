@@ -7,7 +7,13 @@
         "args": {
 			"learnable": true,
 			"s": 2,
-			"no_features": [10]
+			"no_features": [4, 8], 
+			"activation": {
+				"type": "LeakyReLU",
+				"args": {
+					"negative_slope": 0.2
+				}
+			}
 	    }
     },
 

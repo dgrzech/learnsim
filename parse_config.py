@@ -5,8 +5,11 @@ from operator import getitem
 from pathlib import Path
 from shutil import copy, copytree, rmtree
 
+from torch import nn
+
 import data_loader.data_loaders as module_data
 import model.loss as model_loss
+import model.model as model
 import utils.registration as registration
 import utils.transformation as transformation
 from logger import setup_logging
@@ -138,7 +141,7 @@ class ConfigParser:
 
         if 'args' in dict(self[name]):
             module_args = dict(self[name]['args'])
-            assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
+            # assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
             module_args.update(kwargs)
         else:
             module_args = dict()
@@ -157,13 +160,22 @@ class ConfigParser:
 
         module_name = self[name]['type']
         module_args = dict(self[name]['args'])
-        assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
+        # assert all([k not in module_args for k in kwargs]), 'Overwriting kwargs given in config file is not allowed'
         module_args.update(kwargs)
         return partial(getattr(module, module_name), *args, **module_args)
 
     def init_data_loader(self):
         self['data_loader']['args']['save_dirs'] = self.save_dirs
         return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=self.rank)
+
+    def init_model(self):
+        try:
+            args = self['model']['args']['activation']
+            activation_func = getattr(nn, args['type'])(**dict(args['args']))
+        except:
+            activation_func = nn.Identity()
+        
+        return self.init_obj('model', model, activation=activation_func)
 
     def init_losses(self):
         data_loss = self.init_obj('data_loss', model_loss)

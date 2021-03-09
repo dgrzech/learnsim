@@ -5,11 +5,11 @@ from base import BaseModel
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, s=1):
+    def __init__(self, in_channels, out_channels, s=1, activation=nn.Identity()):
         super().__init__()
 
         self.main = nn.Conv3d(in_channels, out_channels, kernel_size=2*s+1, stride=1, padding=s, padding_mode='replicate')
-        self.activation = nn.LeakyReLU(0.2)
+        self.activation = activation
 
         with torch.no_grad():
             epsilon = self.main.weight * 1e-5
@@ -24,14 +24,14 @@ class ConvBlock(nn.Module):
 
 
 class UNetEncoder(nn.Module):
-    def __init__(self, no_features, s=1):
+    def __init__(self, no_features, s=1, activation=nn.Identity()):
         super(UNetEncoder, self).__init__()
         self.enc = nn.ModuleList()
         self.no_features = no_features
         prev_no_features = 1
 
         for no_features in self.no_features:
-            self.enc.append(ConvBlock(prev_no_features, no_features, s=s))
+            self.enc.append(ConvBlock(prev_no_features, no_features, s=s, activation=activation))
             prev_no_features = no_features
 
     def forward(self, im):
@@ -42,11 +42,11 @@ class UNetEncoder(nn.Module):
 
 
 class CNN_SSD(BaseModel):
-    def __init__(self, learnable=False, no_features=None):
+    def __init__(self, learnable=False, no_features=None, activation=nn.Identity()):
         super(CNN_SSD, self).__init__(learnable)
 
         if self.learnable:
-            self.enc = UNetEncoder(no_features)
+            self.enc = UNetEncoder(no_features, activation=activation)
             self.agg = nn.Conv1d(no_features[-1], 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():
@@ -80,7 +80,7 @@ class CNN_SSD(BaseModel):
 
 
 class CNN_LCC(BaseModel):
-    def __init__(self, learnable=False, no_features=None, s=1):
+    def __init__(self, learnable=False, no_features=None, s=1, activation=nn.Identity()):
         super(CNN_LCC, self).__init__(learnable)
 
         kernel_size = 2 * s + 1
