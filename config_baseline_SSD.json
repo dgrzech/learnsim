@@ -47,7 +47,10 @@
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
 			"dims": [128, 128, 128],
 			"num_workers": 4,
-			"rescale_im": true
+			"rescale_im": true,
+
+			"sigma_v_init": 0.5,
+			"u_v_init": 0.0
 		}
 	},
 

@@ -14,6 +14,8 @@
 	"q_f": {
 		"type": "LowRankMultivariateNormalDistribution",
 		"args": {
+			"sigma_init": 0.1,
+			"u_init": 0.0,
 			"loc_learnable": false,
 			"cov_learnable": true
 		}
@@ -70,7 +72,10 @@
 			"dims": [128, 128, 128],
 			"num_workers": 4,
 			"rescale_im": true,
-			"shuffle": true
+			"shuffle": true,
+
+			"sigma_v_init": 0.5,
+			"u_v_init": 0.0
 		}
 	},
 

@@ -5,13 +5,14 @@ from torch import nn
 
 
 class LowRankMultivariateNormalDistribution(nn.Module):
-    def __init__(self, mu, loc_learnable=False, cov_learnable=False):
+    def __init__(self, mu, sigma_init, u_init, loc_learnable=False, cov_learnable=False):
         super(LowRankMultivariateNormalDistribution, self).__init__()
         self.loc_learnable, self.cov_learnable = loc_learnable, cov_learnable
 
         with torch.no_grad():
-            log_var = torch.log((0.1 ** 2) * torch.ones_like(mu))
-            u = torch.zeros_like(mu)
+            var = (sigma_init ** 2) * torch.ones_like(mu)
+            log_var = torch.log(var)
+            u = u_init * torch.ones_like(mu)
 
             self.mu = nn.Parameter(mu, requires_grad=loc_learnable)
             self.log_var = nn.Parameter(log_var, requires_grad=cov_learnable)

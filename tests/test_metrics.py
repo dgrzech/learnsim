@@ -25,7 +25,7 @@ torch.backends.cudnn.benchmark = False
 test_config_str = '{' \
                   '"name": "test", "no_GPUs": 0, "optimize_q_phi": false, "optimize_q_v": false,' \
                   '"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_02", "dims": [64, 64, 64], ' \
-                  '"trainer": {"save_dir": "./temp"}' \
+                  '"trainer": {"save_dir": "./temp", "sigma_v_init": 0.5, "u_v_init": 0.0}' \
                   '}'
 
 
@@ -54,8 +54,10 @@ class MetricsTestMethods(unittest.TestCase):
         im_paths = cfg['data_dir']
         save_paths = cfg.save_dirs
         dims = (64, 64, 64)
+        sigma_v_init = cfg['trainer']['sigma_v_init']
+        u_v_init = cfg['trainer']['u_v_init']
 
-        dataset = BiobankDataset(dims, im_paths, save_paths, rescale_im=False, rank=0)
+        dataset = BiobankDataset(dims, im_paths, save_paths, sigma_v_init, u_v_init, rescale_im=False, rank=0)
         spacing = dataset.im_spacing
 
         fixed = dataset.fixed

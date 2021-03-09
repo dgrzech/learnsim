@@ -12,10 +12,12 @@ from utils import rescale_im
 
 
 class BiobankDataset(Dataset):
-    def __init__(self, dims, im_paths, save_paths, rescale_im=False, rank=0):
+    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, rescale_im=False, rank=0):
         self.im_paths = im_paths
         self.save_paths = save_paths
         self.rescale_im = rescale_im
+
+        self.sigma_v_init, self.u_v_init = sigma_v_init, u_v_init
 
         self.dims, self.dims_im, self.dims_v = dims, (1, *dims), (3, *dims)
         self.padding, self.im_spacing = None, None
@@ -60,9 +62,8 @@ class BiobankDataset(Dataset):
 
         return ['' for _ in range(2)]
 
-    @staticmethod
-    def _init_mu_v(dims):
-        return torch.zeros(dims)
+    def _init_mu_v(self):
+        return torch.zeros(self.dims_v)
 
     def _get_mu_v(self, idx):
         tensor_path = path.join(self.save_paths['tensors'], 'mu_v_' + str(idx) + '.pt')
@@ -70,12 +71,11 @@ class BiobankDataset(Dataset):
         if path.exists(tensor_path):
             return torch.load(tensor_path)
         else:
-            return self._init_mu_v(self.dims_v)
+            return self._init_mu_v()
 
-    @staticmethod
-    def _init_log_var_v(dims):
-        sigma_v = 0.5
-        var_v = (sigma_v ** 2) * torch.ones(dims)
+    def _init_log_var_v(self):
+        sigma_v = self.sigma_v_init
+        var_v = (sigma_v ** 2) * torch.ones(self.dims_v)
 
         return torch.log(var_v)
 
@@ -85,11 +85,11 @@ class BiobankDataset(Dataset):
         if path.exists(tensor_path):
             return torch.load(tensor_path)
         else:
-            return self._init_log_var_v(self.dims_v)
+            return self._init_log_var_v()
 
-    @staticmethod
-    def _init_u_v(dims):
-        return torch.zeros(dims)
+    def _init_u_v(self):
+        u_v = self.u_v_init  * torch.ones(self.dims_v)
+        return u_v
 
     def _get_u_v(self, idx):
         tensor_path = path.join(self.save_paths['tensors'], 'u_v_' + str(idx) + '.pt')
@@ -97,7 +97,7 @@ class BiobankDataset(Dataset):
         if path.exists(tensor_path):
             return torch.load(tensor_path)
         else:
-            return self._init_u_v(self.dims_v)
+            return self._init_u_v()
 
     def _get_image(self, im_path):
         im = sitk.ReadImage(im_path, sitk.sitkFloat32)
