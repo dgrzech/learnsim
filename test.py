@@ -4,7 +4,6 @@ from datetime import datetime
 import torch
 import torch.distributed as dist
 
-import model.model as model
 from parse_config import ConfigParser
 from trainer import Trainer
 
@@ -22,7 +21,7 @@ def test(config):
     no_samples = data_loader.no_samples
 
     # model
-    similarity_metric = config.init_obj('model', model)
+    similarity_metric = config.init_model()
 
     # losses
     losses = config.init_losses()
@@ -52,7 +51,7 @@ if __name__ == '__main__':
     torch.cuda.set_device(rank)
 
     # config
-    timestamp = datetime.now().strftime(r'%m%d_%H%M%S')
+    timestamp = datetime.now().strftime(r'%m%d_%H%M')
     config = ConfigParser.from_args(parser, timestamp=timestamp, test=True)
 
     # run testing
