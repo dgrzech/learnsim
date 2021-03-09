@@ -1,21 +1,20 @@
 from model.loss import EntropyMultivariateNormal
 from model.model import CNN_LCC, CNN_SSD
 from .test_setup import *
+from torch import nn
 
 import pytest
-
 
 class LossTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName + '\n')
 
-        # encoders
-        self.s_LCC, self.no_features_LCC = 2, [4, 8]
-        self.no_features_SSD = [4, 8]
+        # network parameters
+        self.s_LCC = 2
+        self.activations = [nn.Identity(), nn.LeakyReLU(negative_slope=0.2)]
+        self.no_features_SSD = self.no_features_LCC = [[4, 8], [4, 8, 8], [8, 16, 16], [16, 32, 32, 32]]
 
-        self.encoder_LCC, self.encoder_LCC_learnable = CNN_LCC(learnable=False, s=self.s_LCC).to(device), \
-                                                       CNN_LCC(learnable=True, s=self.s_LCC, no_features=self.no_features_LCC).to(device)
-        self.encoder_SSD = CNN_SSD(learnable=True, no_features=self.no_features_SSD).to(device)
+        self.encoder_LCC = CNN_LCC(learnable=False, s=self.s_LCC, activation=nn.Identity()).to(device)
 
     def test_entropy(self):
         entropy = EntropyMultivariateNormal().to(device)
@@ -36,54 +35,55 @@ class LossTestMethods(unittest.TestCase):
         # calculate the entropy
         val = entropy(log_var=log_var_v, u=u_v).item()
         val_true = 0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
-
         assert pytest.approx(val, atol) == val_true
 
     def test_LCC(self):
-        # initialise the images (perfect correlation)
+        # initialise perfectly correlated images
         im_fixed = torch.rand((1, 1, *dims), device=device)
-        im_moving = 4.0 * im_fixed
-
+        im_moving1 = 4.0 * im_fixed
         mask = torch.ones_like(im_fixed).bool()
+        loss_true1 = -1.0 * dim_x * dim_y * dim_z * torch.ones(1, device=device)
 
-        # calculate the loss value
-        z = self.encoder_LCC_learnable(im_fixed, im_moving, mask)
-        loss = loss_LCC(z).item()
-        loss_true = -1.0 * dim_x * dim_y * dim_z
-        
-        assert pytest.approx(loss, atol) == loss_true
-        delattr(self.encoder_LCC_learnable, 'im_fixed')
+        # initialise correlated images
+        im_moving2 = im_fixed + torch.rand_like(im_fixed) * 0.1
+        z_true2 = self.encoder_LCC(im_fixed, im_moving2, mask)
+        loss_true2 = loss_LCC(z_true2)
 
-        # initialise the images (correlated)
-        im_fixed = torch.rand((1, 1, *dims), device=device)
-        im_moving = im_fixed + torch.rand_like(im_fixed) * 0.1
+        # test the loss value for different architectures
+        for no_features in self.no_features_LCC:
+            for activation in self.activations:
+                encoder_LCC = CNN_LCC(learnable=True, s=self.s_LCC,
+                                      no_features=no_features, activation=activation).to(device)
 
-        # calculate the loss value
-        z = self.encoder_LCC_learnable(im_fixed, im_moving, mask)
-        loss = loss_LCC(z).item()
-        
-        z_true = self.encoder_LCC(im_fixed, im_moving, mask)
-        loss_true = loss_LCC(z_true).item()
-        
-        assert pytest.approx(loss, atol) == loss_true
+                # calculate the loss value for im_moving1
+                z = encoder_LCC(im_fixed, im_moving1, mask)
+                loss = loss_LCC(z)
+                assert torch.allclose(loss, loss_true1, atol=atol)
+
+                # calculate the loss value for im_moving2
+                z = encoder_LCC(im_fixed, im_moving2, mask)
+                loss = loss_LCC(z)
+                assert torch.allclose(loss, loss_true2, atol=atol)
 
     def test_SSD(self):
         # initialise the images
         im_fixed = torch.rand((1, 1, *dims), device=device)
         im_moving = torch.rand_like(im_fixed)
-
         mask = torch.ones_like(im_fixed).bool()
 
         # get the residual
-        z = self.encoder_SSD(im_fixed, im_moving, mask)
-
         res_sq = (im_fixed - im_moving) ** 2
         res_sq_masked = res_sq[mask]
-
-        assert torch.allclose(res_sq_masked, z, atol=atol)
-
-        # get the loss value
-        loss = loss_SSD(z)
         loss_true = loss_SSD(res_sq_masked)
 
-        assert torch.allclose(loss_true, loss, rtol=rtol)
+        for no_features in self.no_features_SSD:
+            for activation in self.activations:
+                encoder_SSD = CNN_SSD(learnable=True, no_features=no_features, activation=activation).to(device)
+
+                # calculate the residual
+                z = encoder_SSD(im_fixed, im_moving, mask)
+                assert torch.allclose(z, res_sq_masked, atol=atol)
+
+                # calculate the loss value
+                loss = loss_SSD(z)
+                assert torch.allclose(loss, loss_true, atol=atol)
