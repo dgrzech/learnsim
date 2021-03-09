@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from base import BaseModel
 
@@ -12,11 +13,11 @@ class ConvBlock(nn.Module):
         self.activation = activation
 
         with torch.no_grad():
-            epsilon = self.main.weight * 1e-5
-            nn.init.dirac_(self.main.weight)
-            nn.init.zeros_(self.main.bias)
+            self.main.weight.multiply_(1e-5)
+            self.main.weight[..., s, s, s] = F.normalize(torch.rand_like(self.main.weight[..., s, s, s]), p=1, dim=0)
 
-            self.main.weight = nn.Parameter(self.main.weight + epsilon)
+            nn.init.zeros_(self.main.bias)
+            self.main.bias.add_(torch.randn_like(self.main.bias).multiply(1e-5))
 
     def forward(self, x):
         out = self.main(x)
@@ -50,10 +51,9 @@ class CNN_SSD(BaseModel):
             self.agg = nn.Conv1d(no_features[-1], 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():
-                w = self.agg.weight * 1e-5
-                w[0, 0] = 1.0
-                self.agg.weight = nn.Parameter(w)
-        
+                nn.init.ones_(self.agg.weight)
+                self.agg.weight.add_(torch.randn_like(self.agg.weight).multiply(1e-5))
+
         self.disable_grads()
 
     def encode(self, im_fixed, im_moving):
@@ -99,9 +99,8 @@ class CNN_LCC(BaseModel):
             self.agg = nn.Conv1d(no_features[-1], 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():
-                w = self.agg.weight * 1e-5
-                w[0, 0] = 1.0
-                self.agg.weight = nn.Parameter(w)
+                nn.init.ones_(self.agg.weight)
+                self.agg.weight.add_(torch.randn_like(self.agg.weight).multiply(1e-5))
         
         self.disable_grads()
 

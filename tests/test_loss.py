@@ -82,8 +82,8 @@ class LossTestMethods(unittest.TestCase):
 
                 # calculate the residual
                 z = encoder_SSD(im_fixed, im_moving, mask)
-                assert torch.allclose(z, res_sq_masked, atol=atol)
+                assert torch.allclose(z, res_sq_masked, atol=1e-1)
 
                 # calculate the loss value
                 loss = loss_SSD(z)
-                assert torch.allclose(loss, loss_true, atol=atol)
+                assert torch.allclose(loss, loss_true, rtol=rtol)
