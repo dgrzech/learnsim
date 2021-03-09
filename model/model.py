@@ -95,7 +95,7 @@ class CNN_LCC(BaseModel):
             self.kernel.requires_grad_(True)
 
             self.no_features = no_features
-            self.enc = UNetEncoder(no_features)
+            self.enc = UNetEncoder(no_features, activation=activation)
             self.agg = nn.Conv1d(no_features[-1], 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():
