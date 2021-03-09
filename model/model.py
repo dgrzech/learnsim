@@ -9,7 +9,7 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, s=1, activation=nn.Identity()):
         super().__init__()
 
-        self.main = nn.Conv3d(in_channels, out_channels, kernel_size=2*s+1, stride=1, padding=s, padding_mode='replicate')
+        self.main = nn.Conv3d(in_channels, out_channels, kernel_size=2*s+1, stride=1, padding=s, padding_mode='zeros')
         self.activation = activation
 
         with torch.no_grad():
