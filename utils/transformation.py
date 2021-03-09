@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch.nn.functional as F
 from torch import nn
+import torch
 
 from utils import init_identity_grid_2D, init_identity_grid_3D, transform_coordinates, transform_coordinates_inv
 
@@ -17,6 +18,61 @@ class TransformationModule(nn.Module, ABC):
     @abstractmethod
     def forward(self, v):
         pass
+
+
+def BSpline_1D_value(x, order):
+    t = abs(x)
+
+    if t >= 2:
+        return 0
+
+    if order == 0:
+        if t < 1:
+            return 2 / 3 + (0.5 * t - 1) * t ** 2
+
+        return -1.0 * ((t - 2) ** 3) / 6
+
+    if order == 1:
+        if t < 1:
+            return (1.5 * t - 2.0) * x
+        if x < 0:
+            return 0.5 * (t - 2) ** 2
+
+        return -0.5 * (t - 2) ** 2
+
+    if order == 2:
+        if t < 1:
+            return 3 * t - 2
+        return -1.0 * t + 2
+
+
+def BSpline_1D(stride, order):
+    kernel = torch.ones(4 * stride - 1)
+    radius = kernel.shape[0] // 2
+
+    for i in range(kernel.shape[0]):
+        kernel[i] = BSpline_1D_value((i - radius) / stride, order)
+
+    return kernel
+
+
+class BSpline_3D(TransformationModule):
+    def __init__(self):
+        super(BSpline_3D, self).__init__()
+        self.kernels = list()
+        self.stride = 1
+
+        for s in self.stride:
+            self.kernels.append(BSpline_1D(s))
+
+        self.padding = [(len(kernel) - 1) // 2 for kernel in self.kernels]
+
+    def forward(self, v):
+        flow = v
+        for i, (k, s, p) in enumerate(zip(self.kernels, self.stride, self.padding)):
+            v = F.conv1d(v, dim=i+2, kernel=k, stride=s, padding=p, transpose=True)
+
+        return flow
 
 
 class SVF_2D(TransformationModule):
