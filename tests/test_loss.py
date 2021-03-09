@@ -11,7 +11,7 @@ class LossTestMethods(unittest.TestCase):
 
         # network parameters
         self.s_LCC = 2
-        self.activations = [nn.Identity(), nn.LeakyReLU(negative_slope=0.2)]
+        self.activations = [nn.Identity(), nn.LeakyReLU(negative_slope=0.2), nn.ELU()]
         self.no_features_SSD = self.no_features_LCC = [[4, 8], [4, 8, 8], [8, 16, 16], [16, 32, 32, 32]]
 
         self.encoder_LCC = CNN_LCC(learnable=False, s=self.s_LCC, activation=nn.Identity()).to(device)
