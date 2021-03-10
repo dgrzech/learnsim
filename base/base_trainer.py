@@ -16,7 +16,7 @@ class BaseTrainer:
 
     def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only):
         self.config = config
-        self.logger = config.get_logger('train')
+        self.logger = config.logger
         self.test_only = test_only
 
         self.rank = dist.get_rank()
@@ -25,14 +25,6 @@ class BaseTrainer:
         self.data_loader = data_loader
         self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.config.structures_dict
         self.save_dirs = self.data_loader.save_dirs
-
-        # setup visualization writer instance
-        cfg_trainer = config['trainer']
-
-        if self.rank == 0:
-            self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
-            self.writer.write_graph(model)
-            self.writer.write_hparams(config)
 
         # all-to-one registration
         self.fixed = self.fixed_batch = {k: v.to(self.rank) for k, v in self.data_loader.fixed.items()}
@@ -48,18 +40,6 @@ class BaseTrainer:
         self.reg_loss = losses['regularisation'].to(self.rank)
         self.entropy_loss = losses['entropy'].to(self.rank)
 
-        # training logic
-        self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
-        self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
-        self.no_batches = len(self.data_loader)
-
-        self.log_period = int(cfg_trainer['log_period'])
-        self.var_params_backup_period = int(cfg_trainer['var_params_backup_period'])
-
-        # resuming
-        if config.resume is not None:
-            self._resume_checkpoint(config.resume)
-
         # transformation and registration modules
         self.transformation_module = transformation_module.to(self.rank)
         self.registration_module = registration_module.to(self.rank)
@@ -67,14 +47,34 @@ class BaseTrainer:
         # differential operator for use with the transformation Jacobian
         self.diff_op = self.reg_loss.diff_op
 
+        # training logic
+        cfg_trainer = config['trainer']
+
+        self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
+        self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
+        self.no_batches = len(self.data_loader)
+
+        self.log_period = int(cfg_trainer['log_period'])
+        self.var_params_backup_period = int(cfg_trainer['var_params_backup_period'])
+
+        if self.test_only:
+            self.no_samples_test = cfg_trainer['no_samples_test']
+
+        # resuming
+        if config.resume is not None:
+            self._resume_checkpoint(config.resume)
+
         # metrics and prints
         if self.rank == 0:
+            self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
+            self.writer.write_graph(self.model)
+            self.writer.write_hparams(config.config_str)
+
+            self.logger.info(model)
             self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
-            print(model)
-            print('')
 
     @abstractmethod
-    def _train_epoch(self):
+    def _train_epoch(self, epoch):
         """
         training logic for an epoch
         """
@@ -82,7 +82,7 @@ class BaseTrainer:
         raise NotImplementedError
 
     @abstractmethod
-    def _test(self):
+    def _test(self, no_samples):
         """
         testing logic for a dataset
         """
@@ -98,8 +98,10 @@ class BaseTrainer:
             self._no_iters_q_v_scheduler(epoch)
             self._train_epoch(epoch)
 
-            if epoch % self.var_params_backup_period == 0:
+            if self.rank == 0 and epoch % self.var_params_backup_period == 0:
                 self.config.copy_var_params_to_backup_dirs(epoch)
+
+            dist.barrier()
 
     def test(self):
         """
@@ -171,39 +173,36 @@ class BaseTrainer:
     def _save_checkpoint(self, epoch):
         if self.rank == 0:
             filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
-            print(f'\nsaving checkpoint: {filename}..')
+            self.logger.info(f'\nsaving checkpoint: {filename}..')
 
-            state = {'epoch': epoch, 'step': self.step, 'config': self.config}
-
-            state['q_f'] = self.q_f.module.state_dict() if isinstance(self.q_f, DDP) else self.q_f.state_dict()
-            state['model'] = self.model.module.state_dict() if isinstance(self.model, DDP) else self.model.state_dict()
-
-            state['optimizer_q_f'] = self.optimizer_q_f.state_dict()
-            state['optimizer_q_phi'] = self.optimizer_q_phi.state_dict()
+            state = {'epoch': epoch, 'step': self.step, 'config': self.config,
+                     'q_f': self.q_f.module.state_dict() if isinstance(self.q_f, DDP) else self.q_f.state_dict(),
+                     'model': self.model.module.state_dict() if isinstance(self.model, DDP) else self.model.state_dict(),
+                     'optimizer_q_f': self.optimizer_q_f.state_dict(),
+                     'optimizer_q_phi': self.optimizer_q_phi.state_dict()}
 
             torch.save(state, filename)
-            print('checkpoint saved\n')
+            self.logger.info('checkpoint saved\n')
 
         dist.barrier()
 
     def _resume_checkpoint(self, resume_path):
         if self.rank == 0:
-            print(f'\nloading checkpoint: {resume_path}')
+            self.logger.info(f'\nloading checkpoint: {resume_path}')
 
         map_location = {'cuda:%d' % 0: 'cuda:%d' % self.rank}
         resume_path = str(resume_path)
         checkpoint = torch.load(resume_path, map_location=map_location)
 
-        resume_epoch = checkpoint['epoch']
-        self.start_epoch = resume_epoch + 1 if not self.test_only else 1
-        self.step = checkpoint['step'] + 1 if not self.test_only else 0
-
         if self.test_only:
             self.model.load_state_dict(checkpoint['model'])
 
             if self.rank == 0:
-                print('checkpoint loaded\n')
+                self.logger.info('checkpoint loaded\n')
         else:
+            self.start_epoch = checkpoint['epoch'] + 1
+            self.step = checkpoint['step'] + 1
+
             self.__init_optimizer_q_f()
             self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
             self.q_f.load_state_dict(checkpoint['q_f'])
@@ -213,8 +212,9 @@ class BaseTrainer:
             self.model.load_state_dict(checkpoint['model'])
     
             if self.rank == 0:
-                self.config.copy_var_params_from_backup_dirs(resume_epoch)
+                self.config.copy_var_params_from_backup_dirs(checkpoint['epoch'])
+                self.logger.info('removing backup directories..')
                 self.config.remove_backup_dirs()
-                print('checkpoint loaded\n')
+                self.logger.info('checkpoint loaded\n')
     
         dist.barrier()
