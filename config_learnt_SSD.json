@@ -1,21 +1,22 @@
 {
 	"name": "SSD",
 	"no_GPUs": 2,
-
 	"model": {
-        "type": "CNN_SSD",
-        "args": {
+		"type": "CNN_SSD",
+		"args": {
 			"learnable": true,
-			"no_features": [4, 8],
+			"no_features": [
+				4,
+				8
+			],
 			"activation": {
 				"type": "LeakyReLU",
 				"args": {
 					"negative_slope": 0.2
 				}
 			}
-	    }
-    },
-
+		}
+	},
 	"q_f": {
 		"type": "LowRankMultivariateNormalDistribution",
 		"args": {
@@ -25,7 +26,6 @@
 			"cov_learnable": true
 		}
 	},
-
 	"data_loss": {
 		"type": "SSD"
 	},
@@ -39,7 +39,6 @@
 	"entropy_loss": {
 		"type": "EntropyMultivariateNormal"
 	},
-
 	"transformation_module": {
 		"type": "SVF_3D",
 		"args": {
@@ -49,60 +48,56 @@
 	"registration_module": {
 		"type": "RegistrationModule"
 	},
-
 	"optimizer_q_f": {
 		"type": "Adam",
 		"args": {
-			"lr": 1e-3
+			"lr": 0.001
 		}
 	},
 	"optimizer_q_phi": {
 		"type": "Adam",
 		"args": {
-			"lr": 1e-4
+			"lr": 0.0001
 		}
 	},
 	"optimizer_q_v": {
 		"type": "Adam",
 		"args": {
-			"lr": 3e-3
+			"lr": 0.003
 		}
 	},
-
 	"data_loader": {
 		"type": "LearnSimDataLoader",
 		"args": {
-			"batch_size": 4,
+			"batch_size": 3,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
-			"dims": [128, 128, 128],
-			"num_workers": 4,
+			"dims": [
+				128,
+				128,
+				128
+			],
+			"num_workers": 3,
 			"rescale_im": true,
 			"shuffle": true,
-
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.0
 		}
 	},
-
 	"Sobolev_grad": {
 		"enabled": true,
 		"s": 7,
-		"lambda": 5e-1
+		"lambda": 0.5
 	},
-
 	"trainer": {
 		"uniform_noise": {
 			"enabled": true,
 			"magnitude": 0.1
 		},
-
 		"no_epochs": 50,
 		"no_iters_q_v": 2048,
 		"log_period": 1024,
 		"var_params_backup_period": 5,
-
 		"no_samples_test": 50,
-
 		"tensorboard": true,
 		"save_dir": "saved/",
 		"verbosity": 2
