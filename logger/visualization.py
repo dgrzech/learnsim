@@ -1,63 +1,51 @@
-import socket
+import json
 from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.distributed as dist
+from torch.utils.tensorboard import SummaryWriter
 
 from utils import calc_norm, get_module_attr, im_flip
-from .writer import SummaryWriter
 
 
 class TensorboardWriter:
     def __init__(self, log_dir, enabled):
+        self.selected_module = ''
+        self.timer = datetime.now()
         self.writer = None
-        self.selected_module = ""
 
         if enabled:
             log_dir = str(log_dir)
             self.writer = SummaryWriter(log_dir)
 
-        self.mode = ''
         self.step = 0
-
+        self.tag_mode_exceptions = {'add_histogram', 'add_embedding'}
         self.tb_writer_ftns = {
             'add_scalar', 'add_scalars', 'add_image', 'add_images', 'add_audio', 'add_figure',
             'add_text', 'add_histogram', 'add_pr_curve', 'add_embedding', 'add_histogram'
         }
 
-        self.tag_mode_exceptions = {'add_histogram', 'add_embedding'}
-        self.timer = datetime.now()
-
-    def set_step(self, step, mode='train'):
-        self.mode = mode
+    def set_step(self, step):
         self.step = step
 
-    def write_graph(self, model):  # FIXME
-        # im_fixed = im_moving = torch.randn([1, 1, 16, 16, 16])
-        # mask = torch.ones_like(im_fixed).bool()
-        # inputs = (im_fixed, im_moving, mask)
-        # self.writer.add_graph(model, input_to_model=inputs)
-        pass
+    def write_graph(self, model):
+        rank = dist.get_rank()
 
-    def write_hparams(self, config):
-        hostname = socket.gethostname()
-        no_GPUs = config['no_GPUs']
+        im_fixed = im_moving = torch.randn([1, 1, 128, 128, 128], device=rank)
+        mask = torch.ones([1, 1, 128, 128, 128], device=rank).bool()
+        inputs = (im_fixed, im_moving, mask)
 
-        cfg_data_loader = config['data_loader']['args']
-        cfg_data_loss = config['data_loss']
-        cfg_reg_loss = config['reg_loss']['args']
+        self.writer.add_graph(model, input_to_model=inputs)
 
-        hparam_dict = {'hostname': hostname, 'no_GPUs': no_GPUs, 'batch_size': cfg_data_loader['batch_size'],
-                       'model/type': cfg_data_loss['type'], 'reg_loss/w_reg': cfg_reg_loss['w_reg']}
-        self.writer.add_hparams(hparam_dict, dict())
+    def write_hparams(self, config):  # NOTE (DG): should use add_hparams but it's not working with DDP..
+        text = json.dumps(config, indent=4, sort_keys=False)
+        self.writer.add_text('hparams', text)
 
     def __getattr__(self, name):
         """
-        If visualization is configured to use:
-            return add_data() methods of tensorboard with additional information (step, tag) added.
-        Otherwise:
-            return a blank function handle that does nothing
+        if visualization is configured, return add_data() methods of tensorboard with additional information (step, tag) added; else return a blank function handle that does nothing
         """
         if name in self.tb_writer_ftns:
             add_data = getattr(self.writer, name, None)
@@ -67,8 +55,7 @@ class TensorboardWriter:
                     add_data(tag, data, self.step, *args, **kwargs)
 
             return wrapper
-        else:
-            # default action for returning methods defined in this class, set_step() for instance.
+        else:  # default action for returning methods defined in this class, set_step() for instance.
             try:
                 attr = object.__getattr__(name)
             except AttributeError:

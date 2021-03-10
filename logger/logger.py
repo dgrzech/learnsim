@@ -6,18 +6,15 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 import torch
-import torch.distributed as dist
 from tvtk.api import tvtk, write_data
 
 from utils import read_json
 
 
 def setup_logging(save_dir, log_config='logger/logger_config.json', default_level=logging.INFO):
-    """
-    setup logging configuration
-    """
-
+    # setup logging configuration
     log_config = Path(log_config)
+
     if log_config.is_file():
         config = read_json(log_config)
 
@@ -28,23 +25,8 @@ def setup_logging(save_dir, log_config='logger/logger_config.json', default_leve
 
         logging.config.dictConfig(config)
     else:
-        print("Warning: logging configuration file is not found in {}.".format(log_config))
+        print("warning: logging configuration file is not found in {}.".format(log_config))
         logging.basicConfig(level=default_level)
-
-
-def print_log(logger, log):
-    """
-    print logged scalars
-    """
-
-    for key, value in log.items():
-        if 'DSC' not in key and 'ASD' not in key and 'GMM' not in key and 'test' not in key:
-            if isinstance(value, int):
-                logger.info(f'    {key:50s}: {value}')
-            else:
-                logger.info(f'    {key:50s}: {value:.5f}')
-
-    print()
 
 
 def save_field_to_disk(field, file_path, spacing=(1, 1, 1)):
