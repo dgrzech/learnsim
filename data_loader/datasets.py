@@ -88,7 +88,7 @@ class BiobankDataset(Dataset):
             return self._init_log_var_v()
 
     def _init_u_v(self):
-        u_v = self.u_v_init  * torch.ones(self.dims_v)
+        u_v = self.u_v_init * torch.ones(self.dims_v)
         return u_v
 
     def _get_u_v(self, idx):

@@ -1,10 +1,10 @@
-from logger import save_im_to_disk
-from skimage.data import shepp_logan_phantom
-from .test_setup import *
-from utils import pixel_to_normalised_3D, rescale_im
-
 import pytest
 import torch.nn.functional as F
+from skimage.data import shepp_logan_phantom
+
+from logger import save_im_to_disk
+from utils import pixel_to_normalised_3D, rescale_im
+from .test_setup import *
 
 
 class WarpingTestMethods(unittest.TestCase):

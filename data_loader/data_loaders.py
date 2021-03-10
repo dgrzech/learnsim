@@ -5,9 +5,7 @@ from .datasets import BiobankDataset
 class LearnSimDataLoader(BaseDataLoader):
     def __init__(self, batch_size, dims, num_workers, data_dir, save_dirs, sigma_v_init, u_v_init, rescale_im=False, shuffle=True,
                  no_GPUs=1, rank=0):
-        self.data_dir = data_dir
-        self.save_dirs = save_dirs
-
+        self.data_dir, self.save_dirs = data_dir, save_dirs
         dataset = BiobankDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, rescale_im, rank)
         super().__init__(batch_size, dataset, no_GPUs, num_workers, shuffle, rank)
 

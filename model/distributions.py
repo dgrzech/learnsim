@@ -35,6 +35,7 @@ class LowRankMultivariateNormalDistribution(nn.Module):
 
         raise NotImplementedError
 
+
 """
 Useful distributions
 """

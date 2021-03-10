@@ -1,5 +1,5 @@
-from .test_setup import *
 from utils import calc_det_J
+from .test_setup import *
 
 
 class DiffTestMethods(unittest.TestCase):
@@ -49,10 +49,7 @@ class DiffTestMethods(unittest.TestCase):
         assert torch.allclose(nabla_vz, nabla_vz_true, atol=atol)
 
     def test_log_det_J_identity(self):
-        # initialise an identity transformation
-        identity_transformation = identity_grid.permute([0, 4, 1, 2, 3])
-
-        # calculate its Jacobian
+        # calculate the Jacobian of the identity transformation
         nabla = diff_op(identity_transformation, transformation=True)
         log_det_J = torch.log(calc_det_J(nabla) + 1e-5)
 
@@ -94,7 +91,6 @@ class DiffTestMethods(unittest.TestCase):
 
     def test_log_det_J_stretching(self):
         # initialise a transformation
-        identity_transformation = identity_grid.permute([0, 4, 1, 2, 3])
         displacement = torch.zeros_like(identity_transformation)
 
         for idx_z in range(displacement.shape[2]):

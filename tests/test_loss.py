@@ -1,9 +1,10 @@
+import pytest
+from torch import nn
+
 from model.loss import EntropyMultivariateNormal
 from model.model import CNN_LCC, CNN_SSD
 from .test_setup import *
-from torch import nn
 
-import pytest
 
 class LossTestMethods(unittest.TestCase):
     def setUp(self):

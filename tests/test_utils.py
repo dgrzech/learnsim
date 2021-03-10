@@ -1,6 +1,6 @@
-from .test_setup import *
 from utils import SVF_2D, SVF_3D, calc_norm, pixel_to_normalised_2D, pixel_to_normalised_3D, plot_2D, plot_3D, \
     separable_conv_3D
+from .test_setup import *
 
 
 class UtilsTestMethods(unittest.TestCase):
