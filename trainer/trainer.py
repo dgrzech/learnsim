@@ -1,5 +1,3 @@
-from os import path
-
 import torch
 import torch.distributed as dist
 
@@ -19,6 +17,7 @@ class Trainer(BaseTrainer):
         super().__init__(config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only)
 
         # optimizers
+        self.model.register_buffer_enabled = True
         self._init_optimizers()
 
         # Sobolev gradients
@@ -182,7 +181,7 @@ class Trainer(BaseTrainer):
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             if self.rank == 0:
-                print(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
+                self.logger.info(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
 
             im_pair_idxs = im_pair_idxs.tolist()
 
@@ -194,12 +193,12 @@ class Trainer(BaseTrainer):
             """
 
             self._enable_gradients_variational_parameters(var_params_q_v)
-            self.__init_optimizer_q_v(batch_idx, var_params_q_v)
+            self.__init_optimizer_q_v(var_params_q_v)
             self._step_q_v(epoch, im_pair_idxs, moving, var_params_q_v)
             self._disable_gradients_variational_parameters(var_params_q_v)
 
             if self.rank == 0:
-                print('saving tensors with the variational parameters of q_v..')
+                self.logger.info('saving tensors with the variational parameters of q_v..')
 
             save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
 
@@ -218,7 +217,7 @@ class Trainer(BaseTrainer):
     @torch.no_grad()
     def _test(self, no_samples):
         if self.rank == 0:
-            print('')
+            self.logger.info('')
             save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
@@ -226,7 +225,7 @@ class Trainer(BaseTrainer):
             im_pair_idxs_local = im_pair_idxs
 
             if self.rank == 0:
-                print(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
+                self.logger.info(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
 
             self.__batch_init(moving)
             self.__moving_init(moving, var_params_q_v)
@@ -329,6 +328,6 @@ class Trainer(BaseTrainer):
     def __get_var_params_smoothed(self, var_params):
         return {k: SobolevGrad.apply(v, self.S, self.padding) for k, v in var_params.items()}
 
-    def __init_optimizer_q_v(self, batch_idx, var_params_q_v):
+    def __init_optimizer_q_v(self, var_params_q_v):
         trainable_params_q_v = filter(lambda p: p.requires_grad, var_params_q_v.values())
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
