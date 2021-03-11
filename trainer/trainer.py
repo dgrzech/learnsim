@@ -43,10 +43,10 @@ class Trainer(BaseTrainer):
         if self.add_noise_uniform:
             transformation = add_noise_uniform_field(transformation, self.alpha)
 
-        im_fixed = self.fixed_batch['im'] if im_fixed_sample is None else im_fixed_sample
+        im_fixed = self.fixed['im'] if im_fixed_sample is None else im_fixed_sample
         im_moving_warped = self.registration_module(moving['im'], transformation)
 
-        z = self.model(im_fixed, im_moving_warped, self.fixed_batch['mask'])
+        z = self.model(im_fixed, im_moving_warped, self.fixed['mask'])
         data_term = self.data_loss(z)
 
         if im_fixed_sample is not None:
@@ -119,7 +119,7 @@ class Trainer(BaseTrainer):
         # tensorboard cont.
         with torch.no_grad():
             segs_moving_warped = self.registration_module(moving['seg'], transformation1)
-            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
+            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
 
             ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
             DSC_list = [torch.zeros_like(DSC) for _ in range(self.world_size)]
@@ -145,7 +145,7 @@ class Trainer(BaseTrainer):
 
         # draw a sample from q_v
         v_sample = sample_q_v(var_params_q_v, no_samples=1)
-        term1 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=self.fixed_batch['im'])
+        term1 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=self.fixed['im'])
 
         # draw samples from q_f
         im_fixed_sample1, im_fixed_sample2 = self.q_f(no_samples=2)
@@ -248,7 +248,7 @@ class Trainer(BaseTrainer):
                 no_non_diffeomorphic_voxels_list = [torch.zeros_like(no_non_diffeomorphic_voxels) for _ in range(self.world_size)]
                 dist.all_gather(no_non_diffeomorphic_voxels_list, no_non_diffeomorphic_voxels)
 
-                ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed_batch['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
+                ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
 
                 ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
                 DSC_list = [torch.zeros_like(DSC) for _ in range(self.world_size)]
@@ -270,8 +270,8 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def __batch_init(self, moving):
-        if self.fixed_batch['im'].shape != moving['im'].shape:
-            self.fixed_batch = {k: v.expand_as(moving[k]) for k, v in self.fixed.items()}
+        self.fixed['seg'] = self.fixed['seg'].expand_as(moving['seg'])
+        self.fixed['mask'] = self.fixed['mask'].expand_as(moving['mask'])
 
     @torch.no_grad()
     def __moving_init(self, moving, var_params_q_v):
@@ -288,7 +288,7 @@ class Trainer(BaseTrainer):
             self.__batch_init(moving)
             self.__moving_init(moving, var_params_q_v)
 
-            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed_batch['seg'], moving['seg'], self.structures_dict, self.im_spacing)
+            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], moving['seg'], self.structures_dict, self.im_spacing)
 
             im_pair_idxs_tensor = torch.tensor(im_pair_idxs_local, device=self.rank)
             im_pair_idxs_tensor_list = [torch.zeros_like(im_pair_idxs_tensor) for _ in range(self.world_size)]

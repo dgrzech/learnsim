@@ -27,7 +27,7 @@ class BaseTrainer:
         self.save_dirs = self.data_loader.save_dirs
 
         # all-to-one registration
-        self.fixed = self.fixed_batch = {k: v.to(self.rank) for k, v in self.data_loader.fixed.items()}
+        self.fixed = {k: v.to(self.rank) for k, v in self.data_loader.fixed.items()}
 
         # model and losses
         self.model = model.to(self.rank)
@@ -124,7 +124,13 @@ class BaseTrainer:
     def _enable_gradients_model(self):
         assert not self.test_only  # only to be used in training
 
-        delattr(self.model, 'im_fixed')
+        delattr(self.model, 'z_fixed')
+
+        try:
+            delattr(self.model, 'u_F')
+            delattr(self.model, 'var_F')
+        except:
+            pass
 
         self.model.enable_grads()
         self.model = DDP(self.model, device_ids=[self.rank], find_unused_parameters=True)

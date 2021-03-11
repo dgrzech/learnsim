@@ -37,10 +37,12 @@ class UNetEncoder(nn.Module):
             prev_no_features = no_features
 
     def forward(self, im):
-        for layer in self.enc:
-            im = layer(im)
+        im_enc = [im]
 
-        return im
+        for layer in self.enc:
+            im_enc.append(layer(im_enc[-1]))
+
+        return im_enc[-1]
 
 
 class BaseModel(nn.Module):
@@ -84,23 +86,26 @@ class BaseModel(nn.Module):
             if self.training:
                 z_fixed = self.enc(im_fixed)
                 N, C, D, H, W = z_fixed.shape
-                im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+                z_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
             else:
-                if hasattr(self, 'im_fixed'):
-                    im_fixed = self.im_fixed
+                if hasattr(self, 'z_fixed'):
+                    z_fixed = self.z_fixed
                 else:
                     z_fixed = self.enc(im_fixed)
                     N, C, D, H, W = z_fixed.shape
-                    im_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
+                    z_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
 
                     if self.register_buffer_enabled:
-                        self.register_buffer('im_fixed', im_fixed, persistent=False)
+                        self.register_buffer('z_fixed', z_fixed.detach().clone(), persistent=False)
 
             z_moving = self.enc(im_moving)
             N, C, D, H, W = z_moving.shape
-            im_moving = self.agg(z_moving.view(N, C, -1)).view(N, 1, D, H, W)
+            z_moving = self.agg(z_moving.view(N, C, -1)).view(N, 1, D, H, W)
+        else:
+            z_fixed = im_fixed
+            z_moving = im_moving
 
-        return im_fixed, im_moving
+        return z_fixed, z_moving
 
     def forward(self, im_fixed, im_moving, mask):
         """

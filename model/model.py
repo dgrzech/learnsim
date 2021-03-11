@@ -21,12 +21,26 @@ class CNN_LCC(BaseModel):
         nn.init.ones_(self.kernel.weight)
 
     def encode(self, im_fixed, im_moving):
-        u_F = self.kernel(im_fixed) / self.sz
-        u_M = self.kernel(im_moving) / self.sz
+        if hasattr(self, 'u_F'):
+            u_F = self.u_F
+        else:
+            u_F = self.kernel(im_fixed) / self.sz
 
-        cross = self.kernel((im_fixed - u_F) * (im_moving - u_M))
-        var_F = self.kernel((im_fixed - u_F) ** 2)
+            if self.register_buffer_enabled:
+                self.register_buffer('u_F', u_F.detach().clone(), persistent=False)
+
+        if hasattr(self, 'var_F'):
+            var_F = self.var_F
+        else:
+            var_F = self.kernel((im_fixed - u_F) ** 2)
+
+            if self.register_buffer_enabled:
+                self.register_buffer('var_F', var_F.detach().clone(), persistent=False)
+
+        u_M = self.kernel(im_moving) / self.sz
         var_M = self.kernel((im_moving - u_M) ** 2)
 
+        cross = self.kernel((im_fixed - u_F) * (im_moving - u_M))
         z = cross * cross / (var_F * var_M + 1e-10)
+
         return z
