@@ -2,7 +2,7 @@ import pytest
 from torch import nn
 
 from model.loss import EntropyMultivariateNormal
-from model.model import CNN_LCC, CNN_SSD
+from model.model import CNN_LCC, CNN_MI, CNN_SSD
 from .test_setup import *
 
 
@@ -13,9 +13,10 @@ class LossTestMethods(unittest.TestCase):
         # network parameters
         self.s_LCC = 2
         self.activations = [nn.Identity(), nn.LeakyReLU(negative_slope=0.2), nn.ELU()]
-        self.no_features_SSD = self.no_features_LCC = [[4, 8], [4, 8, 8], [8, 16, 16], [16, 32, 32, 32]]
+        self.no_features = [[4, 8], [4, 8, 8], [8, 16, 16], [16, 32, 32, 32]]
 
-        self.encoder_LCC = CNN_LCC(learnable=False, s=self.s_LCC, activation=nn.Identity()).to(device)
+        self.encoder_LCC = CNN_LCC(learnable=False, s=self.s_LCC).to(device)
+        self.encoder_MI = CNN_MI(learnable=False).to(device)
 
     def test_entropy(self):
         entropy = EntropyMultivariateNormal().to(device)
@@ -50,8 +51,8 @@ class LossTestMethods(unittest.TestCase):
         z_true2 = self.encoder_LCC(im_fixed, im_moving2, mask)
         loss_true2 = loss_LCC(z_true2)
 
-        # test the loss value for different architectures
-        for no_features in self.no_features_LCC:
+        # test the loss value for different networks
+        for no_features in self.no_features:
             for activation in self.activations:
                 encoder_LCC = CNN_LCC(learnable=True, s=self.s_LCC,
                                       no_features=no_features, activation=activation).to(device)
@@ -66,6 +67,53 @@ class LossTestMethods(unittest.TestCase):
                 loss = loss_LCC(z)
                 assert torch.allclose(loss, loss_true2, atol=atol)
 
+    def test_MI(self):
+        # initialise the images
+        im_fixed = torch.rand((1, 1, *dims), device=device)
+        im_moving_identical = im_fixed.clone()
+        mask = torch.ones_like(im_fixed).bool()
+
+        # test that I(F, M) == I(M, F)
+        z1 = self.encoder_MI(im_fixed, im_moving_identical, mask)
+        loss1_identical = loss_MI(z1)
+        z2 = self.encoder_MI(im_moving_identical, im_fixed, mask)
+        loss2_identical = loss_MI(z2)
+        # NOTE (DG): 0.01 bc we sample different locations in each forward pass
+        assert torch.allclose(loss1_identical, loss2_identical, atol=1e-2)
+
+        # initialise another image
+        im_moving = torch.rand_like(im_fixed)
+
+        # test that I(F, M) == I(M, F)
+        z1 = self.encoder_MI(im_fixed, im_moving, mask)
+        loss1 = loss_MI(z1)
+        z2 = self.encoder_MI(im_moving, im_fixed, mask)
+        loss2 = loss_MI(z2)
+
+        assert torch.allclose(loss1, loss2, atol=1e-2)
+        assert loss1_identical < loss1
+
+        # test for different networks
+        for no_features in self.no_features:
+            for activation in self.activations:
+                encoder_MI = CNN_MI(learnable=True,
+                                    no_features=no_features, activation=activation).to(device)
+
+                # calculate the loss values
+                z1 = encoder_MI(im_fixed, im_moving_identical, mask)
+                loss1_identical = loss_MI(z1)
+                z2 = encoder_MI(im_moving_identical, im_fixed, mask)
+                loss2_identical = loss_MI(z2)
+                assert torch.allclose(loss1_identical, loss2_identical, atol=1e-2)
+
+                z1 = encoder_MI(im_fixed, im_moving, mask)
+                loss1 = loss_MI(z1)
+                z2 = encoder_MI(im_moving, im_fixed, mask)
+                loss2 = loss_MI(z2)
+
+                assert torch.allclose(loss1, loss2, atol=1e-2)
+                assert loss1_identical < loss1
+
     def test_SSD(self):
         # initialise the images
         im_fixed = torch.rand((1, 1, *dims), device=device)
@@ -77,7 +125,7 @@ class LossTestMethods(unittest.TestCase):
         res_sq_masked = res_sq[mask]
         loss_true = loss_SSD(res_sq_masked)
 
-        for no_features in self.no_features_SSD:
+        for no_features in self.no_features:
             for activation in self.activations:
                 encoder_SSD = CNN_SSD(learnable=True, no_features=no_features, activation=activation).to(device)
 

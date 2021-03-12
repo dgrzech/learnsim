@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import unittest
 
-from model.loss import LCC, SSD
+from model.loss import LCC, MI, SSD
 from utils import init_identity_grid_3D, GradientOperator, RegistrationModule
 
 # fix random seeds for reproducibility
@@ -37,8 +37,9 @@ identity_grid = init_identity_grid_3D(dims).to(device)
 identity_transformation = identity_grid.permute([0, 4, 1, 2, 3])
 
 # losses
-loss_SSD = SSD().to(device)
 loss_LCC = LCC().to(device)
+loss_MI = MI().to(device)
+loss_SSD = SSD().to(device)
 
 # utils
 diff_op = GradientOperator()

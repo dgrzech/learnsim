@@ -77,7 +77,7 @@ class BaseModel(nn.Module):
         self.eval()
 
     @abstractmethod
-    def encode(self, im_fixed, im_moving):
+    def map(self, im_fixed, im_moving, mask):
         pass
 
     def feature_extraction(self, im_fixed, im_moving):
@@ -102,9 +102,9 @@ class BaseModel(nn.Module):
         """
         
         z_fixed, z_moving = self.feature_extraction(im_fixed, im_moving)
-        z = self.encode(z_fixed, z_moving)
+        z = self.map(z_fixed, z_moving, mask)
 
-        return z[mask]
+        return z
 
     def __str__(self):
         """

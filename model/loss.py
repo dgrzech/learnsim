@@ -35,6 +35,18 @@ class LCC(DataLoss):
         return -1.0 * torch.sum(z, dim=0, keepdim=True)
 
 
+class MI(DataLoss):
+    """
+    mutual information
+    """
+
+    def __init__(self):
+        super(MI, self).__init__()
+
+    def forward(self, z):
+        return -1.0 * torch.sum(z, dim=0, keepdim=True)
+
+
 class SSD(DataLoss):
     """
     sum of squared differences
