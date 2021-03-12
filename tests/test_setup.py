@@ -31,6 +31,7 @@ dims_2D = (N_large, ) * 2
 dim_x = dim_y = dim_z = N_large
 dims = (N_large, ) * 3
 dims_v = (1, 3, *dims)
+dims_v_batch = (2, 3, *dims)
 
 # transformations
 identity_grid = init_identity_grid_3D(dims).to(device)

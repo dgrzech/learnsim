@@ -139,9 +139,6 @@ class Trainer(BaseTrainer):
     def _step_q_f_q_phi(self, im_pair_idxs, moving, var_params_q_v):
         self.step += 1
 
-        n = len(im_pair_idxs)
-        total_no_samples = self.world_size
-
         # draw a sample from q_v
         v_sample = sample_q_v(var_params_q_v, no_samples=1)
         term1 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=self.fixed['im'])
@@ -155,8 +152,7 @@ class Trainer(BaseTrainer):
         term2 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample1)
         term3 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample2)
 
-        loss_q_f_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
-        loss_q_f_q_phi /= n
+        loss_q_f_q_phi = term1.mean() - term2.mean() / 2.0 - term3.mean() / 2.0
 
         self.optimizer_q_f.zero_grad()
         self.optimizer_q_phi.zero_grad()
@@ -166,12 +162,12 @@ class Trainer(BaseTrainer):
         self.optimizer_q_f.step()
         self.optimizer_q_phi.step()
 
-        dist.reduce(loss_q_f_q_phi, 0, op=dist.ReduceOp.SUM)
+        dist.reduce(loss_q_f_q_phi, 0, op=dist.ReduceOp.MEAN)
 
         # tensorboard
         if self.rank == 0:
             self.writer.set_step(self.step)
-            self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item(), n=total_no_samples)
+            self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item())
 
             with torch.no_grad():
                 log_model_weights(self.writer, self.model)

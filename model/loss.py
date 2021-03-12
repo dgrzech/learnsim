@@ -15,8 +15,9 @@ class DataLoss(nn.Module, ABC):
     base class for all data losses
     """
 
-    def __init__(self):
+    def __init__(self, reduction):
         super(DataLoss, self).__init__()
+        self.reduction = getattr(torch, reduction)
 
     @abstractmethod
     def forward(self, z):
@@ -28,11 +29,11 @@ class LCC(DataLoss):
     local cross-correlation
     """
 
-    def __init__(self):
-        super(LCC, self).__init__()
+    def __init__(self, reduction='sum'):
+        super(LCC, self).__init__(reduction)
 
     def forward(self, z):
-        return -1.0 * torch.sum(z, dim=0, keepdim=True)
+        return -1.0 * self.reduction(z, dim=1)
 
 
 class MI(DataLoss):
@@ -40,11 +41,11 @@ class MI(DataLoss):
     mutual information
     """
 
-    def __init__(self):
-        super(MI, self).__init__()
+    def __init__(self, reduction='mean'):
+        super(MI, self).__init__(reduction)
 
     def forward(self, z):
-        return -1.0 * torch.sum(z, dim=0, keepdim=True)
+        return -1.0 * self.reduction(z, dim=1)
 
 
 class SSD(DataLoss):
@@ -52,11 +53,11 @@ class SSD(DataLoss):
     sum of squared differences
     """
 
-    def __init__(self):
-        super(SSD, self).__init__()
+    def __init__(self, reduction='sum'):
+        super(SSD, self).__init__(reduction)
 
     def forward(self, z):
-        return 0.5 * torch.sum(z, dim=0, keepdim=True)
+        return 0.5 * self.reduction(z, dim=1)
 
 
 """
@@ -72,8 +73,9 @@ class RegLoss(nn.Module, ABC):
     Or strings that can be parsed to a diff_op
     """
 
-    def __init__(self, diff_op=None):
+    def __init__(self, diff_op=None, reduction='sum'):
         super(RegLoss, self).__init__()
+        self.reduction = getattr(torch, reduction)
 
         if diff_op is not None:
             if isinstance(diff_op, str):
@@ -96,9 +98,8 @@ class RegLoss(nn.Module, ABC):
         This is not meant to be overriden, just define the proper diff_op and _loss.
         """
 
-        D_input = self.diff_op(input)
-        y = torch.sum(D_input ** 2, dim=(1, 2, 3, 4, 5))  # "chi-square" variable / energy
-
+        D_input = self.diff_op(input)  # (N, 3, D, H, W, 3)
+        y = self.reduction(torch.sum(D_input ** 2, dim=(1, 5)), dim=(1, 2, 3))  # "chi-square" variable / energy
         return self._loss(y)
 
     @abstractmethod
@@ -129,8 +130,8 @@ class RegLoss_L2(RegLoss):
         v = fft(half_kernel_hat * alpha * 1 / sqrt(|omega|**2 + 1)) is the (Sobolev-smooth) velocity field
     """
 
-    def __init__(self, w_reg, diff_op=None):
-        super(RegLoss_L2, self).__init__(diff_op=diff_op)
+    def __init__(self, w_reg, diff_op=None, reduction='sum'):
+        super(RegLoss_L2, self).__init__(diff_op=diff_op, reduction=reduction)
         self.w_reg = w_reg
 
     def _loss(self, y):
@@ -147,8 +148,9 @@ class Entropy(nn.Module, ABC):
     base class for the entropy of a probability distribution
     """
 
-    def __init__(self):
+    def __init__(self, reduction):
         super(Entropy, self).__init__()
+        self.reduction = getattr(torch, reduction)
 
     @abstractmethod
     def forward(self, **kwargs):
@@ -160,8 +162,8 @@ class EntropyMultivariateNormal(Entropy):
     multivariate normal distribution
     """
 
-    def __init__(self):
-        super(EntropyMultivariateNormal, self).__init__()
+    def __init__(self, reduction='sum'):
+        super(EntropyMultivariateNormal, self).__init__(reduction)
 
     def forward(self, **kwargs):
         if len(kwargs) == 2:
@@ -169,7 +171,7 @@ class EntropyMultivariateNormal(Entropy):
             u = kwargs['u']
 
             sigma = torch.exp(0.5 * log_var)
-            return 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2), dim=(1, 2, 3, 4))) + torch.sum(log_var, dim=(1, 2, 3, 4)))
+            return 0.5 * (torch.log1p(self.reduction(torch.pow(u / sigma, 2), dim=(1, 2, 3, 4))) + self.reduction(log_var, dim=(1, 2, 3, 4)))
         elif len(kwargs) == 4:
             sample = kwargs['sample']
 
@@ -182,6 +184,6 @@ class EntropyMultivariateNormal(Entropy):
             sample_n = (sample - mu) / sigma
             u_n = u / sigma
 
-            t1 = torch.sum(torch.pow(sample_n, 2), dim=(1, 2, 3, 4))
-            t2 = torch.pow(torch.sum(sample_n * u_n, dim=(1, 2, 3, 4)), 2) / (1.0 + torch.sum(torch.pow(u_n, 2), dim=(1, 2, 3, 4)))
+            t1 = self.reduction(torch.pow(sample_n, 2), dim=(1, 2, 3, 4))
+            t2 = torch.pow(self.reduction(sample_n * u_n, dim=(1, 2, 3, 4)), 2) / (1.0 + self.reduction(torch.pow(u_n, 2), dim=(1, 2, 3, 4)))
             return 0.5 * (t1 - t2)

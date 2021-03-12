@@ -20,13 +20,13 @@ class WarpingTestMethods(unittest.TestCase):
         im_moving_warped = registration_module(im_moving, transformation)
 
         z_unwarped = (im_fixed - im_moving) ** 2
-        z_unwarped_masked = z_unwarped[mask]
+        z_unwarped_masked = z_unwarped[mask].view(-1, 1)
 
         z_warped = (im_fixed - im_moving_warped) ** 2
-        z_warped_masked = z_warped[mask]
+        z_warped_masked = z_warped[mask].view(-1, 1)
 
-        unwarped_loss_value = loss_SSD(z_unwarped_masked).item()
-        warped_loss_value = loss_SSD(z_warped_masked).item()
+        unwarped_loss_value = loss_SSD(z_unwarped_masked).sum().item()
+        warped_loss_value = loss_SSD(z_warped_masked).sum().item()
 
         assert pytest.approx(unwarped_loss_value, rel=rtol) == warped_loss_value
 

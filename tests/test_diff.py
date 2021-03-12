@@ -15,6 +15,15 @@ class DiffTestMethods(unittest.TestCase):
 
         # calculate its derivatives
         nabla_v = diff_op(v)
+        
+        assert len(nabla_v.shape) == 6
+        assert nabla_v.shape[0] == 1
+        assert nabla_v.shape[1] == 3
+        assert nabla_v.shape[2] == dim_x
+        assert nabla_v.shape[3] == dim_y
+        assert nabla_v.shape[4] == dim_z
+        assert nabla_v.shape[5] == 3
+
         nabla_vx, nabla_vy, nabla_vz = nabla_v[..., 0], nabla_v[..., 1], nabla_v[..., 2]
 
         # test that they're correct
@@ -43,6 +52,48 @@ class DiffTestMethods(unittest.TestCase):
         nabla_vx_true[:, 0] = 1.0
         nabla_vy_true[:, 1] = 1.5
         nabla_vy_true[:, 2] = 3.0
+
+        assert torch.allclose(nabla_vx, nabla_vx_true, atol=atol)
+        assert torch.allclose(nabla_vy, nabla_vy_true, atol=atol)
+        assert torch.allclose(nabla_vz, nabla_vz_true, atol=atol)
+
+    def test_diff_v_batch(self):
+        # init. two uniform 3D velocity fields
+        v = torch.zeros(dims_v_batch, device=device)
+
+        for idx_z in range(v.shape[2]):
+            for idx_y in range(v.shape[3]):
+                for idx_x in range(v.shape[4]):
+                    v[0, 0, idx_z, idx_y, idx_x] = idx_x
+                    v[0, 1, idx_z, idx_y, idx_x] = 1.5 * idx_y + 3.0 * idx_z + 1.0
+                    v[0, 2, idx_z, idx_y, idx_x] = 0.0
+
+                    v[1, 0, idx_z, idx_y, idx_x] = 2.0 * idx_x
+                    v[1, 1, idx_z, idx_y, idx_x] = 3.0 * idx_y + 3.0 * idx_z
+                    v[1, 2, idx_z, idx_y, idx_x] = 1.0
+
+        # calculate its derivatives
+        nabla_v = diff_op(v)
+
+        assert len(nabla_v.shape) == 6
+        assert nabla_v.shape[0] == 2
+        assert nabla_v.shape[1] == 3
+        assert nabla_v.shape[2] == dim_x
+        assert nabla_v.shape[3] == dim_y
+        assert nabla_v.shape[4] == dim_z
+        assert nabla_v.shape[5] == 3
+
+        # test that they're correct
+        nabla_vx, nabla_vy, nabla_vz = nabla_v[..., 0], nabla_v[..., 1], nabla_v[..., 2]
+        nabla_vx_true, nabla_vy_true, nabla_vz_true = torch.zeros_like(nabla_vx), torch.zeros_like(nabla_vy), torch.zeros_like(nabla_vz)
+
+        nabla_vx_true[0, 0] = 1.0
+        nabla_vy_true[0, 1] = 1.5
+        nabla_vy_true[0, 2] = 3.0
+
+        nabla_vx_true[1, 0] = 2.0
+        nabla_vy_true[1, 1] = 3.0
+        nabla_vy_true[1, 2] = 3.0
 
         assert torch.allclose(nabla_vx, nabla_vx_true, atol=atol)
         assert torch.allclose(nabla_vy, nabla_vy_true, atol=atol)

@@ -8,17 +8,24 @@
 		}
 	},
 	"data_loss": {
-		"type": "MI"
+		"type": "MI",
+		"args": {
+			"reduction": "mean"
+		}
 	},
 	"reg_loss": {
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
+			"reduction": "mean",
 			"w_reg": 2.0
 		}
 	},
 	"entropy_loss": {
-		"type": "EntropyMultivariateNormal"
+		"type": "EntropyMultivariateNormal",
+		"args": {
+			"reduction": "mean"
+		}
 	},
 	"transformation_module": {
 		"type": "SVF_3D",

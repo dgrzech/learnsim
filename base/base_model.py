@@ -100,11 +100,14 @@ class BaseModel(nn.Module):
 
         :return: Model output
         """
+
+        assert im_fixed.shape == im_moving.shape == mask.shape
         
         z_fixed, z_moving = self.feature_extraction(im_fixed, im_moving)
-        z = self.map(z_fixed, z_moving, mask)
+        z = self.map(z_fixed, z_moving, mask)  # (N * D * H * W, )
 
-        return z
+        N = im_fixed.shape[0]
+        return z.view(N, -1)  # (N, D * H * W, )
 
     def __str__(self):
         """

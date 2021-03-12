@@ -13,8 +13,9 @@ class CNN_LCC(BaseModel):
         self.sz = float((2 * s + 1) ** 3)
         self.kernel = nn.Conv3d(1, 1, kernel_size=2*s+1, stride=1, padding=s, bias=False, padding_mode='replicate')
         nn.init.ones_(self.kernel.weight)
+        self.kernel.weight.requires_grad_(learnable)
 
-    def encode(self, im_fixed, im_moving):
+    def map(self, im_fixed, im_moving, mask):
         u_F = self.kernel(im_fixed) / self.sz
         u_M = self.kernel(im_moving) / self.sz
 
@@ -35,7 +36,7 @@ class CNN_MI(BaseModel):
         self.sample_ratio = sample_ratio
 
         bins = torch.linspace(min, max, no_bins).unsqueeze(1)
-        self.bins = nn.Parameter(bins, requires_grad=False)
+        self.register_buffer('bins', bins, persistent=False)
 
         # set the std. dev. of the Gaussian kernel so that FWHM is one bin width
         bin_width = (max - min) / no_bins
@@ -43,10 +44,8 @@ class CNN_MI(BaseModel):
 
     def __joint_prob(self, im_fixed, im_moving):
         # compute the Parzen window function response
-        win_F = torch.exp(-1.0 * (im_fixed - self.bins) ** 2 / (2.0 * self.sigma ** 2)) \
-                / (math.sqrt(2 * math.pi) * self.sigma)
-        win_M = torch.exp(-1.0 * (im_moving - self.bins) ** 2 / (2.0 * self.sigma ** 2)) \
-                / (math.sqrt(2 * math.pi) * self.sigma)
+        win_F = torch.exp(-0.5 * (im_fixed - self.bins) ** 2 / (self.sigma ** 2)) / (math.sqrt(2 * math.pi) * self.sigma)
+        win_M = torch.exp(-0.5 * (im_moving - self.bins) ** 2 / (self.sigma ** 2)) / (math.sqrt(2 * math.pi) * self.sigma)
 
         # compute the histogram
         hist = win_F.bmm(win_M.transpose(1, 2))
@@ -56,18 +55,22 @@ class CNN_MI(BaseModel):
         return hist / hist_normalised.view(-1, 1, 1)
 
     def map(self, im_fixed, im_moving, mask):
-        no_voxels = int(mask[0].sum())
-        sampled_no_voxels = int(self.sample_ratio * no_voxels)
-        idxs = torch.randperm(no_voxels)[:sampled_no_voxels]
+        with torch.no_grad():
+            batch_size = im_fixed.shape[0]
+            no_voxels = mask[0].sum()
+            no_voxels_sampled = int(self.sample_ratio * no_voxels)
+            idxs = torch.randperm(no_voxels)[:no_voxels_sampled].view(batch_size, -1)
+        
+        im_fixed_masked = im_fixed[mask].view(batch_size, -1)
+        im_moving_masked = im_moving[mask].view(batch_size, -1)
 
-        batch_size = mask.shape[0]
-        im_fixed_sampled = torch.cat(tuple(im_fixed[idx, ...].flatten()[idxs].unsqueeze(0).unsqueeze(0) for idx in range(batch_size)), dim=0)
-        im_moving_sampled = torch.cat(tuple(im_moving[idx, ...].flatten()[idxs].unsqueeze(0).unsqueeze(0) for idx in range(batch_size)), dim=0)
+        im_fixed_sampled = im_fixed_masked[idxs].view(batch_size, 1, no_voxels_sampled_per_im)
+        im_moving_sampled = im_moving_masked[idxs].view(batch_size, 1, no_voxels_sampled_per_im)
 
         p_FM = self.__joint_prob(im_fixed_sampled, im_moving_sampled)
         p_F, p_M = torch.sum(p_FM, dim=2), torch.sum(p_FM, dim=1)
 
-        # calculate the entropies
+        # calculate entropy of the distr.
         H_FM = -1.0 * torch.sum(p_FM * torch.log(p_FM + 1e-5), dim=(1, 2))
         H_F, H_M = -1.0 * torch.sum(p_F * torch.log(p_F + 1e-5), dim=1), -1.0 * torch.sum(p_M * torch.log(p_M + 1e-5), dim=1)
 
