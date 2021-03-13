@@ -212,6 +212,10 @@ class Trainer(BaseTrainer):
                 self._disable_gradients_model()
 
         if not self.test_only:
+            if self.rank == 0:
+                self.writer.set_step(epoch)
+                self.metrics.update_avg_metrics(self.structures_dict)
+
             self._save_checkpoint(epoch)
 
     @torch.no_grad()
@@ -282,6 +286,9 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def __metrics_init(self):
+        if self.rank == 0:
+            self.writer.set_step(self.step)
+
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             im_pair_idxs_local = im_pair_idxs.tolist()
 
@@ -301,12 +308,14 @@ class Trainer(BaseTrainer):
             dist.all_gather(DSC_list, DSC)
 
             if self.rank == 0:
-                self.writer.set_step(self.step)
                 im_pair_idxs_list = torch.cat(im_pair_idxs_tensor_list, dim=0).view(-1).tolist()
                 self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list)
 
-        if self.rank == 0 and not self.test_only:
-            log_q_f(self.writer, self.q_f)
+        if self.rank == 0:
+            if not self.test_only:
+                log_q_f(self.writer, self.q_f)
+            
+            self.metrics.update_avg_metrics(self.structures_dict)
 
     @torch.no_grad()
     def __Sobolev_gradients_init(self):

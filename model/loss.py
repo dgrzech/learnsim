@@ -85,7 +85,7 @@ class RegLoss(nn.Module, ABC):
         """
 
         D_input = self.diff_op(input)
-        y = torch.sum(D_input ** 2, dim=(1, 2, 3, 4))  # "chi-square" variable / energy
+        y = torch.sum(D_input ** 2, dim=(1, 2, 3, 4, 5))  # "chi-square" variable / energy
 
         return self._loss(y)
 

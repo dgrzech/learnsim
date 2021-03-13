@@ -392,9 +392,9 @@ def transform_coordinates_inv(field):
 
 class MetricTracker:
     def __init__(self, *keys, writer=None):
-        self.writer = writer
-        self._data = pd.DataFrame(index=keys, columns=['total', 'counts', 'average'])
+        self._data = pd.DataFrame(index=keys, columns=['value'])
         self.reset()
+        self.writer = writer
 
     def reset(self):
         for col in self._data.columns:
@@ -404,9 +404,7 @@ class MetricTracker:
         if self.writer is not None:
             self.writer.add_scalar(key, value / n)
 
-        self._data.total[key] += value * n
-        self._data.counts[key] += n
-        self._data.average[key] = self._data.total[key] / self._data.counts[key]
+        self._data.value[key] = value
 
     def update_ASD_and_DSC(self, im_pair_idxs, structures_dict, ASD_list, DSC_list, test=False):
         ASD = torch.cat(ASD_list, dim=0).view(len(im_pair_idxs), len(structures_dict))
@@ -424,11 +422,24 @@ class MetricTracker:
                     name_ASD = 'test/' + name_ASD
                     name_DSC = 'test/' + name_DSC
 
-                self.update(name_ASD, ASDs_im_pair[structure_idx])
-                self.update(name_DSC, DSCs_im_pair[structure_idx])
+                self.update(name_ASD, ASDs_im_pair[structure_idx].item())
+                self.update(name_DSC, DSCs_im_pair[structure_idx].item())
 
-    def avg(self, key):
-        return self._data.average[key]
+            self.update('ASD/im_pair_' + str(im_pair_idx) + '/avg', ASDs_im_pair.mean().item())
+            self.update('DSC/im_pair_' + str(im_pair_idx) + '/avg', DSCs_im_pair.mean().item())
 
-    def result(self):
-        return dict(self._data.average)
+    def update_avg_metrics(self, structures_dict):
+        idxs_no_non_diffeomorphic_voxels = [idx for idx in self._data.index if 'no_non_diffeomorphic_voxels' in idx and 'avg' not in idx]
+        avg_value_no_non_diffeomorphic_voxels = self._data.value[idxs_no_non_diffeomorphic_voxels].mean()
+        self.update('no_non_diffeomorphic_voxels/avg', avg_value_no_non_diffeomorphic_voxels)
+
+        for structure_idx, structure in enumerate(structures_dict):
+            idxs_ASD = [idx for idx in self._data.index if 'ASD' in idx and 'avg' not in idx and structure in idx]
+            idxs_DSC = [idx for idx in self._data.index if 'DSC' in idx and 'avg' not in idx and structure in idx]
+            
+            avg_value_ASD_structure = self._data.value[idxs_ASD].mean()
+            avg_value_DSC_structure = self._data.value[idxs_DSC].mean()
+            
+            self.update('ASD/avg_' + structure, avg_value_ASD_structure)
+            self.update('DSC/avg_' + structure, avg_value_DSC_structure)
+        
