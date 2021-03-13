@@ -70,7 +70,7 @@ class BaseTrainer:
             self.writer.write_graph(self.model)
             self.writer.write_hparams(config.config_str)
 
-            self.logger.info(model)
+            self.logger.info(self.model)
             self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
 
     @abstractmethod
@@ -123,14 +123,6 @@ class BaseTrainer:
 
     def _enable_gradients_model(self):
         assert not self.test_only  # only to be used in training
-
-        delattr(self.model, 'z_fixed')
-
-        try:
-            delattr(self.model, 'u_F')
-            delattr(self.model, 'var_F')
-        except:
-            pass
 
         self.model.enable_grads()
         self.model = DDP(self.model, device_ids=[self.rank], find_unused_parameters=True)

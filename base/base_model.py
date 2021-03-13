@@ -63,7 +63,6 @@ class BaseModel(nn.Module):
                 self.agg.weight.add_(torch.randn_like(self.agg.weight).multiply(1e-5))
 
         self.disable_grads()
-        self.register_buffer_enabled = False  # NOTE (DG): workaround to enable logging the graph to tensorboard
 
     def enable_grads(self):
         for param in self.parameters():
@@ -83,23 +82,11 @@ class BaseModel(nn.Module):
 
     def feature_extraction(self, im_fixed, im_moving):
         if self.learnable:
-            if self.training:
-                z_fixed = self.enc(im_fixed)
-                N, C, D, H, W = z_fixed.shape
-                z_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
-            else:
-                if hasattr(self, 'z_fixed'):
-                    z_fixed = self.z_fixed
-                else:
-                    z_fixed = self.enc(im_fixed)
-                    N, C, D, H, W = z_fixed.shape
-                    z_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
-
-                    if self.register_buffer_enabled:
-                        self.register_buffer('z_fixed', z_fixed.detach().clone(), persistent=False)
+            z_fixed = self.enc(im_fixed)
+            N, C, D, H, W = z_fixed.shape
+            z_fixed = self.agg(z_fixed.view(N, C, -1)).view(N, 1, D, H, W)
 
             z_moving = self.enc(im_moving)
-            N, C, D, H, W = z_moving.shape
             z_moving = self.agg(z_moving.view(N, C, -1)).view(N, 1, D, H, W)
         else:
             z_fixed = im_fixed
@@ -123,7 +110,8 @@ class BaseModel(nn.Module):
         """
         model prints with number of trainable parameters
         """
-
+        
         model_parameters = list(self.parameters())
-        params = sum([np.prod(p.size()) for p in model_parameters])
-        return super().__str__() + '\ntrainable parameters: {}\n'.format(params)
+        no_trainable_params = sum([np.prod(p.size()) for p in model_parameters]) if self.learnable else 0
+        return super().__str__() + '\ntrainable parameters: {}\n'.format(no_trainable_params)
+

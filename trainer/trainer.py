@@ -17,7 +17,6 @@ class Trainer(BaseTrainer):
         super().__init__(config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only)
 
         # optimizers
-        self.model.register_buffer_enabled = True
         self._init_optimizers()
 
         # Sobolev gradients
@@ -150,6 +149,9 @@ class Trainer(BaseTrainer):
         # draw samples from q_f
         im_fixed_sample1, im_fixed_sample2 = self.q_f(no_samples=2)
 
+        im_fixed_sample1 = im_fixed_sample1.expand_as(moving['im'])
+        im_fixed_sample2 = im_fixed_sample2.expand_as(moving['im'])
+
         term2 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample1)
         term3 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample2)
 
@@ -274,6 +276,7 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def __batch_init(self, moving):
+        self.fixed['im'] = self.fixed['im'].expand_as(moving['im'])
         self.fixed['seg'] = self.fixed['seg'].expand_as(moving['seg'])
         self.fixed['mask'] = self.fixed['mask'].expand_as(moving['mask'])
 

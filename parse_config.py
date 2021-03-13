@@ -122,8 +122,8 @@ class ConfigParser:
         return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=self.rank)
 
     def init_model(self):
-        args = self['model']['args']['activation']
-        activation_func = getattr(nn, args['type'])(**dict(args['args']))
+        args = self['model']['args']
+        activation_func = getattr(nn, args['activation']['type'])(**dict(args['activation']['args'])) if args['learnable'] else None
         return self.init_obj('model', model, activation=activation_func)
 
     def init_losses(self):

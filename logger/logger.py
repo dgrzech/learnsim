@@ -192,7 +192,7 @@ def save_sample(im_pair_idxs, save_dirs, spacing, sample_no, im_moving_warped_ba
 tensors
 """
 
-
+@torch.no_grad()
 def save_tensors(im_pair_idxs, save_dirs, var_params_q_v):
     mu_v = var_params_q_v['mu']
     log_var_v = var_params_q_v['log_var']
@@ -200,7 +200,7 @@ def save_tensors(im_pair_idxs, save_dirs, var_params_q_v):
 
     def save_tensor(im_pair_idx, tensor, tensor_name):
         tensor_path = path.join(save_dirs['tensors'], tensor_name + '_' + str(im_pair_idx) + '.pt')
-        torch.save(tensor.detach().cpu(), tensor_path)
+        torch.save(tensor.cpu(), tensor_path)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         save_tensor(im_pair_idx, mu_v[loop_idx], 'mu_v')

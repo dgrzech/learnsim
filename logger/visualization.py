@@ -167,14 +167,15 @@ def get_slices(field, mid_idxs):
     return [field[:, :, mid_idxs[0]], field[:, mid_idxs[1], :], field[mid_idxs[2], :, :]]
 
 
-def log_images(writer, im_pair_idxs, im_fixed, im_moving_batch, im_moving_warped_batch):
-    im_fixed = im_fixed[0, 0].cpu().numpy().squeeze()
+def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
+    im_fixed_batch = im_fixed_batch.cpu().numpy()
     im_moving_batch = im_moving_batch.cpu().numpy()
     im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
     mid_idxs = get_im_or_field_mid_slices_idxs(im_moving_batch)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        im_fixed = im_fixed_batch[loop_idx, 0]
         im_moving = im_moving_batch[loop_idx, 0]
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
 
