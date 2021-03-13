@@ -135,11 +135,14 @@ class ConfigParser:
         loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term', 'loss/q_v', 'loss/q_f_q_phi']
 
         ASD = ['ASD/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)]
-        ASD.extend(['ASD/avg_' + structure for structure in self.structures_dict])
         ASD.extend(['ASD/im_pair_' + str(im_pair_idx) + '/avg' for im_pair_idx in range(no_samples)])
+        ASD.extend(['ASD/avg_' + structure for structure in self.structures_dict])
+        ASD.extend(['ASD/avg'])
+
         DSC = ['DSC/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)]
-        DSC.extend(['DSC/avg_' + structure for structure in self.structures_dict])
         DSC.extend(['DSC/im_pair_' + str(im_pair_idx) + '/avg' for im_pair_idx in range(no_samples)])
+        DSC.extend(['DSC/avg_' + structure for structure in self.structures_dict])
+        DSC.extend(['DSC/avg'])
         
         no_non_diffeomorphic_voxels = ['no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx) for im_pair_idx in range(no_samples)]
         no_non_diffeomorphic_voxels.extend(['no_non_diffeomorphic_voxels/avg'])

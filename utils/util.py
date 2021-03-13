@@ -351,11 +351,7 @@ def standardise_im(im):
     """
 
     im_mean, im_std = torch.mean(im), torch.std(im)
-
-    im -= im_mean
-    im /= im_std
-
-    return im
+    return (im - im_mean) / im_std
 
 
 def transform_coordinates(field):
@@ -364,9 +360,7 @@ def transform_coordinates(field):
     """
 
     field_out = field.clone()
-
-    no_dims = field.shape[1]
-    dims = field.shape[2:]
+    no_dims, dims = field.shape[1], field.shape[2:]
 
     for idx in range(no_dims):
         field_out[:, idx] = field_out[:, idx] * 2.0 / float(dims[idx] - 1)
@@ -380,9 +374,7 @@ def transform_coordinates_inv(field):
     """
 
     field_out = field.clone()
-
-    no_dims = field.shape[1]
-    dims = field.shape[2:]
+    no_dims, dims = field.shape[1], field.shape[2:]
 
     for idx in range(no_dims):
         field_out[:, idx] = field_out[:, idx] * float(dims[idx] - 1) / 2.0
@@ -442,4 +434,13 @@ class MetricTracker:
             
             self.update('ASD/avg_' + structure, avg_value_ASD_structure)
             self.update('DSC/avg_' + structure, avg_value_DSC_structure)
+
+        idxs_ASD = [idx for idx in self._data.index if 'im_pair' in idx and 'ASD' in idx and 'avg' in idx]
+        idxs_DSC = [idx for idx in self._data.index if 'im_pair' in idx and 'DSC' in idx and 'avg' in idx]
         
+        avg_value_ASD = self._data.value[idxs_ASD].mean()
+        avg_value_DSC = self._data.value[idxs_DSC].mean()
+
+        self.update('ASD/avg', avg_value_ASD)
+        self.update('DSC/avg', avg_value_DSC)
+
