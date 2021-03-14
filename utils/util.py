@@ -432,8 +432,8 @@ class MetricTracker:
             avg_value_ASD_structure = self._data.value[idxs_ASD].mean()
             avg_value_DSC_structure = self._data.value[idxs_DSC].mean()
             
-            self.update('ASD/avg_' + structure, avg_value_ASD_structure)
-            self.update('DSC/avg_' + structure, avg_value_DSC_structure)
+            self.update('ASD/avg/' + structure, avg_value_ASD_structure)
+            self.update('DSC/avg/' + structure, avg_value_DSC_structure)
 
         idxs_ASD = [idx for idx in self._data.index if 'im_pair' in idx and 'ASD' in idx and 'avg' in idx]
         idxs_DSC = [idx for idx in self._data.index if 'im_pair' in idx and 'DSC' in idx and 'avg' in idx]
