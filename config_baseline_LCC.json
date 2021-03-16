@@ -5,7 +5,7 @@
 		"type": "CNN_LCC",
 		"args": {
 			"learnable": false,
-			"s": 2
+			"s": 1
 		}
 	},
 	"data_loss": {

@@ -5,9 +5,10 @@
 		"type": "CNN_LCC",
 		"args": {
 			"learnable": true,
-			"s": 2,
+			"s": 1,
 			"no_features": [
 				4,
+				8,
 				8
 			],
 			"activation": {
@@ -58,7 +59,7 @@
 	"optimizer_q_phi": {
 		"type": "Adam",
 		"args": {
-			"lr": 0.0001
+			"lr": 0.000001
 		}
 	},
 	"optimizer_q_v": {
@@ -70,14 +71,14 @@
 	"data_loader": {
 		"type": "LearnSimDataLoader",
 		"args": {
-			"batch_size": 3,
+			"batch_size": 2,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
 			"dims": [
 				128,
 				128,
 				128
 			],
-			"num_workers": 3,
+			"num_workers": 2,
 			"rescale_im": true,
 			"shuffle": true,
 			"sigma_v_init": 0.5,
