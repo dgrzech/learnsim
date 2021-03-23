@@ -123,7 +123,12 @@ class ConfigParser:
 
     def init_model(self):
         args = self['model']['args']
-        activation_func = getattr(nn, args['activation']['type'])(**dict(args['activation']['args'])) if args['learnable'] else None
+
+        try:
+            activation_func = getattr(nn, args['activation']['type'])(**dict(args['activation']['args']))
+        except:
+            activation_func = nn.Identity()
+
         return self.init_obj('model', model, activation=activation_func)
 
     def init_losses(self):
