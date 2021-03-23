@@ -14,11 +14,11 @@ class ConvBlock(nn.Module):
         self.activation = activation
 
         with torch.no_grad():
-            self.main.weight.multiply_(1e-5)
+            self.main.weight.multiply_(1e-7)
             self.main.weight[..., s, s, s] = F.normalize(torch.rand_like(self.main.weight[..., s, s, s]), p=1, dim=0)
 
             nn.init.zeros_(self.main.bias)
-            self.main.bias.add_(torch.randn_like(self.main.bias).multiply(1e-5))
+            self.main.bias.add_(torch.randn_like(self.main.bias).multiply(1e-7))
 
     def forward(self, x):
         out = self.main(x)
@@ -60,7 +60,7 @@ class BaseModel(nn.Module):
 
             with torch.no_grad():
                 nn.init.ones_(self.agg.weight)
-                self.agg.weight.add_(torch.randn_like(self.agg.weight).multiply(1e-5))
+                self.agg.weight.add_(torch.randn_like(self.agg.weight).multiply(1e-7))
 
         self.disable_grads()
 
