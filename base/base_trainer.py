@@ -95,7 +95,7 @@ class BaseTrainer:
         """
 
         for epoch in range(self.start_epoch, self.no_epochs + 1):
-            self._no_iters_q_v_scheduler(epoch)
+            # self._no_iters_q_v_scheduler(epoch)
             self._train_epoch(epoch)
 
             if self.rank == 0 and epoch % self.var_params_backup_period == 0:
