@@ -59,7 +59,7 @@
 	"optimizer_q_phi": {
 		"type": "Adam",
 		"args": {
-			"lr": 0.000001
+			"lr": 0.00001
 		}
 	},
 	"optimizer_q_v": {
@@ -95,7 +95,7 @@
 			"enabled": true,
 			"magnitude": 0.1
 		},
-		"no_epochs": 50,
+		"no_epochs": 100,
 		"no_iters_q_v": 2048,
 		"log_period": 1024,
 		"var_params_backup_period": 5,
