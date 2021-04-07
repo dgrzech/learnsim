@@ -119,6 +119,10 @@ class ConfigParser:
 
     def init_data_loader(self):
         self['data_loader']['args']['save_dirs'] = self.save_dirs
+
+        if self.test:
+            self['data_loader']['args']['shuffle'] = False
+
         return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=self.rank)
 
     def init_model(self):
