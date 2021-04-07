@@ -95,7 +95,6 @@ class BaseTrainer:
         """
 
         for epoch in range(self.start_epoch, self.no_epochs + 1):
-            # self._no_iters_q_v_scheduler(epoch)
             self._train_epoch(epoch)
 
             if self.rank == 0 and epoch % self.var_params_backup_period == 0:
@@ -155,18 +154,6 @@ class BaseTrainer:
             optimizer_q_phi.load_state_dict(self.optimizer_q_phi.state_dict())
 
         self.optimizer_q_phi = optimizer_q_phi
-
-    def _no_iters_q_v_scheduler(self, epoch):
-        """
-        scheduler for the no. of iterations in an epoch
-        """
-
-        cfg_trainer = self.config['trainer']
-
-        if epoch % 2 == 1:
-            self.no_iters_q_v = int(cfg_trainer['no_iters_q_v'])
-        elif epoch % 2 == 0:
-            self.no_iters_q_v = int(cfg_trainer['no_iters_q_v']) // 2
 
     def _save_checkpoint(self, epoch):
         if self.rank == 0:
