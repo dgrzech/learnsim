@@ -84,26 +84,26 @@ def calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict):
     calculate the Dice scores
     """
 
-    DSC_batch = dict()  # dict. with Dice scores for each image pair and segmentation
+    DSC = torch.zeros(len(im_pair_idxs), len(structures_dict), device=seg_fixed.device)
 
     for idx, im_pair in enumerate(im_pair_idxs):
-        DSC = dict()  # dict. with Dice scores for the image pair
-
         seg_fixed_im_pair = seg_fixed[idx]
         seg_moving_im_pair = seg_moving[idx]
 
-        for structure in structures_dict:
+        for structure_idx, structure in enumerate(structures_dict):
             label = structures_dict[structure]
 
-            numerator = 2.0 * ((seg_fixed_im_pair == label) * (seg_moving_im_pair == label)).sum().item()
-            denominator = (seg_fixed_im_pair == label).sum().item() + (seg_moving_im_pair == label).sum().item()
+            numerator = 2.0 * ((seg_fixed_im_pair == label) * (seg_moving_im_pair == label)).sum()
+            denominator = (seg_fixed_im_pair == label).sum() + (seg_moving_im_pair == label).sum()
+            
+            try:
+                score = numerator / denominator
+            except:
+                score = 0.0
 
-            score = numerator / denominator
-            DSC[structure] = score
+            DSC[idx, structure_idx] = score
 
-        DSC_batch[im_pair] = DSC
-
-    return DSC_batch
+    return DSC
 
 
 @torch.no_grad()
@@ -118,7 +118,7 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
                torch.zeros(len(im_pair_idxs), len(structures_dict), device=seg_fixed.device)
 
     if GPU:
-        DSCs = calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict)
+        DSC = calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict)
     else:
         overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
 
@@ -157,9 +157,7 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
             except:
                 ASD[loop_idx, structure_idx] = np.inf
 
-            if GPU:
-                DSC[loop_idx, structure_idx] = DSCs[im_pair_idx][structure_name]
-            else:
+            if not GPU:
                 DSC[loop_idx, structure_idx] = calc_DSC(seg_fixed_im, seg_moving_im)
 
     return ASD, DSC
@@ -399,8 +397,8 @@ class MetricTracker:
         self._data.value[key] = value
 
     def update_ASD_and_DSC(self, im_pair_idxs, structures_dict, ASD_list, DSC_list, test=False):
-        ASD = torch.cat(ASD_list, dim=0).view(len(im_pair_idxs), len(structures_dict))
-        DSC = torch.cat(DSC_list, dim=0).view(len(im_pair_idxs), len(structures_dict))
+        ASD = torch.cat(ASD_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
+        DSC = torch.cat(DSC_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
             ASDs_im_pair = ASD[loop_idx]
@@ -414,11 +412,11 @@ class MetricTracker:
                     name_ASD = f'test/{name_ASD}'
                     name_DSC = f'test/{name_DSC}'
 
-                self.update(name_ASD, ASDs_im_pair[structure_idx].item())
-                self.update(name_DSC, DSCs_im_pair[structure_idx].item())
+                self.update(name_ASD, ASDs_im_pair[structure_idx])
+                self.update(name_DSC, DSCs_im_pair[structure_idx])
 
-            self.update(f'ASD/im_pair_{im_pair_idx}/avg', ASDs_im_pair.mean().item())
-            self.update(f'DSC/im_pair_{im_pair_idx}/avg', DSCs_im_pair.mean().item())
+            self.update(f'ASD/im_pair_{im_pair_idx}/avg', ASDs_im_pair.mean())
+            self.update(f'DSC/im_pair_{im_pair_idx}/avg', DSCs_im_pair.mean())
 
     def update_avg_metrics(self, structures_dict):
         idxs_no_non_diffeomorphic_voxels = [idx for idx in self._data.index if 'no_non_diffeomorphic_voxels' in idx and 'avg' not in idx]
