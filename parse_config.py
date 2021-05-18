@@ -29,7 +29,7 @@ class ConfigParser:
         self.log_levels = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG}
 
         verbosity = self['trainer']['verbosity']
-        msg_verbosity = 'verbosity option {} is invalid. Valid options are {}.'.format(verbosity, self.log_levels.keys())
+        msg_verbosity = f'verbosity option {verbosity} is invalid. Valid options are {self.log_levels.keys()}.'
         assert verbosity in self.log_levels, msg_verbosity
 
         self._logger = logging.getLogger('default')
@@ -40,9 +40,9 @@ class ConfigParser:
 
         if self.test:
             if resume is None:
-                run_id = 'test_baseline_' + run_id
+                run_id = f'test_baseline_{run_id}'
             else:
-                run_id = 'test_learnt_' + run_id
+                run_id = f'test_learnt_{run_id}'
 
         save_dir = Path(self.config['trainer']['save_dir'])
         exper_name = self.config['name']
@@ -143,23 +143,23 @@ class ConfigParser:
     def init_metrics(self, no_samples):
         loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term', 'loss/q_v', 'loss/q_f_q_phi']
 
-        ASD = ['ASD/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)]
-        ASD.extend(['ASD/im_pair_' + str(im_pair_idx) + '/avg' for im_pair_idx in range(no_samples)])
+        ASD = [f'ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)]
+        ASD.extend([f'ASD/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(no_samples)])
         ASD.extend(['ASD/avg'])
-        ASD.extend(['ASD/avg/' + structure for structure in self.structures_dict])
+        ASD.extend([f'ASD/avg/{structure}' for structure in self.structures_dict])
 
-        DSC = ['DSC/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)]
-        DSC.extend(['DSC/im_pair_' + str(im_pair_idx) + '/avg' for im_pair_idx in range(no_samples)])
+        DSC = [f'DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)]
+        DSC.extend([f'DSC/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(no_samples)])
         DSC.extend(['DSC/avg'])
-        DSC.extend(['DSC/avg/' + structure for structure in self.structures_dict])
+        DSC.extend([f'DSC/avg/{structure}' for structure in self.structures_dict])
         
-        no_non_diffeomorphic_voxels = ['no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx) for im_pair_idx in range(no_samples)]
+        no_non_diffeomorphic_voxels = [f'no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(no_samples)]
         no_non_diffeomorphic_voxels.extend(['no_non_diffeomorphic_voxels/avg'])
 
         if self.test:
-            ASD.extend(['test/ASD/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)])
-            DSC.extend(['test/DSC/im_pair_' + str(im_pair_idx) + '/' + structure for structure in self.structures_dict for im_pair_idx in range(no_samples)])
-            no_non_diffeomorphic_voxels.extend(['test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx) for im_pair_idx in range(no_samples)])
+            ASD.extend([f'test/ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)])
+            DSC.extend([f'test/DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)])
+            no_non_diffeomorphic_voxels.extend([f'test/no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(no_samples)])
 
         return loss_terms + ASD + DSC + no_non_diffeomorphic_voxels
 

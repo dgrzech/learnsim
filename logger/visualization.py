@@ -183,7 +183,7 @@ def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_
         im_moving_slices = get_slices(im_moving, mid_idxs)
         im_moving_warped_slices = get_slices(im_moving_warped, mid_idxs)
 
-        writer.add_figure('im_pairs/' + str(im_pair_idx),
+        writer.add_figure(f'im_pairs/{im_pair_idx}',
                           im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
 
 
@@ -249,7 +249,7 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
         displacement_norm_slices = get_slices(displacement_norm, mid_idxs)
         log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
-        writer.add_figure('q_v/' + str(im_pair_idx),
+        writer.add_figure(f'q_v/{im_pair_idx}',
                           fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
 
 
@@ -308,5 +308,5 @@ def log_sample(writer, im_pair_idxs, im_moving_warped_batch, v_batch, displaceme
         displacement_norm_slices = get_slices(displacement_norm, mid_idxs)
         log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
-        writer.add_figure('samples/' + str(im_pair_idx),
+        writer.add_figure(f'samples/{im_pair_idx}',
                           sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices, log_det_J_slices))

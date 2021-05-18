@@ -113,7 +113,7 @@ class Trainer(BaseTrainer):
 
                     for loop_idx, im_pair_idx in enumerate(im_pair_idxs_list):
                         no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx]
-                        self.metrics.update('no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
+                        self.metrics.update(f'no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}', no_non_diffeomorphic_voxels_im_pair)
 
         # tensorboard cont.
         with torch.no_grad():
@@ -271,7 +271,7 @@ class Trainer(BaseTrainer):
                     for loop_idx, im_pair_idx in enumerate(im_pair_idxs_list):
                         no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx]
 
-                        self.metrics.update('test/no_non_diffeomorphic_voxels/im_pair_' + str(im_pair_idx), no_non_diffeomorphic_voxels_im_pair)
+                        self.metrics.update(f'test/no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}', no_non_diffeomorphic_voxels_im_pair)
                         self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list, test=True)
 
     @torch.no_grad()

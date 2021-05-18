@@ -102,7 +102,7 @@ def save_im_to_disk(im, file_path, spacing=(1, 1, 1)):
 
 def save_field(im_pair_idx, save_dirs, spacing, field, field_name, sample=False):
     folder = save_dirs['samples'] if sample else save_dirs['fields']
-    field_path = path.join(folder, field_name + '_' + str(im_pair_idx) + '.vtk')
+    field_path = path.join(folder, f'{field_name}_{im_pair_idx}.vtk')
     save_field_to_disk(field, field_path, spacing)
 
 
@@ -127,7 +127,7 @@ def save_grids(im_pair_idxs, save_dirs, grids):
     """
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        grid_path = path.join(save_dirs['grids'], 'grid_' + str(im_pair_idx) + '.vtk')
+        grid_path = path.join(save_dirs['grids'], f'grid_{im_pair_idx}.vtk')
         grid = grids[loop_idx]
         save_grid_to_disk(grid, grid_path)
 
@@ -149,7 +149,7 @@ def save_fixed_image(save_dirs, spacing, im_fixed):
 
 def save_im(im_pair_idx, save_dirs, spacing, im, name, sample=False):
     folder = save_dirs['samples'] if sample else save_dirs['images']
-    im_path = path.join(folder, name + '_' + str(im_pair_idx) + '.nii.gz')
+    im_path = path.join(folder, f'{name}_{im_pair_idx}.nii.gz')
     save_im_to_disk(im, im_path, spacing)
 
 
@@ -180,11 +180,11 @@ def save_sample(im_pair_idxs, save_dirs, spacing, sample_no, im_moving_warped_ba
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-        name = 'sample_' + str(sample_no) + '_im_moving_warped'
+        name = f'sample_{sample_no}_im_moving_warped'
         save_im(im_pair_idx, save_dirs, spacing, im_moving_warped, name, sample=True)
 
         displacement = displacement_batch[loop_idx]
-        name = 'sample_' + str(sample_no) + '_displacement'
+        name = f'sample_{sample_no}_displacement'
         save_field(im_pair_idx, save_dirs, spacing, displacement, name, sample=True)
 
 
@@ -199,7 +199,7 @@ def save_tensors(im_pair_idxs, save_dirs, var_params_q_v):
     u_v = var_params_q_v['u']
 
     def save_tensor(im_pair_idx, tensor, tensor_name):
-        tensor_path = path.join(save_dirs['tensors'], tensor_name + '_' + str(im_pair_idx) + '.pt')
+        tensor_path = path.join(save_dirs['tensors'], f'{tensor_name}_{im_pair_idx}.pt')
         torch.save(tensor.cpu(), tensor_path)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):

@@ -66,7 +66,7 @@ class BiobankDataset(Dataset):
         return torch.zeros(self.dims_v)
 
     def _get_mu_v(self, idx):
-        tensor_path = path.join(self.save_paths['tensors'], 'mu_v_' + str(idx) + '.pt')
+        tensor_path = path.join(self.save_paths['tensors'], f'mu_v_{idx}.pt')
 
         if path.exists(tensor_path):
             return torch.load(tensor_path)
@@ -80,7 +80,7 @@ class BiobankDataset(Dataset):
         return torch.log(var_v)
 
     def _get_log_var_v(self, idx):
-        tensor_path = path.join(self.save_paths['tensors'], 'log_var_v_' + str(idx) + '.pt')
+        tensor_path = path.join(self.save_paths['tensors'], f'log_var_v_{idx}pt')
 
         if path.exists(tensor_path):
             return torch.load(tensor_path)
@@ -92,7 +92,7 @@ class BiobankDataset(Dataset):
         return u_v
 
     def _get_u_v(self, idx):
-        tensor_path = path.join(self.save_paths['tensors'], 'u_v_' + str(idx) + '.pt')
+        tensor_path = path.join(self.save_paths['tensors'], f'u_v_{idx}.pt')
 
         if path.exists(tensor_path):
             return torch.load(tensor_path)

@@ -407,18 +407,18 @@ class MetricTracker:
             DSCs_im_pair = DSC[loop_idx]
 
             for structure_idx, structure in enumerate(structures_dict):
-                name_ASD = 'ASD/im_pair_' + str(im_pair_idx) + '/' + structure
-                name_DSC = 'DSC/im_pair_' + str(im_pair_idx) + '/' + structure
+                name_ASD = f'ASD/im_pair_{im_pair_idx}/{structure}'
+                name_DSC = f'DSC/im_pair_{im_pair_idx}/{structure}'
 
                 if test:
-                    name_ASD = 'test/' + name_ASD
-                    name_DSC = 'test/' + name_DSC
+                    name_ASD = f'test/{name_ASD}'
+                    name_DSC = f'test/{name_DSC}'
 
                 self.update(name_ASD, ASDs_im_pair[structure_idx].item())
                 self.update(name_DSC, DSCs_im_pair[structure_idx].item())
 
-            self.update('ASD/im_pair_' + str(im_pair_idx) + '/avg', ASDs_im_pair.mean().item())
-            self.update('DSC/im_pair_' + str(im_pair_idx) + '/avg', DSCs_im_pair.mean().item())
+            self.update(f'ASD/im_pair_{im_pair_idx}/avg', ASDs_im_pair.mean().item())
+            self.update(f'DSC/im_pair_{im_pair_idx}/avg', DSCs_im_pair.mean().item())
 
     def update_avg_metrics(self, structures_dict):
         idxs_no_non_diffeomorphic_voxels = [idx for idx in self._data.index if 'no_non_diffeomorphic_voxels' in idx and 'avg' not in idx]
@@ -432,8 +432,8 @@ class MetricTracker:
             avg_value_ASD_structure = self._data.value[idxs_ASD].mean()
             avg_value_DSC_structure = self._data.value[idxs_DSC].mean()
             
-            self.update('ASD/avg/' + structure, avg_value_ASD_structure)
-            self.update('DSC/avg/' + structure, avg_value_DSC_structure)
+            self.update(f'ASD/avg/{structure}', avg_value_ASD_structure)
+            self.update(f'DSC/avg/{structure}', avg_value_DSC_structure)
 
         idxs_ASD = [idx for idx in self._data.index if 'im_pair' in idx and 'ASD' in idx and 'avg' in idx]
         idxs_DSC = [idx for idx in self._data.index if 'im_pair' in idx and 'DSC' in idx and 'avg' in idx]
