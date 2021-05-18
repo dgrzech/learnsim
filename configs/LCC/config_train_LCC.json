@@ -23,7 +23,7 @@
 		"type": "LowRankMultivariateNormalDistribution",
 		"args": {
 			"sigma_init": 0.1,
-			"u_init": 0.0,
+			"u_init": 0.1,
 			"loc_learnable": false,
 			"cov_learnable": true
 		}
@@ -82,12 +82,12 @@
 			"rescale_im": true,
 			"shuffle": true,
 			"sigma_v_init": 0.5,
-			"u_v_init": 0.0
+			"u_v_init": 0.1
 		}
 	},
 	"Sobolev_grad": {
 		"enabled": true,
-		"s": 7,
+		"s": 3,
 		"lambda": 0.5
 	},
 	"trainer": {

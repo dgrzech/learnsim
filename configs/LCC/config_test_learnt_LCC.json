@@ -1,10 +1,11 @@
 {
-	"name": "SSD",
+	"name": "LCC",
 	"no_GPUs": 2,
 	"model": {
-		"type": "CNN_SSD",
+		"type": "CNN_LCC",
 		"args": {
 			"learnable": true,
+			"s": 1,
 			"no_features": [
 				4,
 				8,
@@ -22,19 +23,19 @@
 		"type": "LowRankMultivariateNormalDistribution",
 		"args": {
 			"sigma_init": 0.1,
-			"u_init": 0.0,
+			"u_init": 0.1,
 			"loc_learnable": false,
 			"cov_learnable": true
 		}
 	},
 	"data_loss": {
-		"type": "SSD"
+		"type": "LCC"
 	},
 	"reg_loss": {
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 1.4
+			"w_reg": 2.0
 		}
 	},
 	"entropy_loss": {
@@ -81,12 +82,12 @@
 			"rescale_im": true,
 			"shuffle": false,
 			"sigma_v_init": 0.5,
-			"u_v_init": 0.0
+			"u_v_init": 0.1
 		}
 	},
 	"Sobolev_grad": {
 		"enabled": true,
-		"s": 7,
+		"s": 3,
 		"lambda": 0.5
 	},
 	"trainer": {

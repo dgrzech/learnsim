@@ -324,7 +324,7 @@ class Trainer(BaseTrainer):
     def __Sobolev_gradients_init(self):
         _s = self.config['Sobolev_grad']['s']
         _lambda = self.config['Sobolev_grad']['lambda']
-        padding_sz = _s // 2
+        padding_sz = _s
 
         S, S_sqrt = Sobolev_kernel_1D(_s, _lambda)
         S = torch.from_numpy(S).float().unsqueeze(0)

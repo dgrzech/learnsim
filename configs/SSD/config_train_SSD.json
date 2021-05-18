@@ -1,11 +1,10 @@
 {
-	"name": "LCC",
+	"name": "SSD",
 	"no_GPUs": 2,
 	"model": {
-		"type": "CNN_LCC",
+		"type": "CNN_SSD",
 		"args": {
 			"learnable": true,
-			"s": 1,
 			"no_features": [
 				4,
 				8,
@@ -23,19 +22,19 @@
 		"type": "LowRankMultivariateNormalDistribution",
 		"args": {
 			"sigma_init": 0.1,
-			"u_init": 0.0,
+			"u_init": 0.1,
 			"loc_learnable": false,
 			"cov_learnable": true
 		}
 	},
 	"data_loss": {
-		"type": "LCC"
+		"type": "SSD"
 	},
 	"reg_loss": {
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 2.0
+			"w_reg": 1.4
 		}
 	},
 	"entropy_loss": {
@@ -71,23 +70,23 @@
 	"data_loader": {
 		"type": "LearnSimDataLoader",
 		"args": {
-			"batch_size": 3,
-			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_30",
+			"batch_size": 2,
+			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
 			"dims": [
 				128,
 				128,
 				128
 			],
-			"num_workers": 3,
+			"num_workers": 2,
 			"rescale_im": true,
-			"shuffle": false,
+			"shuffle": true,
 			"sigma_v_init": 0.5,
-			"u_v_init": 0.0
+			"u_v_init": 0.1
 		}
 	},
 	"Sobolev_grad": {
 		"enabled": true,
-		"s": 7,
+		"s": 3,
 		"lambda": 0.5
 	},
 	"trainer": {
@@ -95,7 +94,7 @@
 			"enabled": true,
 			"magnitude": 0.1
 		},
-		"no_epochs": 1,
+		"no_epochs": 50,
 		"no_iters_q_v": 2048,
 		"log_period": 1024,
 		"var_params_backup_period": 5,

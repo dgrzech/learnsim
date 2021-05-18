@@ -48,12 +48,12 @@
 			"num_workers": 3,
 			"rescale_im": true,
 			"sigma_v_init": 0.5,
-			"u_v_init": 0.0
+			"u_v_init": 0.1
 		}
 	},
 	"Sobolev_grad": {
 		"enabled": true,
-		"s": 7,
+		"s": 3,
 		"lambda": 0.5
 	},
 	"trainer": {

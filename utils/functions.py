@@ -25,24 +25,26 @@ def Sobolev_kernel_1D(_s, _lambda):
     """
     approximate the Sobolev kernel
 
-    :param _s: kernel size to use
+    :param _s: half the kernel width to use
     :param _lambda: smoothing parameter
     :return:
     """
+    
+    _kernel_sz = 2 * _s + 1
 
     # we do the eigendecomposition anyway for the sqrt, so might as well compute the smoothing kernel while at it
-    L = np.asarray(Laplacian_1D(_s).todense())
+    L = np.asarray(Laplacian_1D(_kernel_sz).todense())
     w, v = np.linalg.eigh(L)
     w = 1.0 - _lambda * w
 
     mask = np.abs(w) > 1e-10
-    inv_sqrt_w = np.zeros(_s)
+    inv_sqrt_w = np.zeros(_kernel_sz)
     inv_sqrt_w[mask] = 1.0 / np.sqrt(w[mask])
 
     half = v * inv_sqrt_w
 
-    smoothing_kernel = half.dot(half[_s // 2])  # not very pretty but I only need the middle column of half half^t
-    smoothing_kernel_sqrt = half.dot(v[_s // 2])  # not very pretty because it breaks the symmetry
+    smoothing_kernel = half.dot(half[_s])  # not very pretty but I only need the middle column of half half^t
+    smoothing_kernel_sqrt = half.dot(v[_s])  # not very pretty because it breaks the symmetry
 
     return smoothing_kernel / np.sum(smoothing_kernel), smoothing_kernel_sqrt / np.sum(smoothing_kernel_sqrt)
 
