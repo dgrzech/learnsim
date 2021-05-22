@@ -29,9 +29,9 @@ class LowRankMultivariateNormalDistribution(nn.Module):
         x = torch.randn(1, device=self.u.device)
 
         if no_samples == 1:
-            return self.mu + eps * sigma + x * self.u
+            return torch.clamp(self.mu + eps * sigma + x * self.u, min=0.0, max=1.0)
         elif no_samples == 2:
-            return self.mu + (eps * sigma + x * self.u), self.mu - (eps * sigma + x * self.u)
+            return torch.clamp(self.mu + (eps * sigma + x * self.u), min=0.0, max=1.0), torch.clamp(self.mu - (eps * sigma + x * self.u), min=0.0, max=1.0)
 
         raise NotImplementedError
 
