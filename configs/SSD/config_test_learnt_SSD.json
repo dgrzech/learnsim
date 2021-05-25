@@ -64,7 +64,7 @@
 	"optimizer_q_v": {
 		"type": "Adam",
 		"args": {
-			"lr": 0.003
+			"lr": 0.01
 		}
 	},
 	"data_loader": {
@@ -95,9 +95,9 @@
 			"magnitude": 0.1
 		},
 		"no_epochs": 1,
-		"no_iters_q_v": 2048,
-		"log_period": 1024,
-		"var_params_backup_period": 5,
+		"no_iters_q_v": 1024,
+		"log_period": 512,
+		"var_params_backup_period": 10,
 		"no_samples_test": 50,
 		"tensorboard": true,
 		"save_dir": "saved/",
