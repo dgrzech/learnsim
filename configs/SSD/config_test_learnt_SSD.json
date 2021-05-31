@@ -1,6 +1,6 @@
 {
 	"name": "SSD",
-	"no_GPUs": 2,
+	"no_GPUs": 1,
 	"model": {
 		"type": "CNN_SSD",
 		"args": {
