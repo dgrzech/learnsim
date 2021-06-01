@@ -1,0 +1,75 @@
+{
+	"name": "time",
+	"no_GPUs": 1,
+	"model": {
+		"type": "CNN_LCC",
+		"args": {
+			"learnable": false,
+			"s": 1
+		}
+	},
+	"data_loss": {
+		"type": "LCC"
+	},
+	"reg_loss": {
+		"type": "RegLoss_L2",
+		"args": {
+			"diff_op": "GradientOperator",
+			"w_reg": 2.0
+		}
+	},
+	"entropy_loss": {
+		"type": "EntropyMultivariateNormal"
+	},
+	"transformation_module": {
+		"type": "SVF_3D",
+		"args": {
+			"no_steps": 12
+		}
+	},
+	"registration_module": {
+		"type": "RegistrationModule"
+	},
+	"optimizer_q_v": {
+		"type": "Adam",
+		"args": {
+			"lr": 0.01
+		}
+	},
+	"data_loader": {
+		"type": "LearnSimDataLoader",
+		"args": {
+			"batch_size": 1,
+			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_30",
+			"dims": [
+				128,
+				128,
+				128
+			],
+			"num_workers": 1,
+			"rescale_im": true,
+			"sigma_v_init": 0.5,
+			"u_v_init": 0.1
+		}
+	},
+	"Sobolev_grad": {
+		"enabled": true,
+		"s": 3,
+		"lambda": 0.5
+	},
+	"trainer": {
+		"uniform_noise": {
+			"enabled": true,
+			"magnitude": 0.1
+		},
+		"no_epochs": 1,
+		"no_iters_q_v": 1024,
+		"log_period": 512,
+		"var_params_backup_period": 10,
+		"no_samples_test": 50,
+		"time_only": true,
+		"tensorboard": true,
+		"save_dir": "saved/",
+		"verbosity": 2
+	}
+}
