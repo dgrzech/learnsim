@@ -224,7 +224,7 @@ class Trainer(BaseTrainer):
     def _test(self, no_samples):
         if self.rank == 0:
             self.logger.info('')
-            save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'])
+            save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'], self.fixed['mask'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             im_pair_idxs = im_pair_idxs.tolist()
@@ -235,7 +235,7 @@ class Trainer(BaseTrainer):
 
             self.__batch_init(moving)
             self.__moving_init(moving, var_params_q_v)
-            save_moving_images(im_pair_idxs_local, self.save_dirs, self.im_spacing, moving['im'])
+            save_moving_images(im_pair_idxs_local, self.save_dirs, self.im_spacing, moving['im'], moving['mask'])
 
             for sample_no in range(1, no_samples+1):
                 v_sample = sample_q_v(var_params_q_v, no_samples=1)

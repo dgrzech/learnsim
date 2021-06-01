@@ -137,7 +137,7 @@ images
 """
 
 
-def save_fixed_image(save_dirs, spacing, im_fixed):
+def save_fixed_image(save_dirs, spacing, im_fixed, mask_fixed):
     """
     save the input fixed image to .nii.gz
     """
@@ -146,6 +146,10 @@ def save_fixed_image(save_dirs, spacing, im_fixed):
     im_path = path.join(save_dirs['images'], 'im_fixed.nii.gz')
     save_im_to_disk(im_fixed, im_path, spacing)
 
+    mask_fixed = mask_fixed[0, 0].float().cpu().numpy()
+    mask_path = path.join(save_dirs['images'], 'mask_fixed.nii.gz')
+    save_im_to_disk(mask_fixed, mask_path, spacing)
+
 
 def save_im(im_pair_idx, save_dirs, spacing, im, name, sample=False):
     folder = save_dirs['samples'] if sample else save_dirs['images']
@@ -153,14 +157,16 @@ def save_im(im_pair_idx, save_dirs, spacing, im, name, sample=False):
     save_im_to_disk(im, im_path, spacing)
 
 
-def save_moving_images(im_pair_idxs, save_dirs, spacing, im_moving_batch):
+def save_moving_images(im_pair_idxs, save_dirs, spacing, im_moving_batch, mask_moving_batch):
     """
     save input moving images to .nii.gz
     """
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
         im_moving = im_moving_batch[loop_idx, 0].cpu().numpy()
+        mask_moving = mask_moving_batch[loop_idx, 0].float().cpu().numpy()
         save_im(im_pair_idx, save_dirs, spacing, im_moving, 'im_moving')
+        save_im(im_pair_idx, save_dirs, spacing, mask_moving, 'mask_moving')
 
 
 """

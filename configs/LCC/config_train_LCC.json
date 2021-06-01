@@ -71,14 +71,14 @@
 	"data_loader": {
 		"type": "LearnSimDataLoader",
 		"args": {
-			"batch_size": 2,
+			"batch_size": 5,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_120",
 			"dims": [
 				128,
 				128,
 				128
 			],
-			"num_workers": 2,
+			"num_workers": 5,
 			"rescale_im": true,
 			"shuffle": true,
 			"sigma_v_init": 0.5,
@@ -95,7 +95,7 @@
 			"enabled": true,
 			"magnitude": 0.1
 		},
-		"no_epochs": 100,
+		"no_epochs": 50,
 		"no_iters_q_v": 1024,
 		"log_period": 512,
 		"var_params_backup_period": 10,

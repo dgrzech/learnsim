@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from datetime import datetime
 
 import torch
 import torch.distributed as dist
@@ -59,6 +60,7 @@ class BaseTrainer:
 
         if self.test_only:
             self.no_samples_test = cfg_trainer['no_samples_test']
+            self.time_only = cfg_trainer['time_only'] if 'time_only' in cfg_trainer else False
 
         # resuming
         if config.resume is not None:
@@ -107,7 +109,17 @@ class BaseTrainer:
         full testing logic
         """
 
+        if self.time_only:
+            start = datetime.now()
+
         self._train_epoch(epoch=1)
+
+        if self.time_only:
+            stop = datetime.now()
+            registration_time = (stop - start).total_seconds()
+            self.logger.info(f'\nregistration time: {registration_time:.2f}')
+            exit()
+
         self._test(no_samples=self.no_samples_test)
 
     @staticmethod
