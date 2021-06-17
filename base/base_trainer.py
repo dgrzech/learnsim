@@ -205,11 +205,5 @@ class BaseTrainer:
             self.__init_optimizer_q_phi()
             self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
             self.model.load_state_dict(checkpoint['model'])
-    
-            if self.rank == 0:
-                self.config.copy_var_params_from_backup_dirs(checkpoint['epoch'])
-                self.logger.info('removing backup directories..')
-                self.config.remove_backup_dirs()
-                self.logger.info('checkpoint loaded\n')
-    
+
         dist.barrier()

@@ -5,7 +5,7 @@ import socket
 from functools import reduce
 from operator import getitem
 from pathlib import Path
-from shutil import copy, copytree, rmtree
+from shutil import copy, rmtree
 
 from torch import nn
 
@@ -64,12 +64,6 @@ class ConfigParser:
 
         if self.rank == 0:
             setup_logging(self.log_dir)
-
-            # copy values of variational parameters
-            if self.resume is not None and not self.test:
-                self.logger.info('copying previous values of variational parameters..')
-                copytree(self.resume.parent.parent / 'var_params', self.var_params_dir, dirs_exist_ok=True)
-                self.logger.info('done!')
 
             # save updated config file to the checkpoint dir
             self.config_str = json.dumps(self.config, indent=4, sort_keys=False).replace('\n', '')
@@ -283,3 +277,4 @@ def _set_by_path(tree, keys, value):
 def _get_by_path(tree, keys):
     # access a nested object in tree by sequence of keys
     return reduce(getitem, keys, tree)
+
