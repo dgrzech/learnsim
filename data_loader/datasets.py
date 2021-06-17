@@ -13,14 +13,12 @@ from utils import rescale_im
 
 class BiobankDataset(Dataset):
     def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, rescale_im=False, rank=0):
-        self.im_paths = im_paths
-        self.save_paths = save_paths
+        self.im_paths, self.save_paths = im_paths, save_paths
+        self.dims, self.dims_im, self.dims_v = dims, (1, *dims), (3, *dims)
+        self.padding, self.im_spacing = None, None
         self.rescale_im = rescale_im
 
         self.sigma_v_init, self.u_v_init = sigma_v_init, u_v_init
-
-        self.dims, self.dims_im, self.dims_v = dims, (1, *dims), (3, *dims)
-        self.padding, self.im_spacing = None, None
 
         # image filenames
         im_filenames = self._get_filenames(im_paths)

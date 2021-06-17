@@ -39,17 +39,19 @@
 	"data_loader": {
 		"type": "LearnSimDataLoader",
 		"args": {
-			"batch_size": 3,
-			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_30",
+			"batch_size": 5,
+			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_1350",
 			"dims": [
 				128,
 				128,
 				128
 			],
-			"num_workers": 3,
-			"rescale_im": true,
 			"sigma_v_init": 0.5,
-			"u_v_init": 0.1
+			"u_v_init": 0.1,
+			"num_workers": 5,
+			"rescale_im": true,
+			"shuffle": false,
+			"test": true
 		}
 	},
 	"Sobolev_grad": {

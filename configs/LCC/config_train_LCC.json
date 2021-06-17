@@ -78,11 +78,12 @@
 				128,
 				128
 			],
+			"sigma_v_init": 0.5,
+			"u_v_init": 0.1,
 			"num_workers": 5,
 			"rescale_im": true,
 			"shuffle": true,
-			"sigma_v_init": 0.5,
-			"u_v_init": 0.1
+			"test": false
 		}
 	},
 	"Sobolev_grad": {

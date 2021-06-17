@@ -45,10 +45,12 @@
 				128,
 				128
 			],
+			"sigma_v_init": 0.5,
+			"u_v_init": 0.1,
 			"num_workers": 1,
 			"rescale_im": true,
-			"sigma_v_init": 0.5,
-			"u_v_init": 0.1
+			"shuffle": false,
+			"test": true
 		}
 	},
 	"Sobolev_grad": {
