@@ -4,7 +4,23 @@
 	"model": {
 		"type": "CNN_SSD",
 		"args": {
-			"learnable": false
+			"learnable": true,
+			"no_features": [4, 8, 8],
+			"activation": {
+				"type": "LeakyReLU",
+				"args": {
+					"negative_slope": 0.2
+				}
+			}
+		}
+	},
+	"q_f": {
+		"type": "LowRankMultivariateNormalDistribution",
+		"args": {
+			"sigma_init": 0.1,
+			"u_init": 0.1,
+			"loc_learnable": false,
+			"cov_learnable": true
 		}
 	},
 	"data_loss": {
@@ -29,6 +45,18 @@
 	"registration_module": {
 		"type": "RegistrationModule"
 	},
+	"optimizer_q_f": {
+		"type": "Adam",
+		"args": {
+			"lr": 0.001
+		}
+	},
+	"optimizer_q_phi": {
+		"type": "Adam",
+		"args": {
+			"lr": 0.00001
+		}
+	},
 	"optimizer_q_v": {
 		"type": "Adam",
 		"args": {
@@ -40,11 +68,7 @@
 		"args": {
 			"batch_size": 5,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_1350",
-			"dims": [
-				128,
-				128,
-				128
-			],
+			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
 			"num_workers": 5,

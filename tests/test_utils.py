@@ -1,5 +1,5 @@
-from utils import SVF_2D, SVF_3D, calc_norm, pixel_to_normalised_2D, pixel_to_normalised_3D, plot_2D, plot_3D, \
-    separable_conv_3D
+from utils import Cubic_B_spline_FFD_3D, SVF_2D, SVF_3D, SVFFD_3D, \
+    calc_norm, pixel_to_normalised_2D, pixel_to_normalised_3D, plot_2D, plot_3D, separable_conv_3D
 from .test_setup import *
 
 
@@ -69,6 +69,32 @@ class UtilsTestMethods(unittest.TestCase):
 
     #     transformation, displacement = transformation_module(v)
     #     plot_3D(v, transformation)
+
+    def test_cubic_B_spline_FFD_3D(self):
+        v = torch.randn(1, 3, *control_grid_sz)
+
+        transformation_module = Cubic_B_spline_FFD_3D(dims, cps)
+        v_out = transformation_module(v)
+        v_out_size = v_out.shape
+
+        assert v_out_size[0] == 1
+        assert v_out_size[1] == 3
+        assert v_out_size[2] == dims[0]
+        assert v_out_size[3] == dims[1]
+        assert v_out_size[4] == dims[2]
+
+    def test_SVFFD_3D(self):
+        v = torch.randn(1, 3, *control_grid_sz)
+
+        transformation_module = SVFFD_3D(dims, cps)
+        transformation, displacement = transformation_module(v)
+        transformation_size = transformation.shape
+
+        assert transformation_size[0] == 1
+        assert transformation_size[1] == 3
+        assert transformation_size[2] == dims[0]
+        assert transformation_size[3] == dims[1]
+        assert transformation_size[4] == dims[2]
 
     def test_separable_conv_3D(self):
         N = 2  # batch size

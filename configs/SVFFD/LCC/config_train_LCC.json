@@ -1,16 +1,12 @@
 {
 	"name": "LCC",
-	"no_GPUs": 1,
+	"no_GPUs": 2,
 	"model": {
 		"type": "CNN_LCC",
 		"args": {
 			"learnable": true,
 			"s": 1,
-			"no_features": [
-				4,
-				8,
-				8
-			],
+			"no_features": [4, 8, 8],
 			"activation": {
 				"type": "LeakyReLU",
 				"args": {
@@ -42,9 +38,9 @@
 		"type": "EntropyMultivariateNormal"
 	},
 	"transformation_module": {
-		"type": "SVF_3D",
+		"type": "SVFFD_3D",
 		"args": {
-			"no_steps": 12
+			"cps": [2, 2, 2]
 		}
 	},
 	"registration_module": {
@@ -73,17 +69,13 @@
 		"args": {
 			"batch_size": 5,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_1350",
-			"dims": [
-				128,
-				128,
-				128
-			],
+			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
 			"num_workers": 5,
 			"rescale_im": true,
-			"shuffle": false,
-			"test": true
+			"shuffle": true,
+			"test": false
 		}
 	},
 	"Sobolev_grad": {
@@ -96,10 +88,9 @@
 			"enabled": true,
 			"magnitude": 0.1
 		},
-		"no_epochs": 1,
+		"no_epochs": 50,
 		"no_iters_q_v": 1024,
 		"log_period": 512,
-		"var_params_backup_period": 10,
 		"no_samples_test": 50,
 		"tensorboard": true,
 		"save_dir": "saved/",

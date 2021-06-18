@@ -5,12 +5,12 @@ from .datasets import BiobankDataset
 
 
 class LearnSimDataLoader(BaseDataLoader):
-    def __init__(self, batch_size, dims, num_workers, data_dir, save_dirs, sigma_v_init, u_v_init, rescale_im=False, shuffle=True,
-                 no_GPUs=1, rank=0, test_split=0.2, test=False):
+    def __init__(self, batch_size, dims, num_workers, data_dir, save_dirs, sigma_v_init, u_v_init, cps=None,
+                 rescale_im=False, shuffle=True, no_GPUs=1, rank=0, test_split=0.2, test=False):
         self.data_dir, self.save_dirs = data_dir, save_dirs
         generator = torch.Generator().manual_seed(42)
 
-        dataset = BiobankDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, rescale_im, rank)
+        dataset = BiobankDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, cps, rescale_im, rank)
 
         self.dims = dataset.dims
         self.fixed = dataset.fixed

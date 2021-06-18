@@ -56,6 +56,16 @@ def get_noise_Langevin(sigma, tau):
     return math.sqrt(2.0 * tau) * sigma * eps
 
 
+def get_control_grid_size(dims, cps):
+    """
+    calculate the control grid size
+    :param dims: image dimensions
+    :param cps: control point spacing
+    """
+
+    return tuple([int(math.ceil((sz - 1) / c) + 1 + 2) for sz, c in zip(dims, cps)])
+
+
 def calc_det_J(nabla):
     """
     calculate the Jacobian determinant of a vector field

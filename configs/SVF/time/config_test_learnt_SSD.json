@@ -5,11 +5,7 @@
 		"type": "CNN_SSD",
 		"args": {
 			"learnable": true,
-			"no_features": [
-				4,
-				8,
-				8
-			],
+			"no_features": [4, 8, 8],
 			"activation": {
 				"type": "LeakyReLU",
 				"args": {
@@ -72,11 +68,7 @@
 		"args": {
 			"batch_size": 1,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_30",
-			"dims": [
-				128,
-				128,
-				128
-			],
+			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
 			"num_workers": 1,

@@ -8,15 +8,22 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
-from utils import rescale_im
+from utils import get_control_grid_size, rescale_im
 
 
 class BiobankDataset(Dataset):
-    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, rescale_im=False, rank=0):
+    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, cps=None, rescale_im=False, rank=0):
         self.im_paths, self.save_paths = im_paths, save_paths
-        self.dims, self.dims_im, self.dims_v = dims, (1, *dims), (3, *dims)
         self.padding, self.im_spacing = None, None
         self.rescale_im = rescale_im
+
+        self.dims, self.dims_im, = dims, (1, *dims)
+
+        if cps is None:
+            self.dims_v = (3, *dims)
+        else:
+            control_grid_sz = get_control_grid_size(dims, cps)
+            self.dims_v = (3, *control_grid_sz)
 
         self.sigma_v_init, self.u_v_init = sigma_v_init, u_v_init
 

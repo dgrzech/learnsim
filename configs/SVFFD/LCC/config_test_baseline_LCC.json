@@ -1,65 +1,34 @@
 {
-	"name": "SSD",
+	"name": "LCC",
 	"no_GPUs": 1,
 	"model": {
-		"type": "CNN_SSD",
+		"type": "CNN_LCC",
 		"args": {
-			"learnable": true,
-			"no_features": [
-				4,
-				8,
-				8
-			],
-			"activation": {
-				"type": "LeakyReLU",
-				"args": {
-					"negative_slope": 0.2
-				}
-			}
-		}
-	},
-	"q_f": {
-		"type": "LowRankMultivariateNormalDistribution",
-		"args": {
-			"sigma_init": 0.1,
-			"u_init": 0.1,
-			"loc_learnable": false,
-			"cov_learnable": true
+			"learnable": false,
+			"s": 1
 		}
 	},
 	"data_loss": {
-		"type": "SSD"
+		"type": "LCC"
 	},
 	"reg_loss": {
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 1.4
+			"w_reg": 2.0
 		}
 	},
 	"entropy_loss": {
 		"type": "EntropyMultivariateNormal"
 	},
 	"transformation_module": {
-		"type": "SVF_3D",
+		"type": "SVFFD_3D",
 		"args": {
-			"no_steps": 12
+			"cps": [2, 2, 2]
 		}
 	},
 	"registration_module": {
 		"type": "RegistrationModule"
-	},
-	"optimizer_q_f": {
-		"type": "Adam",
-		"args": {
-			"lr": 0.001
-		}
-	},
-	"optimizer_q_phi": {
-		"type": "Adam",
-		"args": {
-			"lr": 0.00001
-		}
 	},
 	"optimizer_q_v": {
 		"type": "Adam",
@@ -72,11 +41,7 @@
 		"args": {
 			"batch_size": 5,
 			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_1350",
-			"dims": [
-				128,
-				128,
-				128
-			],
+			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
 			"num_workers": 5,
@@ -98,7 +63,6 @@
 		"no_epochs": 1,
 		"no_iters_q_v": 1024,
 		"log_period": 512,
-		"var_params_backup_period": 10,
 		"no_samples_test": 50,
 		"tensorboard": true,
 		"save_dir": "saved/",
