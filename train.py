@@ -17,7 +17,6 @@ def train(config):
     data_loader = config.init_data_loader()
 
     # parameters used with other objects
-    dims = data_loader.dims
     no_samples = data_loader.no_samples
 
     # model
@@ -27,7 +26,7 @@ def train(config):
     losses = config.init_losses()
 
     # transformation and registration modules
-    transformation_module, registration_module = config.init_transformation_and_registration_modules(dims)
+    transformation_module, registration_module = config.init_transformation_and_registration_modules()
 
     # metrics
     metrics = config.init_metrics(no_samples)

@@ -119,25 +119,30 @@ class ConfigParser:
 
     def init_data_loader(self):
         self['data_loader']['args']['save_dirs'] = self.save_dirs
+        self['data_loader']['args']['no_GPUs'] = self['no_GPUs']
+        self['data_loader']['args']['rank'] = self.rank
+
+        try:
+            self['data_loader']['args']['cps'] = self['transformation_module']['args']['cps']
+        except:
+            self['data_loader']['args']['cps'] = None
 
         if self.test:
             self['data_loader']['args']['shuffle'] = False
 
-        return self.init_obj('data_loader', module_data, no_GPUs=self['no_GPUs'], rank=self.rank)
+        return self.init_obj('data_loader', module_data)
 
     def init_model(self):
-        args = self['model']['args']
-
         try:
-            activation_func = getattr(nn, args['activation']['type'])(**dict(args['activation']['args']))
+            args = self['model']['args']
+            self['model']['args']['activation'] = getattr(nn, args['activation']['type'])(**dict(args['activation']['args']))
         except:
-            activation_func = nn.Identity()
+            self['model']['args']['activation'] = nn.Identity()
 
-        return self.init_obj('model', model, activation=activation_func)
+        return self.init_obj('model', model)
 
     def init_losses(self):
-        return {'data': self.init_obj('data_loss', model_loss),
-                'regularisation': self.init_obj('reg_loss', model_loss),
+        return {'data': self.init_obj('data_loss', model_loss), 'regularisation': self.init_obj('reg_loss', model_loss),
                 'entropy': self.init_obj('entropy_loss', model_loss)}
 
     def init_metrics(self, no_samples):
@@ -163,9 +168,10 @@ class ConfigParser:
 
         return loss_terms + ASD + DSC + no_non_diffeomorphic_voxels
 
-    def init_transformation_and_registration_modules(self, dims):
-        return self.init_obj('transformation_module', transformation, dims), \
-               self.init_obj('registration_module', registration)
+    def init_transformation_and_registration_modules(self):
+        self['transformation_module']['args']['dims'] = self['data_loader']['args']['dims']
+
+        return self.init_obj('transformation_module', transformation), self.init_obj('registration_module', registration)
 
     def init_obj(self, name, module, *args, **kwargs):
         """

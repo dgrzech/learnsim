@@ -38,42 +38,21 @@ class DifferentialOperator(nn.Module, ABC):
         return input
 
 
-class Fourier1stDerivativeOperator(DifferentialOperator):
-    """
-    Square root of the Laplacian operator computed in frequency domain:
-        alpha -> alpha * |omega|
-    (technically it's not the nabla operator)
-    
-    image_size (int): number of voxels along x, y, or z (assumed to be the same)
-    """
-
-    def __init__(self, image_size):
-        super(DifferentialOperator, self).__init__()
-        omega_sq = get_omega_norm_sq((image_size, image_size, image_size)).transpose(1, 4)
-        self.omega_abs = nn.Parameter(omega_sq.sqrt_().unsqueeze(-1), requires_grad=False)
-
-    def forward(self, input):
-        """
-        input: a field in frequency domain ('z_hat'), with its real and imaginary parts along dim=-1
-        """
-        return input * self.omega_abs
-
-
 class GradientOperator(DifferentialOperator):
     def __init__(self):
         super(GradientOperator, self).__init__()
 
         # paddings
-        self.px = (0, 1, 0, 0, 0, 0)
-        self.py = (0, 0, 0, 1, 0, 0)
-        self.pz = (0, 0, 0, 0, 0, 1)
+        self.px = [0, 1, 0, 0, 0, 0]
+        self.py = [0, 0, 0, 1, 0, 0]
+        self.pz = [0, 0, 0, 0, 0, 1]
 
         # F.grid_sample(..) takes values in range (-1, 1), so needed for det(J) = 1 when the transformation is identity
         self.pixel_spacing = None
 
     def _set_spacing(self, field):
         dims = np.asarray(field.shape[2:])
-        self.pixel_spacing = 2.0 / (dims - 1)
+        self.pixel_spacing = 2.0 / (dims - 1.0)
 
     def forward(self, v, transformation=False):
         if transformation and self.pixel_spacing is None:

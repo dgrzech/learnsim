@@ -75,9 +75,9 @@ def Gaussian_kernel_3D(_s, sigma=1.0):
 
 class SGLD(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, v_curr_state, sigma, tau):
+    def forward(ctx, curr_state, sigma, tau):
         ctx.sigma = sigma
-        return add_noise_Langevin(v_curr_state, sigma, tau)
+        return add_noise_Langevin(curr_state, sigma, tau)
 
     @staticmethod
     def backward(ctx, grad_output):
