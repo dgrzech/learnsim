@@ -81,7 +81,7 @@ class Trainer(BaseTrainer):
             loss_q_v = data_term / 2.0 + reg_term / 2.0 - entropy_term
 
             # backprop
-            self.optimizer_q_v.zero_grad()
+            self.optimizer_q_v.zero_grad(set_to_none=True)
             loss_q_v.backward()
             self.optimizer_q_v.step()
 
@@ -158,12 +158,8 @@ class Trainer(BaseTrainer):
         loss_q_f_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
         loss_q_f_q_phi /= n
 
-        self.optimizer_q_f.zero_grad()
-        self.optimizer_q_phi.zero_grad()
-
-        loss_q_f_q_phi.backward()  # backprop
-
-        self.optimizer_q_f.step()
+        self.optimizer_q_phi.zero_grad(set_to_none=True)
+        loss_q_phi.backward()  # backprop
         self.optimizer_q_phi.step()
 
         dist.reduce(loss_q_f_q_phi, 0, op=dist.ReduceOp.SUM)
