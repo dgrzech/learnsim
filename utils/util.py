@@ -212,10 +212,8 @@ def init_identity_grid_2D(dims):
     x = torch.linspace(-1, 1, steps=nx)
     y = torch.linspace(-1, 1, steps=ny)
 
-    x = x.expand(ny, -1).unsqueeze(0).unsqueeze(3)
-    y = y.expand(nx, -1).transpose(0, 1).unsqueeze(0).unsqueeze(3)
-
-    return torch.cat((x, y), 3)
+    grid_x, grid_y = torch.meshgrid(x, y)
+    return torch.stack([grid_y, grid_x]).unsqueeze(0).float()
 
 
 def init_identity_grid_3D(dims):
@@ -229,11 +227,8 @@ def init_identity_grid_3D(dims):
     y = torch.linspace(-1, 1, steps=ny)
     z = torch.linspace(-1, 1, steps=nz)
 
-    x = x.expand(ny, -1).expand(nz, -1, -1).unsqueeze(0).unsqueeze(4)
-    y = y.expand(nx, -1).expand(nz, -1, -1).transpose(1, 2).unsqueeze(0).unsqueeze(4)
-    z = z.expand(nx, -1).transpose(0, 1).expand(ny, -1, -1).transpose(0, 1).unsqueeze(0).unsqueeze(4)
-
-    return torch.cat((x, y, z), 4)
+    grid_x, grid_y, grid_z = torch.meshgrid(x, y, z)
+    return torch.stack([grid_z, grid_y, grid_x]).unsqueeze(0).float()
 
 
 def max_field_update(field_old, field_new):
