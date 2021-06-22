@@ -117,7 +117,8 @@ class ConfigParser:
                 'entropy': self.init_obj('entropy_loss', model_loss)}
 
     def init_metrics(self, no_samples):
-        loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term', 'loss/q_v', 'loss/q_phi']
+        loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term', 'loss/q_v',
+                      'loss/neg_sample_energy', 'loss/q_phi']
 
         ASD = [f'ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)]
         ASD.extend([f'ASD/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(no_samples)])

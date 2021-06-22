@@ -3,9 +3,8 @@ import torch.distributed as dist
 from tqdm import tqdm, trange
 
 from base import BaseTrainer
-from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
-    save_sample
-from utils import SobolevGrad, Sobolev_kernel_1D, \
+from logger import log_fields, log_images, log_model_samples, log_model_weights, save_sample
+from utils import SGLD, SobolevGrad, Sobolev_kernel_1D, \
     add_noise_uniform_field, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
 
@@ -33,31 +32,63 @@ class Trainer(BaseTrainer):
         if self.add_noise_uniform:
             self.alpha = cfg_trainer['uniform_noise']['magnitude']
 
-        if not self.test_only:
+        if self.atlas_mode and not self.test_only:
             self.__metrics_init()
 
-    def __calc_sample_loss(self, moving, v_sample_unsmoothed, var_params_q_v, im_fixed_sample=None):
+    def __calc_data_loss(self, fixed, moving, v_sample_unsmoothed):
         v_sample = SobolevGrad.apply(v_sample_unsmoothed, self.S, self.padding)
         transformation, displacement = self.transformation_module(v_sample)
 
         if self.add_noise_uniform:
             transformation = add_noise_uniform_field(transformation, self.alpha)
 
-        im_fixed = self.fixed['im'] if im_fixed_sample is None else im_fixed_sample
         im_moving_warped = self.registration_module(moving['im'], transformation)
-
-        z = self.model(im_fixed, im_moving_warped, self.fixed['mask'])
+        z = self.model(fixed['im'], im_moving_warped, fixed['mask'])
         data_term = self.data_loss(z)
 
-        if im_fixed_sample is not None:
-            return data_term
+        return data_term, im_moving_warped, v_sample, transformation, displacement
 
+    def __calc_loss(self, fixed, moving, v_sample_unsmoothed, var_params_q_v):
+        data_term, im_moving_warped, v_sample, transformation, displacement = self.__calc_data_loss(fixed, moving, v_sample_unsmoothed)
         reg_term = self.reg_loss(v_sample)
         entropy_term = self.entropy_loss(sample=v_sample_unsmoothed, mu=var_params_q_v['mu'], log_var=var_params_q_v['log_var'], u=var_params_q_v['u'])
 
         return data_term, reg_term, entropy_term, transformation, displacement, im_moving_warped
 
-    def _step_q_v(self, epoch, batch_idx, im_pair_idxs, moving, var_params_q_v):
+    def __generate_samples_from_model(self, im_pair_idxs, fixed, im_moving_warped):
+        n = len(im_pair_idxs)
+        total_no_samples = n * self.world_size
+
+        self.curr_state = fixed['im'].detach().clone()
+        self.curr_state.requires_grad_(True)
+        self.__init_optimizer_LD()
+
+        mean = torch.zeros_like(self.curr_state)
+
+        for iter_no in range(1, self.no_samples_SGLD):
+            self.curr_state = SGLD.apply(self.curr_state, torch.ones_like(self.curr_state), self.tau)
+            mean += self.curr_state.detach() / self.no_samples_SGLD
+
+            z_curr_state = self.model(self.curr_state, im_moving_warped, fixed['mask'])
+            loss = self.data_loss(z_curr_state)
+
+            self.optimizer_LD.zero_grad(set_to_none=True)
+            loss.backward()
+            self.optimizer_LD.step()
+
+            dist.reduce(loss, 0, op=dist.ReduceOp.SUM)
+
+            if self.rank == 0:
+                with torch.no_grad():
+                    self.writer.set_step(self.step + iter_no)
+                    self.metrics.update('loss/neg_sample_energy', loss.item(), n=total_no_samples)
+
+                    if iter_no % self.log_period_model_samples == 0:
+                        log_model_samples(self.writer, im_pair_idxs, self.curr_state.detach())
+
+        return mean
+
+    def _step_q_v(self, epoch, im_pair_idxs, fixed, moving, var_params_q_v):
         im_pair_idxs_local = im_pair_idxs
 
         n = len(im_pair_idxs_local)
@@ -70,8 +101,8 @@ class Trainer(BaseTrainer):
             v_sample1_unsmoothed, v_sample2_unsmoothed = sample_q_v(var_params_q_v, no_samples=2)
 
             # calculate the loss
-            data_term1, reg_term1, entropy_term1, transformation1, displacement1, im_moving_warped1 = self.__calc_sample_loss(moving, v_sample1_unsmoothed, var_params_q_v)
-            data_term2, reg_term2, entropy_term2, _, _, _ = self.__calc_sample_loss(moving, v_sample2_unsmoothed, var_params_q_v)
+            data_term1, reg_term1, entropy_term1, transformation1, displacement1, im_moving_warped1 = self.__calc_loss(fixed, moving, v_sample1_unsmoothed, var_params_q_v)
+            data_term2, reg_term2, entropy_term2, _, _, _ = self.__calc_loss(fixed, moving, v_sample2_unsmoothed, var_params_q_v)
 
             data_term = data_term1.sum() + data_term2.sum()
             reg_term = reg_term1.sum() + reg_term2.sum()
@@ -122,7 +153,7 @@ class Trainer(BaseTrainer):
             grid_im1 = self.registration_module(grid_im1, transformation1)
 
             segs_moving_warped = self.registration_module(moving['seg'], transformation1)
-            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
+            ASD, DSC = calc_metrics(im_pair_idxs_local, fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
 
             ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
             DSC_list = [torch.zeros_like(DSC) for _ in range(self.world_size)]
@@ -135,9 +166,9 @@ class Trainer(BaseTrainer):
             if not self.test_only:
                 var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
                 log_fields(self.writer, im_pair_idxs_local, var_params_q_v_smoothed, displacement1, grid_im1, log_det_J_transformation)
-                log_images(self.writer, im_pair_idxs_local, self.fixed['im'], moving['im'], im_moving_warped1)
+                log_images(self.writer, im_pair_idxs_local, fixed['im'], moving['im'], im_moving_warped1)
 
-    def _step_q_f_q_phi(self, im_pair_idxs, moving, var_params_q_v):
+    def _step_q_phi(self, im_pair_idxs, fixed, moving, var_params_q_v):
         self.step += 1
 
         n = len(im_pair_idxs)
@@ -145,18 +176,13 @@ class Trainer(BaseTrainer):
 
         # draw a sample from q_v
         v_sample = sample_q_v(var_params_q_v, no_samples=1)
-        term1 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=self.fixed['im'])
+        term1, im_moving_warped1, _, _, _ = self.__calc_data_loss(fixed, moving, v_sample)
 
-        # draw samples from q_f
-        im_fixed_sample1, im_fixed_sample2 = self.q_f(no_samples=2)
+        # implicit generation from the energy-based model
+        im_fixed_sample = self.__generate_samples_from_model(im_pair_idxs, fixed, im_moving_warped1)
+        term2, _, _, _, _ = self.__calc_data_loss({'im': im_fixed_sample, 'mask': fixed['mask']}, moving, v_sample)
 
-        im_fixed_sample1 = im_fixed_sample1.expand_as(moving['im'])
-        im_fixed_sample2 = im_fixed_sample2.expand_as(moving['im'])
-
-        term2 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample1)
-        term3 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample2)
-
-        loss_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
+        loss_q_phi = term1.sum() - term2.sum()
         loss_q_phi /= n
         
         self.optimizer_q_f.zero_grad(set_to_none=True)
@@ -173,7 +199,6 @@ class Trainer(BaseTrainer):
 
         with torch.no_grad():
             log_model_weights(self.writer, self.model)
-            log_q_f(self.writer, self.q_f)
 
     def _train_epoch(self, epoch=0):
         self.data_loader.sampler.set_epoch(epoch)
@@ -183,7 +208,7 @@ class Trainer(BaseTrainer):
             self.logger.debug(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
 
             im_pair_idxs = im_pair_idxs.tolist()
-            self.__fixed_and_moving_init(moving, var_params_q_v)
+            self.__fixed_and_moving_init(fixed, moving, var_params_q_v)
 
             """
             q_v
@@ -191,7 +216,7 @@ class Trainer(BaseTrainer):
 
             self._enable_gradients_variational_parameters(var_params_q_v)
             self.__init_optimizer_q_v(var_params_q_v)
-            self._step_q_v(epoch, batch_idx, im_pair_idxs, moving, var_params_q_v)
+            self._step_q_v(epoch, batch_idx, im_pair_idxs, fixed, moving, var_params_q_v)
             self._disable_gradients_variational_parameters(var_params_q_v)
 
             """
@@ -200,7 +225,7 @@ class Trainer(BaseTrainer):
 
             if not self.test_only:
                 self._enable_gradients_model()
-                self._step_q_f_q_phi(im_pair_idxs, moving, var_params_q_v)
+                self._step_q_phi(im_pair_idxs, fixed, moving, var_params_q_v)
                 self._disable_gradients_model()
 
         if not self.test_only:
@@ -211,15 +236,13 @@ class Trainer(BaseTrainer):
     @torch.no_grad()
     def _test(self, no_samples):
         self.logger.debug('')
-        save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'], self.fixed['mask'])
-
+        
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='testing', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
                 self.logger.debug(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
 
                 im_pair_idxs = im_pair_idxs.tolist()
                 im_pair_idxs_local = im_pair_idxs
-                self.__fixed_and_moving_init(moving, var_params_q_v)
-                save_moving_images(im_pair_idxs_local, self.save_dirs, self.im_spacing, moving['im'], moving['mask'])
+                self.__fixed_and_moving_init(fixed, moving, var_params_q_v)
 
                 for sample_no in range(1, no_samples+1):
                     v_sample = sample_q_v(var_params_q_v, no_samples=1)
@@ -238,7 +261,7 @@ class Trainer(BaseTrainer):
                     no_non_diffeomorphic_voxels_list = [torch.zeros_like(no_non_diffeomorphic_voxels) for _ in range(self.world_size)]
                     dist.all_gather(no_non_diffeomorphic_voxels_list, no_non_diffeomorphic_voxels)
 
-                    ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
+                    ASD, DSC = calc_metrics(im_pair_idxs_local, fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
 
                     ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
                     DSC_list = [torch.zeros_like(DSC) for _ in range(self.world_size)]
@@ -257,11 +280,12 @@ class Trainer(BaseTrainer):
                         self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list, test=True)
 
     @torch.no_grad()
-    def __fixed_and_moving_init(self, moving, var_params_q_v):
-        for key in self.fixed:
-            self.fixed[key] = self.fixed[key].expand_as(moving[key])
+    def __fixed_and_moving_init(self, fixed, moving, var_params_q_v):
+        for key in fixed:
+            fixed[key] = fixed[key].to(self.rank, memory_format=torch.channels_last_3d)
         for key in moving:
-            moving[key] = moving[key].to(self.rank)
+            moving[key] = moving[key].to(self.rank, memory_format=torch.channels_last_3d)
+
         for param_key in var_params_q_v:
             var_params_q_v[param_key] = var_params_q_v[param_key].to(self.rank)
 
@@ -271,9 +295,9 @@ class Trainer(BaseTrainer):
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='pre-registration metrics', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
             im_pair_idxs_local = im_pair_idxs.tolist()
-            self.__fixed_and_moving_init(moving, var_params_q_v)
+            self.__fixed_and_moving_init(fixed, moving, var_params_q_v)
 
-            ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], moving['seg'], self.structures_dict, self.im_spacing)
+            ASD, DSC = calc_metrics(im_pair_idxs_local, fixed['seg'], moving['seg'], self.structures_dict, self.im_spacing)
 
             im_pair_idxs_tensor = torch.tensor(im_pair_idxs_local, device=self.rank)
             im_pair_idxs_tensor_list = [torch.zeros_like(im_pair_idxs_tensor) for _ in range(self.world_size)]
@@ -312,3 +336,7 @@ class Trainer(BaseTrainer):
     def __init_optimizer_q_v(self, var_params_q_v):
         trainable_params_q_v = filter(lambda p: p.requires_grad, var_params_q_v.values())
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
+    
+    def __init_optimizer_LD(self):
+        self.optimizer_LD = self.config.init_obj('optimizer_LD', torch.optim, self.curr_state)
+

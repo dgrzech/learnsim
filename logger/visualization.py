@@ -74,15 +74,15 @@ def log_model_weights(writer,  model):
 
 
 """
-q_f
+energy-based model samples
 """
 
 
-def var_params_q_f_grid(sigma_f_slices, u_f_slices):
-    fig, axs = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+def model_samples_grid(samples_slices):
+    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['sagittal', 'coronal', 'axial']
-    rows = ['sigma_f', 'u_f']
+    rows = ['model_sample']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -97,25 +97,21 @@ def var_params_q_f_grid(sigma_f_slices, u_f_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(sigma_f_slices[i], cmap='gray')
-        axs[1, i].imshow(u_f_slices[i], cmap='gray')
+        axs[0, i].imshow(samples_slices[i], cmap='gray')
 
     return fig
 
 
-def log_q_f(writer,  q_f):
+def log_model_samples(writer, im_pair_idxs, model_samples):
     if dist.get_rank() == 0:
-        log_var_f, u_f = get_module_attr(q_f, 'log_var'), get_module_attr(q_f, 'u').data.cpu().numpy()
-        sigma_f = torch.exp(0.5 * log_var_f).data.cpu().numpy()
-        mid_idxs = get_im_or_field_mid_slices_idxs(sigma_f)
+        model_samples = model_samples.cpu().numpy()
+        mid_idxs = get_im_or_field_mid_slices_idxs(model_samples)
 
-        sigma_f = sigma_f[0, 0]
-        sigma_f_slices = get_slices(sigma_f, mid_idxs)
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+            sample = model_samples[loop_idx, 0]
+            sample_slices = get_slices(sample, mid_idxs)
 
-        u_f = u_f[0, 0]
-        u_f_slices = get_slices(u_f, mid_idxs)
-
-        writer.add_figure('q_f', var_params_q_f_grid(sigma_f_slices, u_f_slices))
+            writer.add_figure(f'model_samples/{im_pair_idx}', model_samples_grid(sample_slices))
 
 
 """

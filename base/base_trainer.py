@@ -4,7 +4,6 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-import model.distributions as distr
 from logger import TensorboardWriter
 from utils import MetricTracker, init_grid_im
 
@@ -17,6 +16,7 @@ class BaseTrainer:
     def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only):
         self.config = config
         self.logger = config.logger
+        self.atlas_mode = False  # TODO
         self.test_only = test_only
 
         self.rank = dist.get_rank()
@@ -28,15 +28,8 @@ class BaseTrainer:
         self.grid_im = init_grid_im(data_loader.dims).to(self.rank)
         self.save_dirs = self.data_loader.save_dirs
 
-        # all-to-one registration
-        self.fixed = {k: v.to(self.rank) for k, v in self.data_loader.fixed.items()}
-
         # model and losses
-        self.model = model.to(self.rank)
-
-        if not self.test_only:
-            self.q_f = self.config.init_obj('q_f', distr, self.fixed['im']).to(self.rank)
-            self.q_f = DDP(self.q_f, device_ids=[self.rank], find_unused_parameters=True)
+        self.model = model.to(self.rank, memory_format=torch.channels_last_3d)
 
         self.data_loss = losses['data'].to(self.rank)
         self.reg_loss = losses['regularisation'].to(self.rank)
@@ -55,8 +48,10 @@ class BaseTrainer:
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
         self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
         self.no_batches = len(self.data_loader)
+        self.no_samples_SGLD, self.tau = cfg_trainer['no_samples_SGLD'], config['optimizer_LD']['args']['lr']
 
         self.log_period = int(cfg_trainer['log_period'])  # NOTE (DG): unused
+        self.log_period_model_samples = int(cfg_trainer['log_period_model_samples'])
         self.log_period_var_params = int(cfg_trainer['log_period_var_params']) if 'log_period_var_params' in cfg_trainer else None  # NOTE (DG): unused
 
         if self.test_only:
@@ -149,12 +144,8 @@ class BaseTrainer:
         self.optimizer_q_v = None
 
         if not self.test_only:
-            self.__init_optimizer_q_f()
+            self.optimizer_LD = None
             self.optimizer_q_phi = None
-
-    def __init_optimizer_q_f(self):
-        trainable_params_q_f = filter(lambda p: p.requires_grad, self.q_f.parameters())
-        self.optimizer_q_f = self.config.init_obj('optimizer_q_f', torch.optim, trainable_params_q_f)
 
     def __init_optimizer_q_phi(self):
         trainable_params_q_phi = filter(lambda p: p.requires_grad, self.model.parameters())
@@ -171,9 +162,7 @@ class BaseTrainer:
             self.logger.info(f'\nsaving checkpoint: {filename}..')
 
             state = {'epoch': epoch, 'step': self.step, 'config': self.config,
-                     'q_f': self.q_f.module.state_dict() if isinstance(self.q_f, DDP) else self.q_f.state_dict(),
                      'model': self.model.module.state_dict() if isinstance(self.model, DDP) else self.model.state_dict(),
-                     'optimizer_q_f': self.optimizer_q_f.state_dict(),
                      'optimizer_q_phi': self.optimizer_q_phi.state_dict()}
 
             torch.save(state, filename)
@@ -198,10 +187,6 @@ class BaseTrainer:
             self.start_epoch = checkpoint['epoch'] + 1
             self.step = checkpoint['step'] + 1
 
-            self.__init_optimizer_q_f()
-            self.optimizer_q_f.load_state_dict(checkpoint['optimizer_q_f'])
-            self.q_f.load_state_dict(checkpoint['q_f'])
-    
             self.__init_optimizer_q_phi()
             self.optimizer_q_phi.load_state_dict(checkpoint['optimizer_q_phi'])
             self.model.load_state_dict(checkpoint['model'])
