@@ -16,8 +16,9 @@ class WarpingTestMethods(unittest.TestCase):
         im_moving = torch.randn_like(im_fixed)
         im_moving_warped = registration_module(im_moving, identity_transformation)
 
-        transformation = identity_grid.permute([0, 4, 1, 2, 3])
-        im_moving_warped = registration_module(im_moving, transformation)
+        assert torch.allclose(im_moving, im_moving_warped, atol=atol)
+
+        mask = torch.ones_like(im_fixed).bool()
 
         z_unwarped = (im_fixed - im_moving) ** 2
         z_unwarped_masked = z_unwarped[mask]
@@ -30,6 +31,13 @@ class WarpingTestMethods(unittest.TestCase):
 
         assert pytest.approx(unwarped_loss_value, rel=rtol) == warped_loss_value
 
+    def test_identity_transformation_non_square(self):
+        im_moving = torch.randn(1, 1, *dims_non_square, device=device)
+        im_moving_warped = registration_module(im_moving, identity_transformation_non_square)
+
+        assert torch.allclose(im_moving, im_moving_warped, atol=atol)
+
+    @torch.no_grad()
     def test_sphere_translation(self):
         # initialise 3D image of a sphere
         im_moving = -1.0 + torch.zeros(1, 1, *dims, device=device)
@@ -54,6 +62,7 @@ class WarpingTestMethods(unittest.TestCase):
         save_im_to_disk(im_moving[0, 0].cpu().numpy(), './temp/test_output/moving.nii.gz')
         save_im_to_disk(im_moving_warped[0, 0].cpu().numpy(), './temp/test_output/moving_warped.nii.gz')
 
+    @torch.no_grad()
     def test_sphere_translation_large(self):
         # initialise 3D image of a sphere
         im_moving = -1.0 + torch.zeros((1, 1, *dims), device=device)
@@ -78,6 +87,7 @@ class WarpingTestMethods(unittest.TestCase):
         save_im_to_disk(im_moving[0, 0].cpu().numpy(), './temp/test_output/moving.nii.gz')
         save_im_to_disk(im_moving_warped[0, 0].cpu().numpy(), './temp/test_output/moving_warped_large.nii.gz')
 
+    @torch.no_grad()
     def test_brain_rotation(self):
         # initialise a rotation matrix
         theta = math.pi / 2.0  # 90 degrees

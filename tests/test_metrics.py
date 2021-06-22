@@ -9,12 +9,6 @@ from parse_config import ConfigParser
 from utils import calc_metrics
 from .test_setup import *
 
-test_config_str = '{' \
-                  '"name": "test", "no_GPUs": 0,' \
-                  '"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_02", "dims": [64, 64, 64], ' \
-                  '"trainer": {"save_dir": "./temp", "sigma_v_init": 0.5, "u_v_init": 0.0, "verbosity": 2}' \
-                  '}'
-
 
 class MetricsTestMethods(unittest.TestCase):
     def setUp(self):

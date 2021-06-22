@@ -23,7 +23,7 @@ rank = 0
 N_small, N_large = 4, 64
 
 dim_x_small = dim_y_small = dim_z_small = N_small
-dims_small = (N_small,) * 3
+dims_small = (N_small, ) * 3
 dims_v_small = (1, 3, *dims_small)
 
 dims_2D = (N_large, ) * 2
@@ -35,9 +35,16 @@ dims_v = (1, 3, *dims)
 cps = (4, ) * len(dims)  # for use with B-splines
 control_grid_sz = get_control_grid_size(dims, cps)
 
+dim_x_non_square, dim_y_non_square, dim_z_non_square = 2, 2, 3
+dims_non_square = (dim_z_non_square, dim_y_non_square, dim_x_non_square)
+dims_v_non_square = (1, 3, *dims_non_square)
+
 # transformations
 identity_grid = init_identity_grid_3D(dims).to(device)
-identity_transformation = identity_grid.permute([0, 4, 1, 2, 3])
+identity_transformation = identity_grid.clone()
+
+identity_grid_non_square = init_identity_grid_3D(dims_non_square).to(device)
+identity_transformation_non_square = identity_grid_non_square.clone()
 
 # losses
 loss_SSD = SSD().to(device)
@@ -50,3 +57,10 @@ registration_module = RegistrationModule().to(device)
 # error tolerances
 atol = 1e-4
 rtol = 1e-2
+
+# config
+test_config_str = '{' \
+                  '"name": "test", "no_GPUs": 0,' \
+                  '"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_02", "dims": [64, 64, 64], ' \
+                  '"trainer": {"save_dir": "./temp", "sigma_v_init": 0.5, "u_v_init": 0.0, "verbosity": 2}' \
+                  '}'
