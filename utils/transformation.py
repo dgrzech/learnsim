@@ -40,11 +40,11 @@ class SVF_2D(TransformationModule):
         displacement = transform_coordinates(v) / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
-            transformation = self.identity_grid + displacement.permute([0, 2, 3, 1])
-            displacement = displacement + F.grid_sample(displacement, transformation,
+            transformation = self.identity_grid + displacement
+            displacement = displacement + F.grid_sample(displacement, transformation.permute([0, 2, 3, 1]),
                                                         padding_mode='border', align_corners=True)
 
-        transformation = self.identity_grid.permute([0, 3, 1, 2]) + displacement
+        transformation = self.identity_grid.permute + displacement
         return transformation, transform_coordinates_inv(displacement)
 
 
@@ -68,11 +68,11 @@ class SVF_3D(TransformationModule):
         displacement = transform_coordinates(v) / float(2 ** self.no_steps)
 
         for _ in range(self.no_steps):
-            transformation = self.identity_grid + displacement.permute([0, 2, 3, 4, 1])
-            displacement = displacement + F.grid_sample(displacement, transformation,
+            transformation = self.identity_grid + displacement
+            displacement = displacement + F.grid_sample(displacement, transformation.permute([0, 2, 3, 4, 1]),
                                                         padding_mode='border', align_corners=True)
 
-        transformation = self.identity_grid.permute([0, 4, 1, 2, 3]) + displacement
+        transformation = self.identity_grid + displacement
         return transformation, transform_coordinates_inv(displacement)
 
 
