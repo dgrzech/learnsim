@@ -64,18 +64,9 @@ def calc_det_J(nabla):
     :return: Jacobian determinant
     """
 
-    nabla_x = nabla[..., 0]
-    nabla_y = nabla[..., 1]
-    nabla_z = nabla[..., 2]
-
-    det_J = nabla_x[:, 0] * nabla_y[:, 1] * nabla_z[:, 2] + \
-            nabla_y[:, 0] * nabla_z[:, 1] * nabla_x[:, 2] + \
-            nabla_z[:, 0] * nabla_x[:, 1] * nabla_y[:, 2] - \
-            nabla_x[:, 2] * nabla_y[:, 1] * nabla_z[:, 0] - \
-            nabla_y[:, 2] * nabla_z[:, 1] * nabla_x[:, 0] - \
-            nabla_z[:, 2] * nabla_x[:, 1] * nabla_y[:, 0]
-
-    return det_J
+    _, N, D, H, W, _ = nabla.shape
+    Jac = nabla.permute([0, 2, 3, 4, 1, 5]).reshape([-1, N, N])
+    return torch.det(Jac).reshape(-1, D, H, W)
 
 
 @torch.no_grad()
