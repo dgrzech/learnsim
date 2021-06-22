@@ -59,13 +59,6 @@ class ConfigParser:
         self._grids_dir = dir / 'grids'
         self._norms_dir = dir / 'norms'
 
-        # segmentation IDs
-        self.structures_dict = {'left_thalamus': 10, 'left_caudate': 11, 'left_putamen': 12,
-                                'left_pallidum': 13, 'brain_stem': 16, 'left_hippocampus': 17,
-                                'left_amygdala': 18, 'left_accumbens': 26, 'right_thalamus': 49,
-                                'right_caudate': 50, 'right_putamen': 51, 'right_pallidum': 52,
-                                'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
-
         # make directories for saving checkpoints and logs
         if self.rank == 0:
             exist_ok = run_id == ''
@@ -130,7 +123,10 @@ class ConfigParser:
         if self.test:
             self['data_loader']['args']['shuffle'] = False
 
-        return self.init_obj('data_loader', module_data)
+        data_loader = self.init_obj('data_loader', module_data)
+        self.structures_dict = data_loader.structures_dict
+
+        return data_loader
 
     def init_model(self):
         try:

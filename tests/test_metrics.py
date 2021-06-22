@@ -27,13 +27,13 @@ class MetricsTestMethods(unittest.TestCase):
         timestamp = datetime.now().strftime(r'%m%d_%H%M%S')
 
         cfg = ConfigParser(test_config_json, rank, timestamp=timestamp)
-        structures_dict = cfg.structures_dict
 
         im_paths = cfg['data_dir']
         save_paths = cfg.save_dirs
         sigma_v_init, u_v_init = cfg['trainer']['sigma_v_init'], cfg['trainer']['u_v_init']
 
         dataset = BiobankDataset(dims, im_paths, save_paths, sigma_v_init, u_v_init, rescale_im=False, rank=0)
+        structures_dict = dataset.structures_dict
         spacing = dataset.im_spacing
 
         fixed = dataset.fixed
