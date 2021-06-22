@@ -137,7 +137,7 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
     else:
         overlap_measures_filter = sitk.LabelOverlapMeasuresImageFilter()
 
-    seg_fixed_arr = seg_fixed[0].squeeze().cpu().numpy()
+    seg_fixed = seg_fixed.cpu().numpy()
     seg_moving = seg_moving.cpu().numpy()
     spacing = spacing.numpy().tolist()
 
@@ -153,6 +153,7 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
         return overlap_measures_filter.GetDiceCoefficient()
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+        seg_fixed_arr = seg_fixed[loop_idx].squeeze()
         seg_moving_arr = seg_moving[loop_idx].squeeze()
 
         for structure_idx, structure_name in enumerate(structures_dict):
