@@ -24,7 +24,7 @@ class BaseTrainer:
         self.world_size = dist.get_world_size()
 
         self.data_loader = data_loader
-        self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.config.structures_dict
+        self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.data_loader.structures_dict
         self.save_dirs = self.data_loader.save_dirs
 
         # all-to-one registration
@@ -141,7 +141,7 @@ class BaseTrainer:
         dist.barrier()
 
     def _disable_gradients_model(self):
-        assert not self.test_only  # only to be used in training 
+        assert not self.test_only  # to be used only in training
         
         self.model = self.model.module
         self.model.disable_grads()
@@ -169,7 +169,7 @@ class BaseTrainer:
 
     def _save_checkpoint(self, epoch):
         if self.rank == 0:
-            filename = str(self.config.save_dir / f'checkpoint_{epoch}.pth')
+            filename = str(self.config.save_dir / f'checkpoint_{epoch}.pt')
             self.logger.info(f'\nsaving checkpoint: {filename}..')
 
             state = {'epoch': epoch, 'step': self.step, 'config': self.config,
