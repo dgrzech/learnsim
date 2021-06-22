@@ -15,15 +15,6 @@
 			}
 		}
 	},
-	"q_f": {
-		"type": "LowRankMultivariateNormalDistribution",
-		"args": {
-			"sigma_init": 0.1,
-			"u_init": 0.1,
-			"loc_learnable": false,
-			"cov_learnable": true
-		}
-	},
 	"data_loss": {
 		"type": "LCC"
 	},
@@ -46,10 +37,10 @@
 	"registration_module": {
 		"type": "RegistrationModule"
 	},
-	"optimizer_q_f": {
-		"type": "Adam",
+	"optimizer_LD": {
+		"type": "SGD",
 		"args": {
-			"lr": 0.001
+			"lr": 0.01
 		}
 	},
 	"optimizer_q_phi": {
@@ -88,8 +79,10 @@
 		},
 		"no_epochs": 1,
 		"no_iters_q_v": 1344,
+		"no_samples_SGLD": 100,
 		"no_samples_test": 5,
 		"log_period": 512,
+		"log_period_model_samples": 100,
 		"save_dir": "saved/"
 	}
 }

@@ -36,9 +36,8 @@
 		}
 	},
 	"data_loader": {
-		"type": "LearnSimDataLoader",
+		"type": "Learn2RegDataLoader",
 		"args": {
-			"im_pairs": "/vol/bitbucket/dig15/datasets/mine/biobank/val_biobank_1500.csv",
 			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
@@ -59,8 +58,10 @@
 		},
 		"no_epochs": 1,
 		"no_iters_q_v": 1024,
+		"no_samples_SGLD": 100,
 		"no_samples_test": 5,
 		"log_period": 512,
+		"log_period_model_samples": 100,
 		"save_dir": "saved/"
 	}
 }
