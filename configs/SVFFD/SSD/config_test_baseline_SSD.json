@@ -46,7 +46,8 @@
 			"num_workers": 5,
 			"rescale_im": true,
 			"shuffle": false,
-			"test": true
+			"test": true,
+			"test_split": 0.2
 		}
 	},
 	"Sobolev_grad": {

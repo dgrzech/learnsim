@@ -56,7 +56,11 @@ class BaseTrainer:
         self.no_batches = len(self.data_loader)
 
         self.log_period = int(cfg_trainer['log_period'])
-        self.var_params_backup_period = int(cfg_trainer['var_params_backup_period'])
+
+        try:
+            self.log_period_var_params = int(cfg_trainer['log_period_var_params'])
+        except:
+            self.log_period_var_params = None
 
         if self.test_only:
             self.no_samples_test = cfg_trainer['no_samples_test']
@@ -99,8 +103,9 @@ class BaseTrainer:
         for epoch in range(self.start_epoch, self.no_epochs + 1):
             self._train_epoch(epoch)
 
-            if self.rank == 0 and epoch % self.var_params_backup_period == 0:
-                self.config.copy_var_params_to_backup_dirs(epoch)
+            if self.log_period_var_params is not None:
+                if self.rank == 0 and epoch % self.log_period_var_params == 0:
+                    self.config.copy_var_params_to_backup_dirs(epoch)
 
             dist.barrier()
 

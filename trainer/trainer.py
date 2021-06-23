@@ -155,19 +155,19 @@ class Trainer(BaseTrainer):
         term2 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample1)
         term3 = self.__calc_sample_loss(moving, v_sample, var_params_q_v, im_fixed_sample=im_fixed_sample2)
 
-        loss_q_f_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
-        loss_q_f_q_phi /= n
+        loss_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
+        loss_q_phi /= n
 
         self.optimizer_q_phi.zero_grad(set_to_none=True)
         loss_q_phi.backward()  # backprop
         self.optimizer_q_phi.step()
 
-        dist.reduce(loss_q_f_q_phi, 0, op=dist.ReduceOp.SUM)
+        dist.reduce(loss_q_phi, 0, op=dist.ReduceOp.SUM)
 
         # tensorboard
         if self.rank == 0:
             self.writer.set_step(self.step)
-            self.metrics.update('loss/q_f_q_phi', loss_q_f_q_phi.item(), n=total_no_samples)
+            self.metrics.update('loss/q_phi', loss_q_phi.item(), n=total_no_samples)
 
             with torch.no_grad():
                 log_model_weights(self.writer, self.model)

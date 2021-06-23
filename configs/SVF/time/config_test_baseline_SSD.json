@@ -39,14 +39,15 @@
 		"type": "LearnSimDataLoader",
 		"args": {
 			"batch_size": 1,
-			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_30",
+			"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_1350",
 			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
 			"num_workers": 1,
 			"rescale_im": true,
 			"shuffle": false,
-			"test": true
+			"test": true,
+			"test_split": 0.2
 		}
 	},
 	"Sobolev_grad": {
@@ -62,7 +63,6 @@
 		"no_epochs": 1,
 		"no_iters_q_v": 1024,
 		"log_period": 512,
-		"var_params_backup_period": 10,
 		"no_samples_test": 50,
 		"time_only": true,
 		"tensorboard": true,

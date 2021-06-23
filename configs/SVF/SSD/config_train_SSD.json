@@ -74,7 +74,8 @@
 			"num_workers": 5,
 			"rescale_im": true,
 			"shuffle": true,
-			"test": false
+			"test": false,
+			"test_split": 0.2
 		}
 	},
 	"Sobolev_grad": {
@@ -90,7 +91,6 @@
 		"no_epochs": 50,
 		"no_iters_q_v": 1024,
 		"log_period": 512,
-		"var_params_backup_period": 10,
 		"no_samples_test": 50,
 		"tensorboard": true,
 		"save_dir": "saved/",
