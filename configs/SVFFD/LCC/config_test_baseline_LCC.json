@@ -39,11 +39,11 @@
 	"data_loader": {
 		"type": "Learn2RegDataLoader",
 		"args": {
-			"dims": [128, 128, 128],
+			"dims": [224, 192, 160],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
-			"batch_size": 5,
-			"no_workers": 5,
+			"batch_size": 2,
+			"no_workers": 2,
 			"test": true
 		}
 	},
