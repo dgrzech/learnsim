@@ -174,6 +174,8 @@ class Trainer(BaseTrainer):
                 log_q_f(self.writer, self.q_f)
 
     def _train_epoch(self, epoch=0):
+        self.data_loader.sampler.set_epoch(epoch)
+
         if self.rank == 0:
             self.metrics.reset()
 
