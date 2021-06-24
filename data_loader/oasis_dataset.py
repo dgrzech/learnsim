@@ -11,7 +11,7 @@ from utils import get_control_grid_size, rescale_im
 
 
 class OasisDataset(BaseImageRegistrationDataset):
-    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, cps=None, rescale_im=False, rank=0):
+    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, cps=None, rescale_im=False, rank=0, test=False):
         self.im_paths, self.save_paths = im_paths, save_paths
         self.im_spacing = None
         self.rescale_im = rescale_im
@@ -38,6 +38,32 @@ class OasisDataset(BaseImageRegistrationDataset):
         # tuples
         im_seg_tuples = zip(im_filenames, seg_filenames)
         self.im_seg_tuples_pairs = list(itertools.combinations(im_seg_tuples, 2))
+
+        # validation pairs
+        self.im_seg_tuples_pairs_val = list()
+
+        val_pairs = [('438', '439'), ('439', '440'), ('440', '441'), ('441', '442'), ('442', '443'),
+                     ('443', '444'), ('444', '445'), ('445', '446'), ('446', '447'), ('447', '448'),
+                     ('448', '449'), ('449', '450'), ('450', '451'), ('451', '452'), ('452', '453'),
+                     ('453', '454'), ('454', '455'), ('455', '456'), ('456', '457')]
+
+        def is_val_pair(im_pair, val_pairs):
+            for val_pair in val_pairs:
+                idx0, idx1 = val_pair[0], val_pair[1]
+
+                if (idx0 in im_pair[0] and idx1 in im_pair[1]) or (idx0 in im_pair[1] and idx1 in im_pair[0]):
+                    return True
+
+            return False
+
+        for im_pair in self.im_seg_tuples_pairs:
+            if is_val_pair(im_pair, val_pairs) and not test:
+                self.im_seg_tuples_pairs.remove(im_pair)
+            elif is_val_pair(im_pair, val_pairs) and test:
+                self.im_seg_tuples_pairs_val.append(im_pair)
+
+        if test:
+            self.im_seg_tuples_pairs = self.im_seg_tuples_pairs_val.copy()
 
         # spacing
         im_path = self.im_seg_tuples_pairs[0][0][0]
