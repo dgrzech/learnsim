@@ -1,41 +1,50 @@
 import torch
+from torch.utils.data import Subset
 
 from base import BaseDataLoader
-from .datasets import BiobankDataset
+from .biobank_dataset import BiobankDataset
+
+
+def get_train_test_split(dataset, test_split):
+    generator = torch.Generator().manual_seed(42)
+    train_len, test_len = (1 - test_split) * len(dataset), test_split * len(dataset)
+    train_data, test_data = torch.utils.data.random_split(dataset, [int(train_len), int(test_len)], generator=generator)
+
+    return train_data, test_data
 
 
 class LearnSimDataLoader(BaseDataLoader):
-    def __init__(self, batch_size, dims, num_workers, data_dir, save_dirs, sigma_v_init, u_v_init, cps=None,
-                 rescale_im=False, shuffle=True, no_GPUs=1, rank=0, test=False, test_split=None):
-        self.data_dir, self.save_dirs = data_dir, save_dirs
-
-        dataset = BiobankDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, cps, rescale_im, rank)
-
-        self.dims = dataset.dims
-        self.fixed = dataset.fixed
-        self.im_spacing = dataset.im_spacing
-        self.structures_dict = dataset.structures_dict
+    def __init__(self, data_dir, save_dirs, dims, sigma_v_init, u_v_init, cps=None,
+                 batch_size=1, no_GPUs=1, no_workers=0, rank=0, test=False, test_split=None):
+        dataset = BiobankDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, cps)
 
         if test_split is not None:
-            generator = torch.Generator().manual_seed(42)
-            train_len, test_len = (1 - test_split) * len(dataset), test_split * len(dataset)
-            train_data, test_data = torch.utils.data.random_split(dataset, [int(train_len), int(test_len)], generator=generator)
-            dataset = train_data if not test else test_data
+            train_data, test_data = get_train_test_split(dataset, test_split)
 
-        super().__init__(batch_size, dataset, no_GPUs, num_workers, shuffle, rank)
+            if test:
+                dataset = test_data
+                shuffle = False
+            else:
+                dataset = train_data
+                shuffle = True
 
-    def dims(self):
-        return self.dims
-
-    def fixed(self):
-        return self.fixed
+        super().__init__(dataset, batch_size, shuffle, no_GPUs, no_workers, rank)
 
     @property
-    def no_samples(self):
-        return len(self.dataset)
+    def fixed(self):
+        return self.dataset.dataset.fixed
 
-    def im_spacing(self):
-        return self.im_spacing
 
-    def structures_dict(self):
-        return self.structures_dict
+class Learn2RegDataLoader(BaseDataLoader):
+    def __init__(self, data_dir, save_dirs, dims, sigma_v_init, u_v_init, cps=None,
+                 batch_size=1, no_GPUs=1, no_workers=0, rank=0, test=False):
+        dataset = OasisDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, cps)
+
+        if test:
+            dataset = Subset(dataset, dataset.val_pairs_idxs)
+            shuffle = False
+        else:
+            dataset = Subset(dataset, dataset.train_pairs_idxs)
+            shuffle = True
+
+        super().__init__(dataset, batch_size, shuffle, no_GPUs, no_workers, rank)

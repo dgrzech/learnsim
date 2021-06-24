@@ -120,8 +120,6 @@ class ConfigParser:
         except:
             self['data_loader']['args']['cps'] = None
 
-        if self.test:
-            self['data_loader']['args']['shuffle'] = False
 
         data_loader = self.init_obj('data_loader', module_data)
         self.structures_dict = data_loader.structures_dict

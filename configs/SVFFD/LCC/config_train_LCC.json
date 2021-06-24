@@ -72,9 +72,7 @@
 			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
-			"num_workers": 5,
-			"rescale_im": true,
-			"shuffle": true,
+			"no_workers": 5,
 			"test": false,
 			"test_split": 0.2
 		}
