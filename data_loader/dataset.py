@@ -45,9 +45,13 @@ class ImageRegistrationDataset(Dataset):
         im_arr = sitk.GetArrayFromImage(im)
         im_spacing = im.GetSpacing()
 
-        if self.pad:
-            if self.im_spacing is None:
+        if self.im_spacing is None:
+            if self.pad:
                 self.im_spacing = torch.tensor(max(im_arr.shape) / np.asarray(self.dims), dtype=torch.float32)
+            else:
+                self.im_spacing = torch.tensor(im_spacing, dtype=torch.float32)
+
+        if self.pad:
             if self.padding is None:
                 padding = (max(im_arr.shape) - np.asarray(im_arr.shape)) // 2
                 self.padding = ((padding[0],) * 2, (padding[1],) * 2, (padding[2],) * 2)

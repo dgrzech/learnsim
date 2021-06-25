@@ -48,4 +48,4 @@ class BiobankDataset(BaseImageRegistrationDataset):
         moving = self._get_moving(idx)
         var_params_q_v = self._get_var_params(idx)
 
-        return idx, moving, var_params_q_v
+        return idx, None, moving, var_params_q_v

@@ -1,9 +1,11 @@
+import copy
+
 import torch
 import torch.distributed as dist
 from tqdm import tqdm, trange
 
 from base import BaseTrainer
-from logger import log_fields, log_images, log_model_samples, log_model_weights, save_sample
+from logger import log_fields, log_images, log_model_samples, log_model_weights, save_sample, save_tensors
 from utils import SGLD, SobolevGrad, Sobolev_kernel_1D, \
     add_noise_uniform_field, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
@@ -56,6 +58,9 @@ class Trainer(BaseTrainer):
         return data_term, reg_term, entropy_term, transformation, displacement, im_moving_warped
 
     def __generate_samples_from_model(self, im_pair_idxs, fixed, im_moving_warped):
+        model = copy.deepcopy(self.model.module)
+        model.disable_grads()
+
         n = len(im_pair_idxs)
         total_no_samples = n * self.world_size
 
@@ -69,7 +74,7 @@ class Trainer(BaseTrainer):
             self.curr_state = SGLD.apply(self.curr_state, torch.ones_like(self.curr_state), self.tau)
             mean += self.curr_state.detach() / self.no_samples_SGLD
 
-            z_curr_state = self.model(self.curr_state, im_moving_warped, fixed['mask'])
+            z_curr_state = model(self.curr_state, im_moving_warped, fixed['mask'])
             loss = self.data_loss(z_curr_state)
 
             self.optimizer_LD.zero_grad(set_to_none=True)
@@ -219,6 +224,10 @@ class Trainer(BaseTrainer):
             self._step_q_v(epoch, batch_idx, im_pair_idxs, fixed, moving, var_params_q_v)
             self._disable_gradients_variational_parameters(var_params_q_v)
 
+            if self.atlas_mode and self.rank == 0:
+                self.logger.info('saving tensors with the variational parameters of q_v..')
+                save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
+
             """
             q_phi
             """
@@ -227,6 +236,9 @@ class Trainer(BaseTrainer):
                 self._enable_gradients_model()
                 self._step_q_phi(im_pair_idxs, fixed, moving, var_params_q_v)
                 self._disable_gradients_model()
+
+            if batch_idx + 1 >= self.no_batches:
+                break
 
         if not self.test_only:
             self._save_checkpoint(epoch)
@@ -281,8 +293,14 @@ class Trainer(BaseTrainer):
 
     @torch.no_grad()
     def __fixed_and_moving_init(self, fixed, moving, var_params_q_v):
-        for key in fixed:
-            fixed[key] = fixed[key].to(self.rank, memory_format=torch.channels_last_3d)
+        if self.atlas_mode:
+            for key in self.fixed:
+                fixed = dict()
+                fixed[key] = self.fixed[key].expand_as(moving[key])
+        else:
+            for key in fixed:
+                fixed[key] = fixed[key].to(self.rank, memory_format=torch.channels_last_3d)
+
         for key in moving:
             moving[key] = moving[key].to(self.rank, memory_format=torch.channels_last_3d)
 
@@ -338,5 +356,5 @@ class Trainer(BaseTrainer):
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
     
     def __init_optimizer_LD(self):
-        self.optimizer_LD = self.config.init_obj('optimizer_LD', torch.optim, self.curr_state)
+        self.optimizer_LD = self.config.init_obj('optimizer_LD', torch.optim, [self.curr_state])
 

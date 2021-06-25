@@ -24,6 +24,13 @@ class BaseTrainer:
 
         self.data_loader = data_loader
         self.atlas_mode = data_loader.atlas_mode
+
+        if self.atlas_mode:
+            self.fixed = data_loader.fixed
+
+            for key in self.fixed:
+                self.fixed[key] = self.fixed[key].to(self.rank, memory_format=torch.channels_last_3d)
+
         self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.data_loader.structures_dict
         self.grid_im = init_grid_im(data_loader.dims).to(self.rank)
         self.save_dirs = self.data_loader.save_dirs
@@ -47,8 +54,18 @@ class BaseTrainer:
 
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
         self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
-        self.no_batches = len(self.data_loader)
         self.no_samples_SGLD, self.tau = cfg_trainer['no_samples_SGLD'], config['optimizer_LD']['args']['lr']
+
+        if not self.atlas_mode:
+            self.no_im_pairs_per_epoch = int(cfg_trainer['no_im_pairs_per_epoch'])
+
+        if self.atlas_mode:
+            self.no_batches = len(self.data_loader)
+        else:
+            cfg_data_loader = config['data_loader']['args']
+            batch_size = cfg_data_loader['batch_size']
+
+            self.no_batches = self.no_im_pairs_per_epoch // (self.world_size * batch_size)
 
         self.log_period = int(cfg_trainer['log_period'])  # NOTE (DG): unused
         self.log_period_model_samples = int(cfg_trainer['log_period_model_samples'])

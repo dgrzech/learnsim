@@ -1,5 +1,5 @@
 {
-	"name": "LCC",
+	"name": "learn2reg",
 	"no_GPUs": 2,
 	"model": {
 		"type": "CNN_LCC",
@@ -78,6 +78,7 @@
 		},
 		"no_epochs": 50,
 		"no_iters_q_v": 1024,
+		"no_im_pairs_per_epoch": 1000,
 		"no_samples_SGLD": 100,
 		"no_samples_test": 5,
 		"log_period": 512,

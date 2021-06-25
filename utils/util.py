@@ -476,3 +476,4 @@ class MetricTracker:
 
             self.update('ASD/avg', avg_value_ASD)
             self.update('DSC/avg', avg_value_DSC)
+

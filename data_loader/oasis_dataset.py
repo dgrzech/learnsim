@@ -1,4 +1,5 @@
 import itertools
+import random
 from os import path
 
 import torch
@@ -23,21 +24,24 @@ class OasisDataset(BaseImageRegistrationDataset):
 
         self.sigma_v_init, self.u_v_init = sigma_v_init, u_v_init
 
-        # image filenames
+        # NOTE (DG): these IDs are missing
+        missing_IDs = [8, 24, 36, 48, 89, 93,
+                       100, 118, 128, 149, 154, 171, 172, 175, 187, 194, 196,
+                       215, 219, 225, 242, 245, 248, 251, 252, 253, 257, 276, 297,
+                       306, 320, 324, 334, 347, 360, 364, 369, 391, 393,
+                       412, 414, 427, 436]
+        existing_IDs = [str(idx) for idx in range(1, 458) if idx not in missing_IDs]
+
         im_mask_seg_triples = list()
-        missing_IDs = [118, 154, 369, 414]  # NOTE (DG): these IDs are missing
         self.train_pairs_idxs, self.val_pairs_idxs = list(), list()
 
-        for IDs_idx, IDs in enumerate(itertools.combinations(list(range(1, 458)), 2)):
-            if IDs[0] in missing_IDs or IDs[1] in missing_IDs:
-                continue
-
-            fixed_idx, moving_idx = IDs[0], IDs[1]
-
+        for IDs_idx, IDs in enumerate(itertools.combinations(existing_IDs, 2)):
             if IDs in self.val_pairs or reversed(IDs) in self.val_pairs:
-                self.val_pairs_idxs.append(IDs_idx)  # FIXME
+                self.val_pairs_idxs.append(IDs_idx)
             else:
                 self.train_pairs_idxs.append(IDs_idx)
+
+            fixed_idx, moving_idx = IDs[0], IDs[1]
 
             fixed_im_path, fixed_seg_path = self._get_im_filename_from_subject_ID(im_paths, fixed_idx), \
                                             self._get_seg_filename_from_subject_ID(im_paths, fixed_idx)
@@ -67,13 +71,18 @@ class OasisDataset(BaseImageRegistrationDataset):
         super().__init__(dims, im_paths, save_paths, im_mask_seg_triples, structures_dict, sigma_v_init, u_v_init,
                          pad=False, rescale=True, resize=False, cps=cps)
 
+        # load a random image to set the spacing
+        idx = random.randint(0, len(self))
+        random_path = self.im_mask_seg_triples[idx]['fixed']['im']
+        _ = self._get_image(random_path)
+
     @staticmethod
     def _get_im_filename_from_subject_ID(im_paths, subject_idx):
         return path.join(path.join(im_paths, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1'), 'aligned_norm.nii.gz')
 
     @staticmethod
     def _get_seg_filename_from_subject_ID(im_paths, subject_idx):
-        return path.join(path.join(im_paths, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1'), 'seg35.nii.gz')
+        return path.join(path.join(im_paths, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1'), 'aligned_seg35.nii.gz')
 
     @property
     def val_pairs(self):

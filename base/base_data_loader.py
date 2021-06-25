@@ -35,3 +35,4 @@ class BaseDataLoader(DataLoader):
     @property
     def structures_dict(self):
         return self.dataset.structures_dict
+
