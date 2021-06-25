@@ -184,9 +184,7 @@ class Trainer(BaseTrainer):
                 self.logger.info(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
 
             im_pair_idxs = im_pair_idxs.tolist()
-
-            self.__batch_init(moving)
-            self.__moving_init(moving, var_params_q_v)
+            self.__fixed_and_moving_init(moving, var_params_q_v)
 
             """
             q_v
@@ -225,14 +223,12 @@ class Trainer(BaseTrainer):
             save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'], self.fixed['mask'])
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
-            im_pair_idxs = im_pair_idxs.tolist()
-            im_pair_idxs_local = im_pair_idxs
-
             if self.rank == 0:
                 self.logger.info(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
 
-            self.__batch_init(moving)
-            self.__moving_init(moving, var_params_q_v)
+            im_pair_idxs = im_pair_idxs.tolist()
+            im_pair_idxs_local = im_pair_idxs
+            self.__fixed_and_moving_init(moving, var_params_q_v)
             save_moving_images(im_pair_idxs_local, self.save_dirs, self.im_spacing, moving['im'], moving['mask'])
 
             for sample_no in range(1, no_samples+1):
@@ -273,13 +269,9 @@ class Trainer(BaseTrainer):
                         self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list, test=True)
 
     @torch.no_grad()
-    def __batch_init(self, moving):
-        self.fixed['im'] = self.fixed['im'].expand_as(moving['im'])
-        self.fixed['seg'] = self.fixed['seg'].expand_as(moving['seg'])
-        self.fixed['mask'] = self.fixed['mask'].expand_as(moving['mask'])
-
-    @torch.no_grad()
-    def __moving_init(self, moving, var_params_q_v):
+    def __fixed_and_moving_init(self, moving, var_params_q_v):
+        for key in self.fixed:
+            self.fixed[key] = self.fixed[key].expand_as(moving[key])
         for key in moving:
             moving[key] = moving[key].to(self.rank)
         for param_key in var_params_q_v:
@@ -292,9 +284,7 @@ class Trainer(BaseTrainer):
 
         for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(self.data_loader):
             im_pair_idxs_local = im_pair_idxs.tolist()
-
-            self.__batch_init(moving)
-            self.__moving_init(moving, var_params_q_v)
+            self.__fixed_and_moving_init(moving, var_params_q_v)
 
             ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], moving['seg'], self.structures_dict, self.im_spacing)
 
