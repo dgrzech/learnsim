@@ -16,7 +16,6 @@ class BaseTrainer:
     def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only):
         self.config = config
         self.logger = config.logger
-        self.atlas_mode = False  # TODO
         self.test_only = test_only
 
         self.rank = dist.get_rank()
@@ -24,6 +23,7 @@ class BaseTrainer:
         self.tqdm_disable = not self.rank == 0
 
         self.data_loader = data_loader
+        self.atlas_mode = data_loader.atlas_mode
         self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.data_loader.structures_dict
         self.grid_im = init_grid_im(data_loader.dims).to(self.rank)
         self.save_dirs = self.data_loader.save_dirs
