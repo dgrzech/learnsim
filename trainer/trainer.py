@@ -157,9 +157,11 @@ class Trainer(BaseTrainer):
 
         loss_q_phi = term1.sum() - term2.sum() / 2.0 - term3.sum() / 2.0
         loss_q_phi /= n
-
+        
+        self.optimizer_q_f.zero_grad(set_to_none=True)
         self.optimizer_q_phi.zero_grad(set_to_none=True)
         loss_q_phi.backward()  # backprop
+        self.optimizer_q_f.step()
         self.optimizer_q_phi.step()
 
         dist.reduce(loss_q_phi, 0, op=dist.ReduceOp.SUM)
