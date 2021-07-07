@@ -84,10 +84,10 @@ def model_samples_grid(samples_slices):
     cols = ['sagittal', 'coronal', 'axial']
     rows = ['model_sample']
 
-    for ax, col in zip(axs[0], cols):
+    for ax, col in zip(axs, cols):
         ax.set_title(col)
 
-    for ax, row in zip(axs[:, 0], rows):
+    for ax, row in zip(axs, rows):
         ax.set_xticks([], minor=False)
         ax.set_xticks([], minor=True)
 
@@ -97,7 +97,7 @@ def model_samples_grid(samples_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(samples_slices[i], cmap='gray')
+        axs[i].imshow(samples_slices[i], cmap='gray')
 
     return fig
 

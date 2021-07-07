@@ -61,8 +61,8 @@
 			"dims": [224, 192, 160],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
-			"batch_size": 2,
-			"no_workers": 2,
+			"batch_size": 1,
+			"no_workers": 1,
 			"test": false
 		}
 	},
@@ -78,8 +78,8 @@
 		},
 		"no_epochs": 50,
 		"no_iters_q_v": 1024,
-		"no_im_pairs_per_epoch": 1000,
-		"no_samples_SGLD": 100,
+		"no_im_pairs_per_epoch": 120,
+		"no_samples_SGLD": 200,
 		"no_samples_test": 5,
 		"log_period": 512,
 		"log_period_model_samples": 100,

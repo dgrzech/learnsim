@@ -1,5 +1,3 @@
-import copy
-
 import torch
 import torch.distributed as dist
 from tqdm import tqdm, trange
@@ -57,24 +55,26 @@ class Trainer(BaseTrainer):
 
         return data_term, reg_term, entropy_term, transformation, displacement, im_moving_warped
 
-    def __generate_samples_from_model(self, im_pair_idxs, fixed, im_moving_warped):
-        model = copy.deepcopy(self.model.module)
-        model.disable_grads()
-
+    def __generate_samples_from_model(self, im_pair_idxs, fixed, moving, var_params_q_v):
         n = len(im_pair_idxs)
         total_no_samples = n * self.world_size
+        
+        with torch.no_grad():
+            v_sample = SobolevGrad.apply(sample_q_v(var_params_q_v, no_samples=1), self.S, self.padding)
+            transformation, displacement = self.transformation_module(v_sample)
+            transformation = add_noise_uniform_field(transformation, self.alpha) if self.add_noise_uniform else transformation
+            im_moving_warped = self.registration_module(moving['im'], transformation)
 
         self.curr_state = fixed['im'].detach().clone()
         self.curr_state.requires_grad_(True)
         self.__init_optimizer_LD()
-
         mean = torch.zeros_like(self.curr_state)
 
-        for iter_no in range(1, self.no_samples_SGLD):
+        for iter_no in range(1, self.no_samples_SGLD + 1):
             self.curr_state = SGLD.apply(self.curr_state, torch.ones_like(self.curr_state), self.tau)
             mean += self.curr_state.detach() / self.no_samples_SGLD
 
-            z_curr_state = model(self.curr_state, im_moving_warped, fixed['mask'])
+            z_curr_state = self.model(self.curr_state, im_moving_warped, fixed['mask'])
             loss = self.data_loss(z_curr_state)
 
             self.optimizer_LD.zero_grad(set_to_none=True)
@@ -91,7 +91,7 @@ class Trainer(BaseTrainer):
                     if iter_no % self.log_period_model_samples == 0:
                         log_model_samples(self.writer, im_pair_idxs, self.curr_state.detach())
 
-        return mean
+        return v_sample.detach(), mean.detach()
 
     def _step_q_v(self, epoch, im_pair_idxs, fixed, moving, var_params_q_v):
         im_pair_idxs_local = im_pair_idxs
@@ -179,21 +179,18 @@ class Trainer(BaseTrainer):
         n = len(im_pair_idxs)
         total_no_samples = self.world_size
 
-        # draw a sample from q_v
-        v_sample = sample_q_v(var_params_q_v, no_samples=1)
-        term1, im_moving_warped1, _, _, _ = self.__calc_data_loss(fixed, moving, v_sample)
-
         # implicit generation from the energy-based model
-        im_fixed_sample = self.__generate_samples_from_model(im_pair_idxs, fixed, im_moving_warped1)
+        v_sample, im_fixed_sample = self.__generate_samples_from_model(im_pair_idxs, fixed, moving, var_params_q_v)
+
+        self._enable_gradients_model()
+        term1, _, _, _, _ = self.__calc_data_loss(fixed, moving, v_sample)
         term2, _, _, _, _ = self.__calc_data_loss({'im': im_fixed_sample, 'mask': fixed['mask']}, moving, v_sample)
 
         loss_q_phi = term1.sum() - term2.sum()
         loss_q_phi /= n
         
-        self.optimizer_q_f.zero_grad(set_to_none=True)
         self.optimizer_q_phi.zero_grad(set_to_none=True)
         loss_q_phi.backward()  # backprop
-        self.optimizer_q_f.step()
         self.optimizer_q_phi.step()
 
         dist.reduce(loss_q_phi, 0, op=dist.ReduceOp.SUM)
@@ -204,6 +201,8 @@ class Trainer(BaseTrainer):
 
         with torch.no_grad():
             log_model_weights(self.writer, self.model)
+
+        self._disable_gradients_model()
 
     def _train_epoch(self, epoch=0):
         self.data_loader.sampler.set_epoch(epoch)
@@ -233,9 +232,7 @@ class Trainer(BaseTrainer):
             """
 
             if not self.test_only:
-                self._enable_gradients_model()
                 self._step_q_phi(im_pair_idxs, fixed, moving, var_params_q_v)
-                self._disable_gradients_model()
 
             if batch_idx + 1 >= self.no_batches:
                 break
