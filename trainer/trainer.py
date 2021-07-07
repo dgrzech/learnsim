@@ -70,9 +70,11 @@ class Trainer(BaseTrainer):
         self.__init_optimizer_LD()
         mean = torch.zeros_like(self.curr_state)
 
-        for iter_no in range(1, self.no_samples_SGLD + 1):
+        for sample_no in range(1, self.no_samples_SGLD + 1):
             self.curr_state = SGLD.apply(self.curr_state, torch.ones_like(self.curr_state), self.tau)
-            mean += self.curr_state.detach() / self.no_samples_SGLD
+
+            if sample_no > self.no_samples_SGLD_burn_in:
+                mean += self.curr_state.detach() / (self.no_samples_SGLD - self.no_samples_SGLD_burn_in)
 
             z_curr_state = self.model(self.curr_state, im_moving_warped, fixed['mask'])
             loss = self.data_loss(z_curr_state)
@@ -85,10 +87,10 @@ class Trainer(BaseTrainer):
 
             if self.rank == 0:
                 with torch.no_grad():
-                    self.writer.set_step(self.step + iter_no)
+                    self.writer.set_step(self.step + sample_no)
                     self.metrics.update('loss/neg_sample_energy', loss.item(), n=total_no_samples)
 
-                    if iter_no % self.log_period_model_samples == 0:
+                    if sample_no > self.no_samples_SGLD_burn_in and sample_no % self.log_period_model_samples == 0:
                         log_model_samples(self.writer, im_pair_idxs, self.curr_state.detach())
 
         return v_sample.detach(), mean.detach()

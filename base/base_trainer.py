@@ -54,7 +54,8 @@ class BaseTrainer:
 
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
         self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
-        self.no_samples_SGLD, self.tau = cfg_trainer['no_samples_SGLD'], config['optimizer_LD']['args']['lr']
+        self.no_samples_SGLD, self.no_samples_SGLD_burn_in = cfg_trainer['no_samples_SGLD'], cfg_trainer['no_samples_SGLD_burn_in']
+        self.tau = config['optimizer_LD']['args']['lr']
 
         if not self.atlas_mode:
             self.no_im_pairs_per_epoch = int(cfg_trainer['no_im_pairs_per_epoch'])
