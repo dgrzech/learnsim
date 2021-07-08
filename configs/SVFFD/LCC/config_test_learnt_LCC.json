@@ -40,7 +40,7 @@
 	"optimizer_LD": {
 		"type": "SGD",
 		"args": {
-			"lr": 0.01
+			"lr": 0.0001
 		}
 	},
 	"optimizer_q_phi": {
@@ -58,7 +58,7 @@
 	"data_loader": {
 		"type": "Learn2RegDataLoader",
 		"args": {
-			"dims": [224, 192, 160],
+			"dims": [192, 224, 160],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
 			"batch_size": 2,
