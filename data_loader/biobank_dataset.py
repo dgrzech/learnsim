@@ -22,9 +22,13 @@ class BiobankDataset(BaseImageRegistrationDataset):
 
         # pre-load the fixed image, the segmentation, and the mask
         self.fixed = self._get_fixed(0)
-
+        
         for k, v in self.fixed.items():
             v.unsqueeze_(0)
+
+    @property
+    def atlas_mode(self):
+        return True
 
     def __preprocess(self, im_or_mask_or_seg):
         im_or_mask_or_seg = torch.flipud(im_or_mask_or_seg.reshape(-1)).reshape(im_or_mask_or_seg.shape)
@@ -45,7 +49,8 @@ class BiobankDataset(BaseImageRegistrationDataset):
         return mask_or_seg.squeeze(0)
 
     def __getitem__(self, idx):
+        fixed = {'im': 0.0, 'mask': 0.0, 'seg': 0.0}  # NOTE (DG): dummy data
         moving = self._get_moving(idx)
         var_params_q_v = self._get_var_params(idx)
 
-        return idx, None, moving, var_params_q_v
+        return idx, fixed, moving, var_params_q_v

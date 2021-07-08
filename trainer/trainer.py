@@ -294,7 +294,6 @@ class Trainer(BaseTrainer):
     def __fixed_and_moving_init(self, fixed, moving, var_params_q_v):
         if self.atlas_mode:
             for key in self.fixed:
-                fixed = dict()
                 fixed[key] = self.fixed[key].expand_as(moving[key])
         else:
             for key in fixed:

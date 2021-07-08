@@ -34,7 +34,7 @@ class MetricsTestMethods(unittest.TestCase):
         spacing = dataset.im_spacing
 
         fixed = dataset.fixed
-        _, moving, var_params_q_v = dataset[0]
+        _, _, moving, var_params_q_v = dataset[0]
         im_pair_idxs = [0]
 
         for key in fixed:

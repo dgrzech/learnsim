@@ -9,21 +9,7 @@ from utils import get_control_grid_size, rescale_im
 
 
 class OasisDataset(BaseImageRegistrationDataset):
-    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, cps=None, rescale_im=False, rank=0, test=False):
-        self.im_paths, self.save_paths = im_paths, save_paths
-        self.im_spacing = None
-        self.rescale_im = rescale_im
-
-        self.dims, self.dims_im, = dims, (1, *dims)
-
-        if cps is None:
-            self.dims_v = (3, *dims)
-        else:
-            control_grid_sz = get_control_grid_size(dims, cps)
-            self.dims_v = (3, *control_grid_sz)
-
-        self.sigma_v_init, self.u_v_init = sigma_v_init, u_v_init
-
+    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, cps=None):
         # NOTE (DG): these IDs are missing
         missing_IDs = [8, 24, 36, 48, 89, 93,
                        100, 118, 128, 149, 154, 171, 172, 175, 187, 194, 196,
@@ -68,13 +54,11 @@ class OasisDataset(BaseImageRegistrationDataset):
                            'right_accumbens': 32, 'right_ventral_dorsal_cord': 33, 'right_vessel': 34,
                            'right_choroid_plexus': 35}
 
-        super().__init__(dims, im_paths, save_paths, im_mask_seg_triples, structures_dict, sigma_v_init, u_v_init,
-                         pad=False, rescale=True, resize=False, cps=cps)
+        super().__init__(dims, im_paths, save_paths, im_mask_seg_triples, structures_dict, sigma_v_init, u_v_init, cps=cps)
 
-        # load a random image to set the spacing
-        idx = random.randint(0, len(self))
-        random_path = self.im_mask_seg_triples[idx]['fixed']['im']
-        _ = self._get_image(random_path)
+    @property
+    def atlas_mode(self):
+        return False
 
     @staticmethod
     def _get_im_filename_from_subject_ID(im_paths, subject_idx):
@@ -95,7 +79,7 @@ class OasisDataset(BaseImageRegistrationDataset):
 
         im_fixed, im_fixed_spacing = self._get_image(im_fixed_path)
         mask_fixed = torch.ones_like(im_fixed).bool()
-        seg_fixed = self._get_seg(seg_fixed_path)
+        seg_fixed = self._get_mask_or_seg(seg_fixed_path).short()
 
         # moving image
         im_moving_path = self.im_mask_seg_triples[idx]['moving']['im']
@@ -103,7 +87,7 @@ class OasisDataset(BaseImageRegistrationDataset):
 
         im_moving, im_moving_spacing = self._get_image(im_moving_path)
         mask_moving = torch.ones_like(im_moving).bool()
-        seg_moving = self._get_seg(seg_moving_path)
+        seg_moving = self._get_mask_or_seg(seg_moving_path).short()
 
         if im_fixed_spacing != im_moving_spacing:
             raise ValueError(f'images have different spacings {im_fixed_spacing} and {im_moving_spacing}, exiting..')
