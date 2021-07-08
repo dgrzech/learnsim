@@ -62,6 +62,16 @@ class TensorboardWriter:
             return attr
 
 
+def pad_to_square(im_arr):
+    sz = np.max(im_arr.shape)
+    H, W = im_arr.shape[0], im_arr.shape[1]
+
+    a, b = (sz - H) // 2, (sz - W) // 2
+    aa, bb = sz - a - H, sz - b - W
+
+    return np.pad(im_arr, pad_width=((a, aa), (b, bb)), mode='minimum')
+
+
 """
 model
 """
@@ -97,7 +107,7 @@ def model_samples_grid(samples_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[i].imshow(samples_slices[i], cmap='gray')
+        axs[i].imshow(pad_to_square(samples_slices[i]), cmap='gray')
 
     return fig
 
@@ -142,9 +152,9 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_fixed_slices[i], cmap='gray')
-        axs[1, i].imshow(im_moving_slices[i], cmap='gray')
-        axs[2, i].imshow(im_moving_warped_slices[i], cmap='gray')
+        axs[0, i].imshow(pad_to_square(im_fixed_slices[i]), cmap='gray')
+        axs[1, i].imshow(pad_to_square(im_moving_slices[i]), cmap='gray')
+        axs[2, i].imshow(pad_to_square(im_moving_warped_slices[i]), cmap='gray')
 
     return fig
 
@@ -284,7 +294,7 @@ def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_moving_warped_slices[i], cmap='gray')
+        axs[0, i].imshow(pad_to_square(im_moving_warped_slices[i]), cmap='gray')
         axs[1, i].imshow(v_norm_slices[i], cmap='hot')
         axs[2, i].imshow(displacement_norm_slices[i], cmap='hot')
         axs[3, i].imshow(log_det_J_slices[i])
