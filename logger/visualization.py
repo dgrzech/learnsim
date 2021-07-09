@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import calc_norm, get_module_attr
+from utils import calc_norm, pad_to_square
 
 
 class TensorboardWriter:
@@ -60,16 +60,6 @@ class TensorboardWriter:
             except AttributeError:
                 raise AttributeError("type object '{}' has no attribute '{}'".format(self.selected_module, name))
             return attr
-
-
-def pad_to_square(im_arr):
-    sz = np.max(im_arr.shape)
-    H, W = im_arr.shape[0], im_arr.shape[1]
-
-    a, b = (sz - H) // 2, (sz - W) // 2
-    aa, bb = sz - a - H, sz - b - W
-
-    return np.pad(im_arr, pad_width=((a, aa), (b, bb)), mode='minimum')
 
 
 """

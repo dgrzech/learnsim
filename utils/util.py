@@ -283,6 +283,16 @@ def max_field_update(field_old, field_new):
     return torch.max(diff), torch.argmax(diff)
 
 
+def pad_to_square(im_arr):
+    sz = np.max(im_arr.shape)
+    H, W = im_arr.shape[0], im_arr.shape[1]
+
+    a, b = (sz - H) // 2, (sz - W) // 2
+    aa, bb = sz - a - H, sz - b - W
+
+    return np.pad(im_arr, pad_width=((a, aa), (b, bb)), mode='minimum')
+
+
 def pixel_to_normalised_2D(px_idx_x, px_idx_y, dim_x, dim_y):
     """
     transform the coordinates of a pixel to range (-1, 1)

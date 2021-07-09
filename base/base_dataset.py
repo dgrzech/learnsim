@@ -27,6 +27,10 @@ class BaseImageRegistrationDataset(Dataset):
     def __len__(self):
         return len(self.im_pairs.index)
 
+    @abstractproperty
+    def atlas_mode(self):
+        pass
+
     @property
     def dims_im(self):
         return 1, *self.dims

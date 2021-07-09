@@ -1,11 +1,10 @@
 import itertools
-import random
 from os import path
 
 import torch
 
 from base import BaseImageRegistrationDataset
-from utils import get_control_grid_size, rescale_im
+from utils import rescale_im
 
 
 class OasisDataset(BaseImageRegistrationDataset):
@@ -72,22 +71,34 @@ class OasisDataset(BaseImageRegistrationDataset):
     def val_pairs(self):
         return [(str(idx), str(idx + 1)) for idx in range(438, 457)]
 
+    def __preprocess(self, im_or_mask_or_seg):
+        im_or_mask_or_seg = torch.rot90(im_or_mask_or_seg, dims=(3, 2))
+        return im_or_mask_or_seg
+
+    def _preprocess_im(self, im):
+        im = self.__preprocess(im)
+        return rescale_im(im).squeeze(0)
+
+    def _preprocess_mask_or_seg(self, mask_or_seg):
+        mask_or_seg = self.__preprocess(mask_or_seg)
+        return mask_or_seg.squeeze(0)
+
     def __getitem__(self, idx):
         # fixed image
         im_fixed_path = self.im_mask_seg_triples[idx]['fixed']['im']
         seg_fixed_path = self.im_mask_seg_triples[idx]['fixed']['seg']
 
-        im_fixed, im_fixed_spacing = self._get_image(im_fixed_path)
+        im_fixed, im_fixed_spacing = self._get_im(im_fixed_path)
         mask_fixed = torch.ones_like(im_fixed).bool()
-        seg_fixed = self._get_mask_or_seg(seg_fixed_path).short()
+        seg_fixed, _ = self._get_mask_or_seg(seg_fixed_path)
 
         # moving image
         im_moving_path = self.im_mask_seg_triples[idx]['moving']['im']
         seg_moving_path = self.im_mask_seg_triples[idx]['moving']['seg']
 
-        im_moving, im_moving_spacing = self._get_image(im_moving_path)
+        im_moving, im_moving_spacing = self._get_im(im_moving_path)
         mask_moving = torch.ones_like(im_moving).bool()
-        seg_moving = self._get_mask_or_seg(seg_moving_path).short()
+        seg_moving, _ = self._get_mask_or_seg(seg_moving_path)
 
         if im_fixed_spacing != im_moving_spacing:
             raise ValueError(f'images have different spacings {im_fixed_spacing} and {im_moving_spacing}, exiting..')
@@ -97,8 +108,8 @@ class OasisDataset(BaseImageRegistrationDataset):
         log_var_v = self._get_log_var_v(idx)
         u_v = self._get_u_v(idx)
 
-        fixed = {'im': im_fixed, 'mask': mask_fixed, 'seg': seg_fixed}
-        moving = {'im': im_moving, 'mask': mask_moving, 'seg': seg_moving}
+        fixed = {'im': im_fixed, 'mask': mask_fixed, 'seg': seg_fixed.short()}
+        moving = {'im': im_moving, 'mask': mask_moving, 'seg': seg_moving.short()}
         var_params_q_v = {'mu': mu_v, 'log_var': log_var_v, 'u': u_v}
 
         return idx, fixed, moving, var_params_q_v
