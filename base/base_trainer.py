@@ -77,7 +77,7 @@ class BaseTrainer:
             self.writer.write_hparams(config.config_str)
 
             self.logger.info(self.model)
-            self.metrics = MetricTracker(*[m for m in metrics], writer=self.writer)
+            self.metrics = MetricTracker(*metrics, writer=self.writer)
 
     @abstractmethod
     def _train_epoch(self, epoch):
