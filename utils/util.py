@@ -1,10 +1,10 @@
 import json
-import math
 from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
 
 import SimpleITK as sitk
+import math
 import numpy as np
 import pandas as pd
 import torch
@@ -209,10 +209,6 @@ def get_module_attr(module, name):
 
 def get_samples_path_from_run_ID(save_path, run_ID):
     return save_path + '/' + run_ID + '/samples'
-
-
-def im_flip(array):
-    return np.fliplr(np.flipud(np.transpose(array, (1, 0))))
 
 
 def init_identity_grid_2D(dims):

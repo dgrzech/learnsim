@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import calc_norm, get_module_attr, im_flip
+from utils import calc_norm, get_module_attr
 
 
 class TensorboardWriter:
@@ -81,7 +81,7 @@ q_f
 def var_params_q_f_grid(sigma_f_slices, u_f_slices):
     fig, axs = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
-    cols = ['axial', 'coronal', 'sagittal']
+    cols = ['sagittal', 'coronal', 'axial']
     rows = ['sigma_f', 'u_f']
 
     for ax, col in zip(axs[0], cols):
@@ -97,8 +97,8 @@ def var_params_q_f_grid(sigma_f_slices, u_f_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(sigma_f_slices[i]), cmap='gray')
-        axs[1, i].imshow(im_flip(u_f_slices[i]), cmap='gray')
+        axs[0, i].imshow(sigma_f_slices[i], cmap='gray')
+        axs[1, i].imshow(u_f_slices[i], cmap='gray')
 
     return fig
 
@@ -129,7 +129,7 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
 
     fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
-    cols = ['axial', 'coronal', 'sagittal']
+    cols = ['sagittal', 'coronal', 'axial']
     rows = ['im_fixed', 'im_moving', 'im_moving_warped']
 
     for ax, col in zip(axs[0], cols):
@@ -145,9 +145,9 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(im_fixed_slices[i]), cmap='gray')
-        axs[1, i].imshow(im_flip(im_moving_slices[i]), cmap='gray')
-        axs[2, i].imshow(im_flip(im_moving_warped_slices[i]), cmap='gray')
+        axs[0, i].imshow(im_fixed_slices[i], cmap='gray')
+        axs[1, i].imshow(im_moving_slices[i], cmap='gray')
+        axs[2, i].imshow(im_moving_warped_slices[i], cmap='gray')
 
     return fig
 
@@ -199,8 +199,8 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
 
     fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
 
+    cols = ['sagittal', 'coronal', 'axial']
     rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J']
-    cols = ['axial', 'coronal', 'sagittal']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -215,11 +215,11 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(mu_v_norm_slices[i]), cmap='hot')
-        axs[1, i].imshow(im_flip(displacement_norm_slices[i]), cmap='hot')
-        axs[2, i].imshow(im_flip(sigma_v_norm_slices[i]), cmap='hot')
-        axs[3, i].imshow(im_flip(u_v_norm_slices[i]), cmap='hot')
-        axs[4, i].imshow(im_flip(log_det_J_slices[i]))
+        axs[0, i].imshow(mu_v_norm_slices[i], cmap='hot')
+        axs[1, i].imshow(displacement_norm_slices[i], cmap='hot')
+        axs[2, i].imshow(sigma_v_norm_slices[i], cmap='hot')
+        axs[3, i].imshow(u_v_norm_slices[i], cmap='hot')
+        axs[4, i].imshow(log_det_J_slices[i])
 
     return fig
 
@@ -265,7 +265,7 @@ def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices
 
     fig, axs = plt.subplots(nrows=4, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
-    cols = ['axial', 'coronal', 'sagittal']
+    cols = ['sagittal', 'coronal', 'axial']
     rows = ['im_moving_warped', 'v_curr_state_norm', 'displacement_norm', 'log_det_J']
 
     for ax, col in zip(axs[0], cols):
@@ -281,10 +281,10 @@ def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[0, i].imshow(im_flip(im_moving_warped_slices[i]), cmap='gray')
-        axs[1, i].imshow(im_flip(v_norm_slices[i]), cmap='hot')
-        axs[2, i].imshow(im_flip(displacement_norm_slices[i]), cmap='hot')
-        axs[3, i].imshow(im_flip(log_det_J_slices[i]))
+        axs[0, i].imshow(im_moving_warped_slices[i], cmap='gray')
+        axs[1, i].imshow(v_norm_slices[i], cmap='hot')
+        axs[2, i].imshow(displacement_norm_slices[i], cmap='hot')
+        axs[3, i].imshow(log_det_J_slices[i])
 
     return fig
 
