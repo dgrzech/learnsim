@@ -423,6 +423,7 @@ def transform_coordinates_inv(field):
 class MetricTracker:
     def __init__(self, *keys, writer=None):
         self._data = pd.DataFrame(index=keys, columns=['value'])
+        self._no_im_pairs_per_epoch = 0
         self.rank = dist.get_rank()
         self.reset()
         self.writer = writer
@@ -431,6 +432,8 @@ class MetricTracker:
         if self.rank == 0:
             for col in self._data.columns:
                 self._data[col].values[:] = 0
+
+        self._no_im_pairs_per_epoch = 0
 
     def update(self, key, value, n=1):
         if self.rank == 0:
@@ -462,27 +465,29 @@ class MetricTracker:
                 self.update(f'ASD/im_pair_{im_pair_idx}/avg', ASDs_im_pair.mean())
                 self.update(f'DSC/im_pair_{im_pair_idx}/avg', DSCs_im_pair.mean())
 
+            self._no_im_pairs_per_epoch += 1
+
     def update_avg_metrics(self, structures_dict):
         if self.rank == 0:
             idxs_no_non_diffeomorphic_voxels = [idx for idx in self._data.index if 'no_non_diffeomorphic_voxels' in idx and 'avg' not in idx]
-            avg_value_no_non_diffeomorphic_voxels = self._data.value[idxs_no_non_diffeomorphic_voxels].mean()
+            avg_value_no_non_diffeomorphic_voxels = self._data.value[idxs_no_non_diffeomorphic_voxels].sum() / self._no_im_pairs_per_epoch
             self.update('no_non_diffeomorphic_voxels/avg', avg_value_no_non_diffeomorphic_voxels)
 
             for structure_idx, structure in enumerate(structures_dict):
                 idxs_ASD = [idx for idx in self._data.index if 'ASD' in idx and 'avg' not in idx and structure in idx]
                 idxs_DSC = [idx for idx in self._data.index if 'DSC' in idx and 'avg' not in idx and structure in idx]
-
-                avg_value_ASD_structure = self._data.value[idxs_ASD].mean()
-                avg_value_DSC_structure = self._data.value[idxs_DSC].mean()
-
+                
+                avg_value_ASD_structure = self._data.value[idxs_ASD].sum() / self._no_im_pairs_per_epoch
+                avg_value_DSC_structure = self._data.value[idxs_DSC].sum() / self._no_im_pairs_per_epoch
+                
                 self.update(f'ASD/avg/{structure}', avg_value_ASD_structure)
                 self.update(f'DSC/avg/{structure}', avg_value_DSC_structure)
 
             idxs_ASD = [idx for idx in self._data.index if 'im_pair' in idx and 'ASD' in idx and 'avg' in idx]
             idxs_DSC = [idx for idx in self._data.index if 'im_pair' in idx and 'DSC' in idx and 'avg' in idx]
-
-            avg_value_ASD = self._data.value[idxs_ASD].mean()
-            avg_value_DSC = self._data.value[idxs_DSC].mean()
+            
+            avg_value_ASD = self._data.value[idxs_ASD].sum() / self._no_im_pairs_per_epoch
+            avg_value_DSC = self._data.value[idxs_DSC].sum() / self._no_im_pairs_per_epoch
 
             self.update('ASD/avg', avg_value_ASD)
             self.update('DSC/avg', avg_value_DSC)

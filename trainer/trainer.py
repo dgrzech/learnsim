@@ -95,7 +95,7 @@ class Trainer(BaseTrainer):
 
         return v_sample.detach(), mean.detach()
 
-    def _step_q_v(self, epoch, im_pair_idxs, fixed, moving, var_params_q_v):
+    def _step_q_v(self, epoch, batch_idx, im_pair_idxs, fixed, moving, var_params_q_v):
         im_pair_idxs_local = im_pair_idxs
 
         n = len(im_pair_idxs_local)
@@ -210,7 +210,7 @@ class Trainer(BaseTrainer):
         self.data_loader.sampler.set_epoch(epoch)
         self.metrics.reset()
 
-        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc=f'epoch {epoch}', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
+        for batch_idx, (im_pair_idxs, fixed, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc=f'epoch {epoch}', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
             self.logger.debug(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
 
             im_pair_idxs = im_pair_idxs.tolist()
@@ -248,7 +248,7 @@ class Trainer(BaseTrainer):
     def _test(self, no_samples):
         self.logger.debug('')
         
-        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='testing', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
+        for batch_idx, (im_pair_idxs, fixed, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='testing', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
                 self.logger.debug(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
 
                 im_pair_idxs = im_pair_idxs.tolist()
@@ -309,7 +309,7 @@ class Trainer(BaseTrainer):
     def __metrics_init(self):
         self.writer.set_step(self.step)
 
-        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='pre-registration metrics', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
+        for batch_idx, (im_pair_idxs, fixed, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='pre-registration metrics', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
             im_pair_idxs_local = im_pair_idxs.tolist()
             self.__fixed_and_moving_init(fixed, moving, var_params_q_v)
 
