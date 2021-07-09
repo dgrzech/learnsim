@@ -24,7 +24,7 @@
 	"transformation_module": {
 		"type": "SVFFD_3D",
 		"args": {
-			"cps": [2, 2, 2]
+			"cps": [3, 3, 3]
 		}
 	},
 	"registration_module": {

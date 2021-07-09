@@ -37,23 +37,39 @@ class OasisDataset(BaseImageRegistrationDataset):
                                         'moving': {'im': moving_im_path, 'mask': '', 'seg': moving_seg_path}})
 
         # segmentation labels
-        structures_dict = {'left_cerebral_white_matter': 1, 'left_cerebral_cortex': 2,
-                           'left_lateral_ventricle': 3, 'left_inf_lateral_ventricle': 4,
-                           'left_cerebellum_white_matter': 5, 'left_cerebellum_cortex': 6,
-                           'left_thalamus': 7, 'left_caudate': 8, 'left_putamen': 9,
-                           'left_pallidum': 10, '3rd_ventricle': 11, '4th_ventricle': 12,
-                           'brain_stem': 13, 'left_hippocampus': 14, 'left_amygdala': 15,
-                           'left_accumbens': 16, 'left_ventral_dorsal_cord': 17, 'left_vessel': 18,
-                           'left_choroid_plexus': 19,
-                           'right_cerebral_white_matter': 20, 'right_cerebral_cortex': 21,
-                           'right_lateral_ventricle': 22, 'right_inf_lateral_ventricle': 23,
-                           'right_cerebellum_white_matter': 24, 'right_cerebellum_cortex': 25,
-                           'right_thalamus': 26, 'right_caudate': 27, 'right_putamen': 28,
-                           'right_pallidum': 29, 'right_hippocampus': 30, 'right_amygdala': 31,
-                           'right_accumbens': 32, 'right_ventral_dorsal_cord': 33, 'right_vessel': 34,
-                           'right_choroid_plexus': 35}
+        structures_4_dict = {'cortex': 1, 'subcortical_grey_matter': 2, 'white_matter': 3, 'CSF': 4}
 
-        super().__init__(dims, im_paths, save_paths, im_mask_seg_triples, structures_dict, sigma_v_init, u_v_init, cps=cps)
+        structures_24_dict = {'left_cerebral_white_matter': 1, 'left_cerebral_cortex': 2,
+                              'left_lateral_ventricle': 3, 'left_inf_lateral_ventricle': 4,
+                              'left_thalamus': 5, 'left_caudate': 6, 'left_putamen': 7,
+                              'left_pallidum': 8,
+                              '3rd_ventricle': 9, 'brain_stem': 10,
+                              'left_hippocampus': 11, 'left_ventral_dorsal_cord': 12,
+                              'left choroid_plexus': 13,
+                              'right_cerebral_white_matter': 14, 'right_cerebral_cortex': 15,
+                              'right_lateral_ventricle': 16, 'right_inf_lateral_ventricle': 17,
+                              'right_thalamus': 18, 'right_caudate': 19, 'right_putamen': 20,
+                              'right_pallidum': 21,
+                              'right_hippocampus': 22, 'right_ventrcal_dorsal_cord': 23,
+                              'right_choroid_plexus': 24}
+
+        structures_35_dict = {'left_cerebral_white_matter': 1, 'left_cerebral_cortex': 2,
+                              'left_lateral_ventricle': 3, 'left_inf_lateral_ventricle': 4,
+                              'left_cerebellum_white_matter': 5, 'left_cerebellum_cortex': 6,
+                              'left_thalamus': 7, 'left_caudate': 8, 'left_putamen': 9,
+                              'left_pallidum': 10, '3rd_ventricle': 11, '4th_ventricle': 12,
+                              'brain_stem': 13, 'left_hippocampus': 14, 'left_amygdala': 15,
+                              'left_accumbens': 16, 'left_ventral_dorsal_cord': 17, 'left_vessel': 18,
+                              'left_choroid_plexus': 19,
+                              'right_cerebral_white_matter': 20, 'right_cerebral_cortex': 21,
+                              'right_lateral_ventricle': 22, 'right_inf_lateral_ventricle': 23,
+                              'right_cerebellum_white_matter': 24, 'right_cerebellum_cortex': 25,
+                              'right_thalamus': 26, 'right_caudate': 27, 'right_putamen': 28,
+                              'right_pallidum': 29, 'right_hippocampus': 30, 'right_amygdala': 31,
+                              'right_accumbens': 32, 'right_ventral_dorsal_cord': 33, 'right_vessel': 34,
+                              'right_choroid_plexus': 35}
+
+        super().__init__(dims, im_paths, save_paths, im_mask_seg_triples, structures_35_dict, sigma_v_init, u_v_init, cps=cps)
 
     @property
     def atlas_mode(self):
