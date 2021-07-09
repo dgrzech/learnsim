@@ -9,7 +9,7 @@ class BaseDataLoader(DataLoader):
 
     def __init__(self, dataset, batch_size, shuffle, no_GPUs, no_workers, rank):
         init_kwargs = {'batch_size': batch_size, 'dataset': dataset, 'num_workers': no_workers, 'pin_memory': True}
-        sampler = DistributedSampler(dataset, num_replicas=no_GPUs, rank=rank, shuffle=shuffle) if no_GPUs > 1 else None
+        sampler = DistributedSampler(dataset, num_replicas=no_GPUs, rank=rank, shuffle=shuffle)
 
         super().__init__(sampler=sampler, **init_kwargs)
 
