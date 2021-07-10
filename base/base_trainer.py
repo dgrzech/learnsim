@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from datetime import datetime
 
 import torch
 import torch.distributed as dist
@@ -22,6 +21,7 @@ class BaseTrainer:
 
         self.rank = dist.get_rank()
         self.world_size = dist.get_world_size()
+        self.tqdm_disable = not self.rank == 0
 
         self.data_loader = data_loader
         self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.data_loader.structures_dict
@@ -56,11 +56,7 @@ class BaseTrainer:
         self.no_batches = len(self.data_loader)
 
         self.log_period = int(cfg_trainer['log_period'])
-
-        try:
-            self.log_period_var_params = int(cfg_trainer['log_period_var_params'])
-        except:
-            self.log_period_var_params = None
+        self.log_period_var_params = int(cfg_trainer['log_period_var_params']) if 'log_period_var_params' in cfg_trainer else None
 
         if self.test_only:
             self.no_samples_test = cfg_trainer['no_samples_test']
@@ -71,13 +67,13 @@ class BaseTrainer:
             self._resume_checkpoint(config.resume)
 
         # metrics and prints
-        if self.rank == 0:
-            self.writer = TensorboardWriter(config.log_dir, cfg_trainer['tensorboard'])
-            self.writer.write_graph(self.model)
-            self.writer.write_hparams(config.config_str)
+        self.writer = TensorboardWriter(config.log_dir)
+        self.metrics = MetricTracker(*metrics, writer=self.writer)
 
-            self.logger.info(self.model)
-            self.metrics = MetricTracker(*metrics, writer=self.writer)
+        self.writer.write_graph(self.model)
+        self.writer.write_hparams(config.config_str)
+
+        self.logger.info(self.model)
 
     @abstractmethod
     def _train_epoch(self, epoch):
@@ -103,8 +99,8 @@ class BaseTrainer:
         for epoch in range(self.start_epoch, self.no_epochs + 1):
             self._train_epoch(epoch)
 
-            if self.log_period_var_params is not None:
-                if self.rank == 0 and epoch % self.log_period_var_params == 0:
+            if self.log_period_var_params is not None and epoch % self.log_period_var_params == 0:
+                if self.rank == 0:
                     self.config.copy_var_params_to_backup_dirs(epoch)
 
             dist.barrier()
@@ -114,15 +110,11 @@ class BaseTrainer:
         full testing logic
         """
 
-        if self.time_only:
-            start = datetime.now()
+        self.start_epoch = 1
+        self.no_epochs = 1
+        self.train()
 
-        self._train_epoch(epoch=1)
-
         if self.time_only:
-            stop = datetime.now()
-            registration_time = (stop - start).total_seconds()
-            self.logger.info(f'\nregistration time: {registration_time:.2f}')
             exit()
 
         self._test(no_samples=self.no_samples_test)

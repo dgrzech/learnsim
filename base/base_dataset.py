@@ -26,12 +26,12 @@ class BaseImageRegistrationDataset(Dataset):
 
     @property
     def dims_im(self):
-        return (1, *dims)
+        return 1, *dims
 
     @property
     def dims_v(self):
         parameter_dims = self.dims if self.cps is None else get_control_grid_size(self.dims, self.cps)
-        return (3, *parameter_dims)
+        return 3, *parameter_dims
 
     @abstractmethod
     def __preprocess(self, im_or_mask_or_seg):
@@ -45,7 +45,8 @@ class BaseImageRegistrationDataset(Dataset):
     def _preprocess_mask_or_seg(self, mask_or_seg):
         pass
 
-    def _load_im_or_mask_or_seg_file(self, path):
+    @staticmethod
+    def _load_im_or_mask_or_seg_file(path):
         im_or_mask_or_seg = sitk.ReadImage(path)
         spacing = im_or_mask_or_seg.GetSpacing()
         im_or_mask_or_seg = sitk.GetArrayFromImage(im_or_mask_or_seg)

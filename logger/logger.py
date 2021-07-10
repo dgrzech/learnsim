@@ -1,32 +1,44 @@
 import logging
 import logging.config
 from os import path
-from pathlib import Path
 
 import nibabel as nib
 import numpy as np
 import torch
+import torch.distributed as dist
 from tvtk.api import tvtk, write_data
 
 from utils import read_json
 
 
-def setup_logging(save_dir, log_config='logger/logger_config.json', default_level=logging.INFO):
-    # setup logging configuration
-    log_config = Path(log_config)
+class Logger(logging.Logger):
+    def __init__(self, name, level=logging.DEBUG):
+        super(Logger, self).__init__(name, level)
 
-    if log_config.is_file():
-        config = read_json(log_config)
+    def debug(self, msg, *args, **kwargs):
+        if dist.get_rank() == 0:
+            return super(Logger, self).debug(msg, *args, **kwargs)
 
-        # modify logging paths based on run config
-        for _, handler in config['handlers'].items():
-            if 'filename' in handler:
-                handler['filename'] = str(save_dir / handler['filename'])
+    def info(self, msg, *args, **kwargs):
+        if dist.get_rank() == 0:
+            return super(Logger, self).info(msg, *args, **kwargs)
 
-        logging.config.dictConfig(config)
-    else:
-        print("warning: logging configuration file is not found in {}.".format(log_config))
-        logging.basicConfig(level=default_level)
+    def warning(self, msg, *args, **kwargs):
+        if dist.get_rank() == 0:
+            return super(Logger, self).warning(msg, *args, **kwargs)
+
+
+def setup_logging(log_dir):
+    log_config_path = 'logger/logger_config.json'
+    config = read_json(log_config_path)
+
+    # modify logging paths based on run config
+    for _, handler in config['handlers'].items():
+        if 'filename' in handler:
+            filename = handler['filename']
+            handler['filename'] = f'{log_dir}/{filename}'
+
+    logging.config.dictConfig(config)
 
 
 def save_field_to_disk(field, file_path, spacing=(1, 1, 1)):
@@ -142,13 +154,14 @@ def save_fixed_image(save_dirs, spacing, im_fixed, mask_fixed):
     save the input fixed image to .nii.gz
     """
 
-    im_fixed = im_fixed[0, 0].cpu().numpy()
-    im_path = path.join(save_dirs['images'], 'im_fixed.nii.gz')
-    save_im_to_disk(im_fixed, im_path, spacing)
+    if dist.get_rank() == 0:
+        im_fixed = im_fixed[0, 0].cpu().numpy()
+        im_path = path.join(save_dirs['images'], 'im_fixed.nii.gz')
+        save_im_to_disk(im_fixed, im_path, spacing)
 
-    mask_fixed = mask_fixed[0, 0].float().cpu().numpy()
-    mask_path = path.join(save_dirs['images'], 'mask_fixed.nii.gz')
-    save_im_to_disk(mask_fixed, mask_path, spacing)
+        mask_fixed = mask_fixed[0, 0].float().cpu().numpy()
+        mask_path = path.join(save_dirs['images'], 'mask_fixed.nii.gz')
+        save_im_to_disk(mask_fixed, mask_path, spacing)
 
 
 def save_im(im_pair_idx, save_dirs, spacing, im, name, sample=False):

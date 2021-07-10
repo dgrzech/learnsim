@@ -88,10 +88,8 @@
 		},
 		"no_epochs": 50,
 		"no_iters_q_v": 1024,
-		"log_period": 512,
 		"no_samples_test": 50,
-		"tensorboard": true,
-		"save_dir": "saved/",
-		"verbosity": 2
+		"log_period": 512,
+		"save_dir": "saved/"
 	}
 }

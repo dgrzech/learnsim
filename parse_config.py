@@ -14,26 +14,16 @@ import model.loss as model_loss
 import model.model as model
 import utils.registration as registration
 import utils.transformation as transformation
-from logger import setup_logging
+from logger import Logger, setup_logging
 from utils import read_json, write_json
 
 
 class ConfigParser:
     def __init__(self, config, local_rank, modification=None, resume=None, test=False, timestamp=None):
-        self._config = _update_config(config, modification)
+        self._config, self.config_str = _update_config(config, modification), ''
         self.rank = local_rank
         self.resume = resume
         self.test = test
-
-        # logger
-        self.log_levels = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG}
-
-        verbosity = self['trainer']['verbosity']
-        msg_verbosity = f'verbosity option {verbosity} is invalid. Valid options are {self.log_levels.keys()}.'
-        assert verbosity in self.log_levels, msg_verbosity
-
-        self._logger = logging.getLogger('default')
-        self._logger.setLevel(self.log_levels[verbosity])
 
         # set save_dir where the trained model and log will be saved
         run_id = timestamp
@@ -44,8 +34,8 @@ class ConfigParser:
             else:
                 run_id = f'test_learnt_{run_id}'
 
-        save_dir = Path(self.config['trainer']['save_dir'])
         exper_name = self.config['name']
+        save_dir = Path(self.config['trainer']['save_dir'])
         dir = save_dir / exper_name / run_id
 
         self._dir = dir
@@ -73,14 +63,19 @@ class ConfigParser:
             self.grids_dir.mkdir(parents=True, exist_ok=exist_ok)
             self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
 
+        # logger
+        logging.setLoggerClass(Logger)
+        self._logger = logging.getLogger('default')
+        self._logger.setLevel(logging.DEBUG)
+
+        if self.rank == 0:
+            setup_logging(self.log_dir)
+
             # copy values of variational parameters
             if self.resume is not None and not self.test:
                 self.logger.info('copying previous values of variational parameters..')
                 copytree(self.resume.parent.parent / 'tensors', self.tensors_dir, dirs_exist_ok=True)
                 self.logger.info('done!')
-
-            # configure logging
-            setup_logging(self.log_dir)
 
             # save updated config file to the checkpoint dir
             self.config_str = json.dumps(self.config, indent=4, sort_keys=False).replace('\n', '')
@@ -111,15 +106,12 @@ class ConfigParser:
         return cls(config, local_rank, modification=modification, resume=resume, test=test, timestamp=timestamp)
 
     def init_data_loader(self):
+        cfg_transformation_module = self['transformation_module']['args']
+
         self['data_loader']['args']['save_dirs'] = self.save_dirs
         self['data_loader']['args']['no_GPUs'] = self['no_GPUs']
         self['data_loader']['args']['rank'] = self.rank
-
-        try:
-            self['data_loader']['args']['cps'] = self['transformation_module']['args']['cps']
-        except:
-            self['data_loader']['args']['cps'] = None
-
+        self['data_loader']['args']['cps'] = cfg_transformation_module['cps'] if 'cps' in cfg_transformation_module else None
 
         data_loader = self.init_obj('data_loader', module_data)
         self.structures_dict = data_loader.structures_dict
@@ -127,11 +119,8 @@ class ConfigParser:
         return data_loader
 
     def init_model(self):
-        try:
-            args = self['model']['args']
-            self['model']['args']['activation'] = getattr(nn, args['activation']['type'])(**dict(args['activation']['args']))
-        except:
-            self['model']['args']['activation'] = nn.Identity()
+        cfg_model = self['model']['args']
+        self['model']['args']['activation'] = getattr(nn, cfg_model['activation']['type'])(**dict(cfg_model['activation']['args'])) if 'activation' in cfg_model else nn.Identity
 
         return self.init_obj('model', model)
 

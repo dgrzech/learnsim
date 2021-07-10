@@ -17,16 +17,11 @@ class LearnSimDataLoader(BaseDataLoader):
     def __init__(self, data_dir, save_dirs, dims, sigma_v_init, u_v_init, cps=None,
                  batch_size=1, no_GPUs=1, no_workers=0, rank=0, test=False, test_split=None):
         dataset = BiobankDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, cps)
+        shuffle = not test
 
         if test_split is not None:
             train_data, test_data = get_train_test_split(dataset, test_split)
-
-            if test:
-                dataset = test_data
-                shuffle = False
-            else:
-                dataset = train_data
-                shuffle = True
+            dataset = test_data if test else train_data
 
         super().__init__(dataset, batch_size, shuffle, no_GPUs, no_workers, rank)
 

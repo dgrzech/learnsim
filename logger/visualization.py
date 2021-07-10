@@ -11,16 +11,15 @@ from utils import calc_norm, get_module_attr
 
 
 class TensorboardWriter:
-    def __init__(self, log_dir, enabled):
-        self.selected_module = ''
+    def __init__(self, log_dir):
+        log_dir = str(log_dir)
+        self.rank = dist.get_rank()
+        self.step = 0
         self.timer = datetime.now()
-        self.writer = None
 
-        if enabled:
-            log_dir = str(log_dir)
+        if self.rank == 0:
             self.writer = SummaryWriter(log_dir)
 
-        self.step = 0
         self.tag_mode_exceptions = {'add_histogram', 'add_embedding'}
         self.tb_writer_ftns = {
             'add_scalar', 'add_scalars', 'add_image', 'add_images', 'add_audio', 'add_figure',
@@ -31,17 +30,17 @@ class TensorboardWriter:
         self.step = step
 
     def write_graph(self, model):
-        rank = dist.get_rank()
+        if self.rank == 0:
+            im_fixed = im_moving = torch.randn([1, 1, 128, 128, 128], device=self.rank)
+            mask = torch.ones([1, 1, 128, 128, 128], device=self.rank).bool()
+            inputs = (im_fixed, im_moving, mask)
 
-        im_fixed = im_moving = torch.randn([1, 1, 128, 128, 128], device=rank)
-        mask = torch.ones([1, 1, 128, 128, 128], device=rank).bool()
-        inputs = (im_fixed, im_moving, mask)
-
-        self.writer.add_graph(model, input_to_model=inputs)
+            self.writer.add_graph(model, input_to_model=inputs)
 
     def write_hparams(self, config):  # NOTE (DG): should use add_hparams but it's not working with DDP..
-        text = json.dumps(config, indent=4, sort_keys=False)
-        self.writer.add_text('hparams', text)
+        if self.rank == 0:
+            text = json.dumps(config, indent=4, sort_keys=False)
+            self.writer.add_text('hparams', text)
 
     def __getattr__(self, name):
         """
@@ -69,8 +68,9 @@ model
 
 
 def log_model_weights(writer,  model):
-    for name, p in model.named_parameters():
-        writer.add_histogram(name, p, bins=np.arange(-1.5, 1.5, 0.1))
+    if dist.get_rank() == 0:
+        for name, p in model.named_parameters():
+            writer.add_histogram(name, p, bins=np.arange(-1.5, 1.5, 0.1))
 
 
 """
@@ -104,17 +104,18 @@ def var_params_q_f_grid(sigma_f_slices, u_f_slices):
 
 
 def log_q_f(writer,  q_f):
-    log_var_f, u_f = get_module_attr(q_f, 'log_var'), get_module_attr(q_f, 'u').data.cpu().numpy()
-    sigma_f = torch.exp(0.5 * log_var_f).data.cpu().numpy()
-    mid_idxs = get_im_or_field_mid_slices_idxs(sigma_f)
+    if dist.get_rank() == 0:
+        log_var_f, u_f = get_module_attr(q_f, 'log_var'), get_module_attr(q_f, 'u').data.cpu().numpy()
+        sigma_f = torch.exp(0.5 * log_var_f).data.cpu().numpy()
+        mid_idxs = get_im_or_field_mid_slices_idxs(sigma_f)
 
-    sigma_f = sigma_f[0, 0]
-    sigma_f_slices = get_slices(sigma_f, mid_idxs)
+        sigma_f = sigma_f[0, 0]
+        sigma_f_slices = get_slices(sigma_f, mid_idxs)
 
-    u_f = u_f[0, 0]
-    u_f_slices = get_slices(u_f, mid_idxs)
+        u_f = u_f[0, 0]
+        u_f_slices = get_slices(u_f, mid_idxs)
 
-    writer.add_figure('q_f', var_params_q_f_grid(sigma_f_slices, u_f_slices))
+        writer.add_figure('q_f', var_params_q_f_grid(sigma_f_slices, u_f_slices))
 
 
 """
@@ -168,23 +169,24 @@ def get_slices(field, mid_idxs):
 
 
 def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
-    im_fixed_batch = im_fixed_batch.cpu().numpy()
-    im_moving_batch = im_moving_batch.cpu().numpy()
-    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
+    if dist.get_rank() == 0:
+        im_fixed_batch = im_fixed_batch.cpu().numpy()
+        im_moving_batch = im_moving_batch.cpu().numpy()
+        im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
-    mid_idxs = get_im_or_field_mid_slices_idxs(im_moving_batch)
+        mid_idxs = get_im_or_field_mid_slices_idxs(im_moving_batch)
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        im_fixed = im_fixed_batch[loop_idx, 0]
-        im_moving = im_moving_batch[loop_idx, 0]
-        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+            im_fixed = im_fixed_batch[loop_idx, 0]
+            im_moving = im_moving_batch[loop_idx, 0]
+            im_moving_warped = im_moving_warped_batch[loop_idx, 0]
 
-        im_fixed_slices = get_slices(im_fixed, mid_idxs)
-        im_moving_slices = get_slices(im_moving, mid_idxs)
-        im_moving_warped_slices = get_slices(im_moving_warped, mid_idxs)
+            im_fixed_slices = get_slices(im_fixed, mid_idxs)
+            im_moving_slices = get_slices(im_moving, mid_idxs)
+            im_moving_warped_slices = get_slices(im_moving_warped, mid_idxs)
 
-        writer.add_figure(f'im_pairs/{im_pair_idx}',
-                          im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
+            writer.add_figure(f'im_pairs/{im_pair_idx}',
+                              im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
 
 
 """
@@ -225,32 +227,33 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
 
 
 def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
-    mu_v_norm_batch = calc_norm(var_params_batch['mu']).cpu().numpy()
-    sigma_v_norm_batch = calc_norm(torch.exp(0.5 * var_params_batch['log_var'])).cpu().numpy()
-    u_v_norm_batch = calc_norm(var_params_batch['u']).cpu().numpy()
+    if dist.get_rank() == 0:
+        mu_v_norm_batch = calc_norm(var_params_batch['mu']).cpu().numpy()
+        sigma_v_norm_batch = calc_norm(torch.exp(0.5 * var_params_batch['log_var'])).cpu().numpy()
+        u_v_norm_batch = calc_norm(var_params_batch['u']).cpu().numpy()
 
-    displacement_norm_batch = calc_norm(displacement_batch).cpu().numpy()
-    log_det_J_batch = log_det_J_batch.cpu().numpy()
+        displacement_norm_batch = calc_norm(displacement_batch).cpu().numpy()
+        log_det_J_batch = log_det_J_batch.cpu().numpy()
 
-    mid_idxs = get_im_or_field_mid_slices_idxs(mu_v_norm_batch)
+        mid_idxs = get_im_or_field_mid_slices_idxs(mu_v_norm_batch)
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        mu_v_norm = mu_v_norm_batch[loop_idx, 0]
-        sigma_v_norm = sigma_v_norm_batch[loop_idx, 0]
-        u_v_norm = u_v_norm_batch[loop_idx, 0]
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+            mu_v_norm = mu_v_norm_batch[loop_idx, 0]
+            sigma_v_norm = sigma_v_norm_batch[loop_idx, 0]
+            u_v_norm = u_v_norm_batch[loop_idx, 0]
 
-        displacement_norm = displacement_norm_batch[loop_idx, 0]
-        log_det_J = log_det_J_batch[loop_idx]
+            displacement_norm = displacement_norm_batch[loop_idx, 0]
+            log_det_J = log_det_J_batch[loop_idx]
 
-        mu_v_norm_slices = get_slices(mu_v_norm, mid_idxs)
-        sigma_v_norm_slices = get_slices(sigma_v_norm, mid_idxs)
-        u_v_norm_slices = get_slices(u_v_norm, mid_idxs)
+            mu_v_norm_slices = get_slices(mu_v_norm, mid_idxs)
+            sigma_v_norm_slices = get_slices(sigma_v_norm, mid_idxs)
+            u_v_norm_slices = get_slices(u_v_norm, mid_idxs)
 
-        displacement_norm_slices = get_slices(displacement_norm, mid_idxs)
-        log_det_J_slices = get_slices(log_det_J, mid_idxs)
+            displacement_norm_slices = get_slices(displacement_norm, mid_idxs)
+            log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
-        writer.add_figure(f'q_v/{im_pair_idx}',
-                          fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
+            writer.add_figure(f'q_v/{im_pair_idx}',
+                              fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
 
 
 """
@@ -290,23 +293,24 @@ def sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices
 
 
 def log_sample(writer, im_pair_idxs, im_moving_warped_batch, v_batch, displacement_batch, log_det_J_batch):
-    im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
-    v_norm_batch = calc_norm(v_batch).cpu().numpy()
-    displacement_norm_batch = calc_norm(displacement_batch).cpu().numpy()
-    log_det_J_batch = log_det_J_batch.cpu().numpy()
+    if dist.get_rank() == 0:
+        im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
+        v_norm_batch = calc_norm(v_batch).cpu().numpy()
+        displacement_norm_batch = calc_norm(displacement_batch).cpu().numpy()
+        log_det_J_batch = log_det_J_batch.cpu().numpy()
 
-    mid_idxs = get_im_or_field_mid_slices_idxs(v_batch)
+        mid_idxs = get_im_or_field_mid_slices_idxs(v_batch)
 
-    for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
-        im_moving_warped = im_moving_warped_batch[loop_idx, 0]
-        v_norm = v_norm_batch[loop_idx, 0]
-        displacement_norm = displacement_norm_batch[loop_idx, 0]
-        log_det_J = log_det_J_batch[loop_idx]
+        for loop_idx, im_pair_idx in enumerate(im_pair_idxs.tolist()):
+            im_moving_warped = im_moving_warped_batch[loop_idx, 0]
+            v_norm = v_norm_batch[loop_idx, 0]
+            displacement_norm = displacement_norm_batch[loop_idx, 0]
+            log_det_J = log_det_J_batch[loop_idx]
 
-        im_moving_warped_slices = get_slices(im_moving_warped, mid_idxs)
-        v_norm_slices = get_slices(v_norm, mid_idxs)
-        displacement_norm_slices = get_slices(displacement_norm, mid_idxs)
-        log_det_J_slices = get_slices(log_det_J, mid_idxs)
+            im_moving_warped_slices = get_slices(im_moving_warped, mid_idxs)
+            v_norm_slices = get_slices(v_norm, mid_idxs)
+            displacement_norm_slices = get_slices(displacement_norm, mid_idxs)
+            log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
-        writer.add_figure(f'samples/{im_pair_idx}',
-                          sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices, log_det_J_slices))
+            writer.add_figure(f'samples/{im_pair_idx}',
+                              sample_grid(im_moving_warped_slices, v_norm_slices, displacement_norm_slices, log_det_J_slices))

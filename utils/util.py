@@ -8,6 +8,7 @@ import math
 import numpy as np
 import pandas as pd
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from torch import nn
 
@@ -388,62 +389,66 @@ def transform_coordinates_inv(field):
 class MetricTracker:
     def __init__(self, *keys, writer=None):
         self._data = pd.DataFrame(index=keys, columns=['value'])
+        self.rank = dist.get_rank()
         self.reset()
         self.writer = writer
 
     def reset(self):
-        for col in self._data.columns:
-            self._data[col].values[:] = 0
+        if self.rank == 0:
+            for col in self._data.columns:
+                self._data[col].values[:] = 0
 
     def update(self, key, value, n=1):
-        if self.writer is not None:
-            self.writer.add_scalar(key, value / n)
+        if self.rank == 0:
+            if self.writer is not None:
+                self.writer.add_scalar(key, value / n)
 
-        self._data.value[key] = value
+            self._data.value[key] = value
 
     def update_ASD_and_DSC(self, im_pair_idxs, structures_dict, ASD_list, DSC_list, test=False):
-        ASD = torch.cat(ASD_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
-        DSC = torch.cat(DSC_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
+        if self.rank == 0:
+            ASD = torch.cat(ASD_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
+            DSC = torch.cat(DSC_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
 
-        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            ASDs_im_pair = ASD[loop_idx]
-            DSCs_im_pair = DSC[loop_idx]
+            for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
+                ASDs_im_pair = ASD[loop_idx]
+                DSCs_im_pair = DSC[loop_idx]
 
-            for structure_idx, structure in enumerate(structures_dict):
-                name_ASD = f'ASD/im_pair_{im_pair_idx}/{structure}'
-                name_DSC = f'DSC/im_pair_{im_pair_idx}/{structure}'
+                for structure_idx, structure in enumerate(structures_dict):
+                    name_ASD = f'ASD/im_pair_{im_pair_idx}/{structure}'
+                    name_DSC = f'DSC/im_pair_{im_pair_idx}/{structure}'
 
-                if test:
-                    name_ASD = f'test/{name_ASD}'
-                    name_DSC = f'test/{name_DSC}'
+                    if test:
+                        name_ASD = f'test/{name_ASD}'
+                        name_DSC = f'test/{name_DSC}'
 
-                self.update(name_ASD, ASDs_im_pair[structure_idx])
-                self.update(name_DSC, DSCs_im_pair[structure_idx])
+                    self.update(name_ASD, ASDs_im_pair[structure_idx])
+                    self.update(name_DSC, DSCs_im_pair[structure_idx])
 
-            self.update(f'ASD/im_pair_{im_pair_idx}/avg', ASDs_im_pair.mean())
-            self.update(f'DSC/im_pair_{im_pair_idx}/avg', DSCs_im_pair.mean())
+                self.update(f'ASD/im_pair_{im_pair_idx}/avg', ASDs_im_pair.mean())
+                self.update(f'DSC/im_pair_{im_pair_idx}/avg', DSCs_im_pair.mean())
 
     def update_avg_metrics(self, structures_dict):
-        idxs_no_non_diffeomorphic_voxels = [idx for idx in self._data.index if 'no_non_diffeomorphic_voxels' in idx and 'avg' not in idx]
-        avg_value_no_non_diffeomorphic_voxels = self._data.value[idxs_no_non_diffeomorphic_voxels].mean()
-        self.update('no_non_diffeomorphic_voxels/avg', avg_value_no_non_diffeomorphic_voxels)
+        if self.rank == 0:
+            idxs_no_non_diffeomorphic_voxels = [idx for idx in self._data.index if 'no_non_diffeomorphic_voxels' in idx and 'avg' not in idx]
+            avg_value_no_non_diffeomorphic_voxels = self._data.value[idxs_no_non_diffeomorphic_voxels].mean()
+            self.update('no_non_diffeomorphic_voxels/avg', avg_value_no_non_diffeomorphic_voxels)
 
-        for structure_idx, structure in enumerate(structures_dict):
-            idxs_ASD = [idx for idx in self._data.index if 'ASD' in idx and 'avg' not in idx and structure in idx]
-            idxs_DSC = [idx for idx in self._data.index if 'DSC' in idx and 'avg' not in idx and structure in idx]
-            
-            avg_value_ASD_structure = self._data.value[idxs_ASD].mean()
-            avg_value_DSC_structure = self._data.value[idxs_DSC].mean()
-            
-            self.update(f'ASD/avg/{structure}', avg_value_ASD_structure)
-            self.update(f'DSC/avg/{structure}', avg_value_DSC_structure)
+            for structure_idx, structure in enumerate(structures_dict):
+                idxs_ASD = [idx for idx in self._data.index if 'ASD' in idx and 'avg' not in idx and structure in idx]
+                idxs_DSC = [idx for idx in self._data.index if 'DSC' in idx and 'avg' not in idx and structure in idx]
 
-        idxs_ASD = [idx for idx in self._data.index if 'im_pair' in idx and 'ASD' in idx and 'avg' in idx]
-        idxs_DSC = [idx for idx in self._data.index if 'im_pair' in idx and 'DSC' in idx and 'avg' in idx]
-        
-        avg_value_ASD = self._data.value[idxs_ASD].mean()
-        avg_value_DSC = self._data.value[idxs_DSC].mean()
+                avg_value_ASD_structure = self._data.value[idxs_ASD].mean()
+                avg_value_DSC_structure = self._data.value[idxs_DSC].mean()
 
-        self.update('ASD/avg', avg_value_ASD)
-        self.update('DSC/avg', avg_value_DSC)
+                self.update(f'ASD/avg/{structure}', avg_value_ASD_structure)
+                self.update(f'DSC/avg/{structure}', avg_value_DSC_structure)
 
+            idxs_ASD = [idx for idx in self._data.index if 'im_pair' in idx and 'ASD' in idx and 'avg' in idx]
+            idxs_DSC = [idx for idx in self._data.index if 'im_pair' in idx and 'DSC' in idx and 'avg' in idx]
+
+            avg_value_ASD = self._data.value[idxs_ASD].mean()
+            avg_value_DSC = self._data.value[idxs_DSC].mean()
+
+            self.update('ASD/avg', avg_value_ASD)
+            self.update('DSC/avg', avg_value_DSC)
