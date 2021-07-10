@@ -194,15 +194,15 @@ vector fields
 """
 
 
-def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices):
+def fields_grid(mu_v_norm_slices, displacement_norm_slices, grid_im_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices):
     """
     plot of the norms of output vector fields to log in tensorboard
     """
 
-    fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
+    fig, axs = plt.subplots(nrows=6, ncols=3, sharex=True, sharey=True, figsize=(10, 10))
 
     cols = ['sagittal', 'coronal', 'axial']
-    rows = ['mu_v_norm', 'displacement_norm', 'sigma_v_norm', 'u_v_norm', 'log_det_J']
+    rows = ['mu_v_norm', 'displacement_norm', 'grid', 'sigma_v_norm', 'u_v_norm', 'log_det_J']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -219,20 +219,22 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices,
     for i in range(3):
         axs[0, i].imshow(mu_v_norm_slices[i], cmap='hot')
         axs[1, i].imshow(displacement_norm_slices[i], cmap='hot')
-        axs[2, i].imshow(sigma_v_norm_slices[i], cmap='hot')
-        axs[3, i].imshow(u_v_norm_slices[i], cmap='hot')
-        axs[4, i].imshow(log_det_J_slices[i])
+        axs[2, i].imshow(grid_im_slices[i], cmap='gray')
+        axs[3, i].imshow(sigma_v_norm_slices[i], cmap='hot')
+        axs[4, i].imshow(u_v_norm_slices[i], cmap='hot')
+        axs[5, i].imshow(log_det_J_slices[i])
 
     return fig
 
 
-def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_det_J_batch):
+def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, grid_im_batch, log_det_J_batch):
     if dist.get_rank() == 0:
         mu_v_norm_batch = calc_norm(var_params_batch['mu']).cpu().numpy()
         sigma_v_norm_batch = calc_norm(torch.exp(0.5 * var_params_batch['log_var'])).cpu().numpy()
         u_v_norm_batch = calc_norm(var_params_batch['u']).cpu().numpy()
 
         displacement_norm_batch = calc_norm(displacement_batch).cpu().numpy()
+        grid_im_batch = grid_im_batch.cpu().numpy()
         log_det_J_batch = log_det_J_batch.cpu().numpy()
 
         mid_idxs = get_im_or_field_mid_slices_idxs(mu_v_norm_batch)
@@ -243,6 +245,7 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
             u_v_norm = u_v_norm_batch[loop_idx, 0]
 
             displacement_norm = displacement_norm_batch[loop_idx, 0]
+            grid_im = grid_im_batch[loop_idx, 0]
             log_det_J = log_det_J_batch[loop_idx]
 
             mu_v_norm_slices = get_slices(mu_v_norm, mid_idxs)
@@ -250,10 +253,11 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, log_d
             u_v_norm_slices = get_slices(u_v_norm, mid_idxs)
 
             displacement_norm_slices = get_slices(displacement_norm, mid_idxs)
+            grid_im_slices = get_slices(grid_im, mid_idxs)
             log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
             writer.add_figure(f'q_v/{im_pair_idx}',
-                              fields_grid(mu_v_norm_slices, displacement_norm_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
+                              fields_grid(mu_v_norm_slices, displacement_norm_slices, grid_im_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
 
 
 """

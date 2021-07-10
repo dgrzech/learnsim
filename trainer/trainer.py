@@ -117,7 +117,9 @@ class Trainer(BaseTrainer):
 
         # tensorboard cont.
         with torch.no_grad():
+            grid_im1 = self.registration_module(self.grid_im, transformation1)
             segs_moving_warped = self.registration_module(moving['seg'], transformation1)
+
             ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
 
             ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
@@ -130,7 +132,7 @@ class Trainer(BaseTrainer):
 
             if not self.test_only:
                 var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
-                log_fields(self.writer, im_pair_idxs_local, var_params_q_v_smoothed, displacement1, log_det_J_transformation)
+                log_fields(self.writer, im_pair_idxs_local, var_params_q_v_smoothed, displacement1, grid_im1, log_det_J_transformation)
                 log_images(self.writer, im_pair_idxs_local, self.fixed['im'], moving['im'], im_moving_warped1)
 
     def _step_q_f_q_phi(self, im_pair_idxs, moving, var_params_q_v):

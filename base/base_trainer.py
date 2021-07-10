@@ -6,7 +6,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 import model.distributions as distr
 from logger import TensorboardWriter
-from utils import MetricTracker
+from utils import make_grid_im, MetricTracker
 
 
 class BaseTrainer:
@@ -25,6 +25,7 @@ class BaseTrainer:
 
         self.data_loader = data_loader
         self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.data_loader.structures_dict
+        self.grid_im = make_grid_im(data_loader.dims).to(self.rank)
         self.save_dirs = self.data_loader.save_dirs
 
         # all-to-one registration

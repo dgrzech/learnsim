@@ -241,6 +241,20 @@ def init_identity_grid_3D(dims):
     return torch.stack([grid_z, grid_y, grid_x]).unsqueeze(0).float()
 
 
+def make_grid_im(size, spacing=4):
+    im = torch.zeros([1, 1, *size], dtype=torch.float)
+
+    if len(size) == 2:
+        im[:, :, ::spacing, :] = 1
+        im[:, :, :, ::spacing] = 1
+    elif len(size) == 3:
+        # im[:, :, ::spacing, :, :] = 1
+        im[:, :, :, ::spacing, :] = 1
+        im[:, :, :, :, ::spacing] = 1
+    
+    return im
+
+
 def max_field_update(field_old, field_new):
     """
     calculate the largest voxel-wise update to a vector field in terms of the L2 norm
