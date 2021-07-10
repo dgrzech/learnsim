@@ -236,9 +236,6 @@ class Trainer(BaseTrainer):
             if not self.test_only:
                 self._step_q_phi(im_pair_idxs, fixed, moving, var_params_q_v)
 
-            if batch_idx + 1 >= self.no_batches:
-                break
-
         if not self.test_only:
             self._save_checkpoint(epoch)
             self.writer.set_step(epoch)

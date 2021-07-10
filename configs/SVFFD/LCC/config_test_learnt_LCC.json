@@ -62,6 +62,7 @@
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
 			"batch_size": 2,
+			"no_im_pairs_per_epoch": 100,
 			"no_workers": 2,
 			"test": true
 		}
@@ -78,7 +79,6 @@
 		},
 		"no_epochs": 1,
 		"no_iters_q_v": 1024,
-		"no_im_pairs_per_epoch": 120,
 		"no_samples_SGLD": 200,
 		"no_samples_SGLD_burn_in": 100,
 		"no_samples_test": 5,

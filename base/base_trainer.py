@@ -54,19 +54,9 @@ class BaseTrainer:
 
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
         self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
+        self.no_batches = len(self.data_loader)
         self.no_samples_SGLD, self.no_samples_SGLD_burn_in = cfg_trainer['no_samples_SGLD'], cfg_trainer['no_samples_SGLD_burn_in']
         self.tau = config['optimizer_LD']['args']['lr']
-
-        if not self.atlas_mode:
-            self.no_im_pairs_per_epoch = int(cfg_trainer['no_im_pairs_per_epoch'])
-
-        if self.atlas_mode:
-            self.no_batches = len(self.data_loader)
-        else:
-            cfg_data_loader = config['data_loader']['args']
-            batch_size = cfg_data_loader['batch_size']
-
-            self.no_batches = self.no_im_pairs_per_epoch // (self.world_size * batch_size)
 
         self.log_period = int(cfg_trainer['log_period'])  # NOTE (DG): unused
         self.log_period_model_samples = int(cfg_trainer['log_period_model_samples'])
