@@ -63,7 +63,7 @@ class Trainer(BaseTrainer):
         n = len(im_pair_idxs_local)
         total_no_samples = n * self.world_size
 
-        for _ in trange(1, self.no_iters_q_v + 1, desc=f'batch {batch_idx+1}', colour='#808080', disable=self.tqdm_disable, leave=False):
+        for _ in trange(1, self.no_iters_q_v + 1, desc=f'batch {batch_idx+1}', colour='#808080', disable=self.tqdm_disable, dynamic_ncols=True, leave=False):
             self.step += 1
 
             # get samples from q_v
@@ -117,7 +117,7 @@ class Trainer(BaseTrainer):
 
         # tensorboard cont.
         with torch.no_grad():
-            grid_im1 = self.registration_module(self.grid_im, transformation1)
+            grid_im1 = self.registration_module(self.grid_im.expand_as(moving['im']), transformation1)
             segs_moving_warped = self.registration_module(moving['seg'], transformation1)
 
             ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
@@ -177,7 +177,7 @@ class Trainer(BaseTrainer):
         self.data_loader.sampler.set_epoch(epoch)
         self.metrics.reset()
 
-        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc=f'epoch {epoch}', disable=self.tqdm_disable, unit='batch')):
+        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc=f'epoch {epoch}', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
             self.logger.debug(f'epoch {epoch}, processing batch {batch_idx+1} out of {self.no_batches}..')
 
             im_pair_idxs = im_pair_idxs.tolist()
@@ -214,7 +214,7 @@ class Trainer(BaseTrainer):
         self.logger.debug('')
         save_fixed_image(self.save_dirs, self.im_spacing, self.fixed['im'], self.fixed['mask'])
 
-        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='testing', disable=self.tqdm_disable, unit='batch')):
+        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='testing', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
                 self.logger.debug(f'testing, processing batch {batch_idx+1} out of {self.no_batches}..')
 
                 im_pair_idxs = im_pair_idxs.tolist()
@@ -270,7 +270,7 @@ class Trainer(BaseTrainer):
     def __metrics_init(self):
         self.writer.set_step(self.step)
 
-        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='pre-registration metrics', disable=self.tqdm_disable, unit='batch')):
+        for batch_idx, (im_pair_idxs, moving, var_params_q_v) in enumerate(tqdm(self.data_loader, desc='pre-registration metrics', disable=self.tqdm_disable, dynamic_ncols=True, unit='batch')):
             im_pair_idxs_local = im_pair_idxs.tolist()
             self.__fixed_and_moving_init(moving, var_params_q_v)
 
