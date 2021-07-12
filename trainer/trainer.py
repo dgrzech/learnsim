@@ -225,8 +225,10 @@ class Trainer(BaseTrainer):
             self._step_q_v(epoch, batch_idx, im_pair_idxs, fixed, moving, var_params_q_v)
             self._disable_gradients_variational_parameters(var_params_q_v)
 
-            if self.atlas_mode and self.rank == 0:
-                self.logger.info('saving tensors with the variational parameters of q_v..')
+            if self.atlas_mode: 
+                if self.rank == 0:
+                    self.logger.info('saving tensors with the variational parameters of q_v..')
+
                 save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
 
             """
