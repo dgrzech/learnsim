@@ -45,7 +45,7 @@ class BaseImageRegistrationDataset(Dataset):
     """
 
     @abstractmethod
-    def __preprocess(self, im_or_mask_or_seg):
+    def _preprocess(self, im_or_mask_or_seg):
         pass
 
     @abstractmethod

@@ -87,16 +87,16 @@ class OasisDataset(BaseImageRegistrationDataset):
     def val_pairs(self):
         return [(str(idx), str(idx + 1)) for idx in range(438, 457)]
 
-    def __preprocess(self, im_or_mask_or_seg):
+    def _preprocess(self, im_or_mask_or_seg):
         im_or_mask_or_seg = torch.rot90(im_or_mask_or_seg, dims=(3, 2))
         return im_or_mask_or_seg
 
     def _preprocess_im(self, im):
-        im = self.__preprocess(im)
+        im = self._preprocess(im)
         return rescale_im(im).squeeze(0)
 
     def _preprocess_mask_or_seg(self, mask_or_seg):
-        mask_or_seg = self.__preprocess(mask_or_seg)
+        mask_or_seg = self._preprocess(mask_or_seg)
         return mask_or_seg.squeeze(0)
 
     def __getitem__(self, idx):

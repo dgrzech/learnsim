@@ -37,13 +37,13 @@ class BiobankDataset(BaseImageRegistrationDataset):
         return im_or_mask_or_seg
 
     def _preprocess_im(self, im):
-        im = self.__preprocess(im)
+        im = self._preprocess(im)
         im = F.interpolate(im, size=self.dims, mode='trilinear', align_corners=True)
 
         return rescale_im(im).squeeze(0)
 
     def _preprocess_mask_or_seg(self, mask_or_seg):
-        mask_or_seg = self.__preprocess(mask_or_seg)
+        mask_or_seg = self._preprocess(mask_or_seg)
         mask_or_seg = F.interpolate(mask_or_seg, size=self.dims, mode='nearest')
 
         return mask_or_seg.squeeze(0)
