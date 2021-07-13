@@ -70,7 +70,7 @@ class Trainer(BaseTrainer):
         self.__init_optimizer_LD()
         mean = torch.zeros_like(self.curr_state)
 
-        for sample_no in range(1, self.no_samples_SGLD + 1):
+        for sample_no in trange(1, self.no_samples_SGLD + 1, desc=f'sampling from EBM', colour='#808080', disable=self.tqdm_disable, dynamic_ncols=True, leave=False, unit='sample'):
             self.curr_state = SGLD.apply(self.curr_state, torch.ones_like(self.curr_state), self.tau)
 
             if sample_no > self.no_samples_SGLD_burn_in:
