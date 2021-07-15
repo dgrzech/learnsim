@@ -109,8 +109,14 @@ def calc_DSC_GPU(im_pair_idxs, seg_fixed, seg_moving, structures_dict):
             label = structures_dict[structure]
 
             numerator = 2.0 * ((seg_fixed_im_pair == label) * (seg_moving_im_pair == label)).sum()
-            denominator = (seg_fixed_im_pair == label).sum() + (seg_moving_im_pair == label).sum() + 1e-10
-            DSC[idx, structure_idx] = numerator / denominator
+            denominator = (seg_fixed_im_pair == label).sum() + (seg_moving_im_pair == label).sum()
+
+            try:
+                score = numerator / denominator
+            except:
+                score = 0.0
+
+            DSC[idx, structure_idx] = score
 
     return DSC
 
