@@ -208,20 +208,20 @@ def save_sample(im_pair_idxs, save_dirs, spacing, sample_no, im_moving_warped_ba
 
 
 """
-tensors
+variational parameters
 """
 
-@torch.no_grad()
-def save_tensors(im_pair_idxs, save_dirs, var_params_q_v):
-    mu_v = var_params_q_v['mu']
-    log_var_v = var_params_q_v['log_var']
-    u_v = var_params_q_v['u']
 
-    def save_tensor(im_pair_idx, tensor, tensor_name):
-        tensor_path = path.join(save_dirs['tensors'], f'{tensor_name}_{im_pair_idx}.pt')
-        torch.save(tensor.cpu(), tensor_path)
+@torch.no_grad()
+def save_var_params(im_pair_idxs, save_dirs, var_params_q_v):
+    mu_v = var_params_q_v['mu'].cpu()
+    log_var_v = var_params_q_v['log_var'].cpu()
+    u_v = var_params_q_v['u'].cpu()
+
+    def save_state_dict(im_pair_idx, state_dict, name):
+        state_dict_path = path.join(save_dirs['var_params'], f'{name}_{im_pair_idx}.pt')
+        torch.save(state_dict, state_dict_path)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        save_tensor(im_pair_idx, mu_v[loop_idx], 'mu_v')
-        save_tensor(im_pair_idx, log_var_v[loop_idx], 'log_var_v')
-        save_tensor(im_pair_idx, u_v[loop_idx], 'u_v')
+        im_pair_state_dict = {'mu': mu_v[loop_idx], 'log_var': log_var_v[loop_idx], 'u': u_v[loop_idx]}
+        save_state_dict(im_pair_idx, im_pair_state_dict, 'var_params')

@@ -70,35 +70,21 @@ class BaseImageRegistrationDataset(Dataset):
         return torch.zeros(self.dims_v)
 
     def _init_log_var_v(self):
-        var_v = (self.sigma_v_init ** 2) * torch.ones(self.dims_v)
+        var_v = (self.sigma_v_init ** 2) + torch.zeros(self.dims_v)
         return var_v.log()
 
     def _init_u_v(self):
-        return self.u_v_init * torch.ones(self.dims_v)
+        return self.u_v_init + torch.zeros(self.dims_v)
 
-    def _get_mu_v(self, idx):
-        tensor_path = path.join(self.save_paths['tensors'], f'mu_v_{idx}.pt')
-
-        if path.exists(tensor_path):
-            return torch.load(tensor_path)
-        else:
-            return self._init_mu_v()
-
-    def _get_log_var_v(self, idx):
-        tensor_path = path.join(self.save_paths['tensors'], f'log_var_v_{idx}.pt')
+    def _get_var_params(self, idx):
+        state_dict_path = path.join(self.save_paths['var_params'], f'var_params_{idx}.pt')
 
         if path.exists(tensor_path):
-            return torch.load(tensor_path)
-        else:
-            return self._init_log_var_v()
+            state_dict = torch.load(state_dict_path)
+            mu_v, log_var_v, u_v = state_dict['mu'], state_dict['log_var'], state_dict['u']
+            return mu_v, log_var_v, u_v
 
-    def _get_u_v(self, idx):
-        tensor_path = path.join(self.save_paths['tensors'], f'u_v_{idx}.pt')
-
-        if path.exists(tensor_path):
-            return torch.load(tensor_path)
-        else:
-            return self._init_u_v()
+        return self._init(mu_v), self._init_log_var_v(), self._init_u_v()
 
     def __set_im_spacing(self):
         im_path = random.choice(self.im_mask_seg_triples)['im']
@@ -110,4 +96,3 @@ class BaseImageRegistrationDataset(Dataset):
 
         with open(txt_file_path, 'w') as out:
             json.dump(dict(enumerate(self.im_mask_seg_triples)), out, indent=4, sort_keys=True)
-

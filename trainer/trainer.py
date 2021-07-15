@@ -4,7 +4,7 @@ from tqdm import tqdm, trange
 
 from base import BaseTrainer
 from logger import log_fields, log_images, log_model_weights, log_q_f, save_fixed_image, save_moving_images, \
-    save_sample, save_tensors
+    save_sample, save_var_params
 from utils import SobolevGrad, Sobolev_kernel_1D, \
     add_noise_uniform_field, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
@@ -192,8 +192,8 @@ class Trainer(BaseTrainer):
             self._step_q_v(epoch, batch_idx, im_pair_idxs, moving, var_params_q_v)
             self._disable_gradients_variational_parameters(var_params_q_v)
 
-            self.logger.debug('saving tensors with the variational parameters of q_v..')
-            save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
+            self.logger.debug('saving files with the variational parameters of q_v..')
+            save_var_params(im_pair_idxs, self.save_dirs, var_params_q_v)
 
             """
             q_phi
