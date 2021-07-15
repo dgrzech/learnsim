@@ -57,20 +57,29 @@ def Sobolev_kernel_3D(_s, _lambda):
     v[(_s ** 3) // 2] = 1.0
 
     S = np.linalg.solve(I - _lambda * L, v)
-    S /= np.sum(S)
+    S = S / S.sum()
 
     return S.reshape((_s, _s, _s))  # 3D Sobolev filter
 
 
-def Gaussian_kernel_3D(_s, sigma=1.0):
+def Gaussian_kernel_1D(sigma, truncate=4):
     """
-    approximate the Gaussian kernel
+    Computes a 1D Gaussian convolution kernel
     """
 
-    x, y, z = np.mgrid[-_s // 2 + 1:_s // 2 + 1, -_s // 2 + 1:_s // 2 + 1, -_s // 2 + 1:_s // 2 + 1]
-    g = np.exp(-1.0 * (x ** 2 + y ** 2 + z ** 2) / (2.0 * sigma ** 2))
+    sd = float(sigma)
+    # a positive order wouldcorrespond to convolution with a derivative
+    order = 0
+    # make the radius of the filter equal to truncate standard deviations
+    radius = int(truncate * sd + 0.5)
 
-    return g / g.sum()
+    exponent_range = np.arange(order + 1)
+    sigma2 = sigma * sigma
+    x = np.arange(-radius, radius + 1)
+    phi_x = np.exp(-0.5 / sigma2 * x ** 2)
+    phi_x = phi_x / phi_x.sum()
+
+    return phi_x
 
 
 class SGLD(torch.autograd.Function):

@@ -306,7 +306,7 @@ def rescale_im(im, range_min=0.0, range_max=1.0):
 
 def separable_conv_3D(field, *args):
     """
-    implements separable convolution over a three-dimensional vector field either as three 1D convolutions
+    implements separable convolution over a three-dimensional image or vector field either as three 1D convolutions
     with a 1D kernel, or as three 3D convolutions with three 3D kernels of sizes kx1x1, 1xkx1, and 1x1xk
 
     :param field: input vector field
@@ -315,6 +315,7 @@ def separable_conv_3D(field, *args):
     """
 
     field_out = field.clone()
+    ndim = field_out.shape[1]
 
     if len(args) == 2:
         kernel = args[0]
@@ -326,7 +327,7 @@ def separable_conv_3D(field, *args):
 
         field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
-        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # depth
+        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=ndim)  # depth
         field_out = field_out.reshape(N, C, D, H, -1)
         field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
@@ -334,7 +335,7 @@ def separable_conv_3D(field, *args):
 
         field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
-        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # height
+        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=ndim)  # height
         field_out = field_out.reshape(N, C, D, H, -1)
         field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
@@ -342,23 +343,21 @@ def separable_conv_3D(field, *args):
 
         field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
-        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=3)  # width
+        field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=ndim)  # width
         field_out = field_out.reshape(N, C, D, H, -1)
         field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
         field_out = field_out.permute((0, 1, 3, 4, 2))  # back to the orig. dimensions
 
     elif len(args) == 4:
-        kernel_x = args[0]
-        kernel_y = args[1]
-        kernel_z = args[2]
+        kernel_x, kernel_y, kernel_z = args[0], args[1], args[2]
         padding = args[3]
 
         field_out = F.pad(field_out, padding, mode='replicate')
 
-        field_out = F.conv3d(field_out, kernel_z, groups=3)
-        field_out = F.conv3d(field_out, kernel_y, groups=3)
-        field_out = F.conv3d(field_out, kernel_x, groups=3)
+        field_out = F.conv3d(field_out, kernel_z, groups=ndim)
+        field_out = F.conv3d(field_out, kernel_y, groups=ndim)
+        field_out = F.conv3d(field_out, kernel_x, groups=ndim)
 
     return field_out
 
