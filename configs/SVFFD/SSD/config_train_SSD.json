@@ -66,6 +66,7 @@
 	"data_loader": {
 		"type": "Learn2RegDataLoader",
 		"args": {
+			"im_pairs": "",
 			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,

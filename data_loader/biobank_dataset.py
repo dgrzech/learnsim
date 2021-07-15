@@ -30,7 +30,7 @@ class BiobankDataset(BaseImageRegistrationDataset):
     def atlas_mode(self):
         return True
 
-    def __preprocess(self, im_or_mask_or_seg):
+    def _preprocess(self, im_or_mask_or_seg):
         im_or_mask_or_seg = torch.flipud(im_or_mask_or_seg.reshape(-1)).reshape(im_or_mask_or_seg.shape)
         im_or_mask_or_seg = F.pad(im_or_mask_or_seg, self.padding, mode='constant')
 

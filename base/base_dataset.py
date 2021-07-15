@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 from os import path
 
 import SimpleITK as sitk

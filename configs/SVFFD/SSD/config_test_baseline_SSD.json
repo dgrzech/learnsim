@@ -38,6 +38,7 @@
 	"data_loader": {
 		"type": "Learn2RegDataLoader",
 		"args": {
+			"im_pairs": "/vol/biodata/data/learn2reg/2021/task03/pairs_val.csv",
 			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,

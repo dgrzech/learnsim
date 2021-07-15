@@ -3,7 +3,7 @@ import torch.distributed as dist
 from tqdm import tqdm, trange
 
 from base import BaseTrainer
-from logger import log_fields, log_images, log_model_samples, log_model_weights, save_sample, save_tensors
+from logger import log_fields, log_images, log_model_samples, log_model_weights, save_sample, save_var_params
 from utils import SGLD, SobolevGrad, Sobolev_kernel_1D, \
     add_noise_uniform_field, calc_metrics, calc_no_non_diffeomorphic_voxels, sample_q_v
 
@@ -229,7 +229,7 @@ class Trainer(BaseTrainer):
                 if self.rank == 0:
                     self.logger.info('saving tensors with the variational parameters of q_v..')
 
-                save_tensors(im_pair_idxs, self.save_dirs, var_params_q_v)
+                save_var_params(im_pair_idxs, self.save_dirs, var_params_q_v)
 
             """
             q_phi

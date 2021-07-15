@@ -7,7 +7,7 @@ class BaseDataLoader(DataLoader):
     base class for all data loaders
     """
 
-    def __init__(self, dataset, batch_size, no_GPUs, no_workers, rank, shuffle, no_im_pair_per_epoch=None):
+    def __init__(self, dataset, batch_size, no_GPUs, no_workers, rank, shuffle, no_im_pairs_per_epoch=None):
         init_kwargs = {'batch_size': batch_size, 'dataset': dataset, 'num_workers': no_workers, 'pin_memory': True}
 
         if no_im_pairs_per_epoch is None:
@@ -17,9 +17,8 @@ class BaseDataLoader(DataLoader):
 
         sampler_random = RandomSampler(dataset, replacement=True, num_samples=no_samples)
         sampler_dist = DistributedSamplerWrapper(sampler_random, num_replicas=no_GPUs, rank=rank, shuffle=shuffle)
-        sampler = DistributedSampler(dataset, num_replicas=no_GPUs, rank=rank, shuffle=shuffle)
 
-        super().__init__(sampler=sampler, **init_kwargs)
+        super().__init__(sampler=sampler_dist, **init_kwargs)
 
     @property
     def atlas_mode(self):
