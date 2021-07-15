@@ -61,6 +61,6 @@ rtol = 1e-2
 # config
 test_config_str = '{' \
                   '"name": "test", "no_GPUs": 0,' \
-                  '"data_dir": "/vol/bitbucket/dig15/datasets/mine/biobank/biobank_02", "dims": [64, 64, 64], ' \
-                  '"trainer": {"save_dir": "./temp", "sigma_v_init": 0.5, "u_v_init": 0.0, "verbosity": 2}' \
+                  '"im_pairs": "/vol/bitbucket/dig15/datasets/mine/biobank/val_biobank_1350.csv", "dims": [128, 128, 128], ' \
+                  '"trainer": {"save_dir": "./temp", "verbosity": 2}' \
                   '}'

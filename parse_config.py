@@ -42,12 +42,9 @@ class ConfigParser:
         self._log_dir = dir / 'log'
         self._save_dir = dir / 'model' / 'checkpoints'
         self._var_params_dir = dir / 'model' / 'var_params'
-        self._samples_dir = dir / 'samples'
 
         self._im_dir = dir / 'images'
-        self._fields_dir = dir / 'fields'
-        self._grids_dir = dir / 'grids'
-        self._norms_dir = dir / 'norms'
+        self._samples_dir = dir / 'samples'
 
         # make directories for saving checkpoints and logs
         if self.rank == 0:
@@ -56,12 +53,9 @@ class ConfigParser:
             self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
             self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
             self.var_params_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
 
             self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.fields_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.grids_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.norms_dir.mkdir(parents=True, exist_ok=exist_ok)
+            self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
 
         # logger
         logging.setLoggerClass(Logger)
@@ -255,21 +249,9 @@ class ConfigParser:
         return self._im_dir
 
     @property
-    def fields_dir(self):
-        return self._fields_dir
-
-    @property
-    def grids_dir(self):
-        return self._grids_dir
-
-    @property
-    def norms_dir(self):
-        return self._norms_dir
-
-    @property
     def save_dirs(self):
-        return {'dir': self.dir, 'var_params': self.var_params_dir, 'samples': self.samples_dir,
-                'images': self.im_dir, 'fields': self.fields_dir, 'grids': self.grids_dir, 'norms': self.norms_dir}
+        return {'dir': self.dir, 'var_params': self.var_params_dir,
+                'images': self.im_dir, 'samples': self.samples_dir}
 
 
 def _update_config(config, modification):

@@ -1,5 +1,4 @@
 import random
-from os import listdir, path
 
 import numpy as np
 import torch
@@ -10,16 +9,12 @@ from utils import rescale_im
 
 
 class BiobankDataset(BaseImageRegistrationDataset):
-    def __init__(self, dims, im_paths, save_paths, sigma_v_init, u_v_init, cps=None):
-        # image filenames
-        im_filenames = self._get_filenames(im_paths)
-        mask_filenames = self._get_filenames(path.join(im_paths, 'masks'))
-        seg_filenames = self._get_filenames(path.join(im_paths, 'segs'))
+    def __init__(self, save_paths, im_pairs, dims, mu_v_init=0.0, sigma_v_init=1e-5, u_v_init=0.0, cps=None):
+        data_path = '/vol/biodata/data/biobank/12579/brain/t0/affine_to_mni/images/'
 
-        im_mask_seg_triples = list()  # all-to-one
-
-        for triple in list(zip(im_filenames, mask_filenames, seg_filenames)):
-            im_mask_seg_triples.append({'im': triple[0], 'mask': triple[1], 'seg': triple[2]})
+        im_filename = 'T2_FLAIR_unbiased_brain_affine_to_mni.nii.gz'
+        seg_filename = 'T1_first_all_fast_firstseg_affine_to_mni.nii.gz'
+        mask_filename = 'T1_brain_mask_affine_to_mni.nii.gz'
 
         # segmentation IDs
         structures_dict = {'left_thalamus': 10, 'left_caudate': 11, 'left_putamen': 12,
@@ -28,34 +23,17 @@ class BiobankDataset(BaseImageRegistrationDataset):
                            'right_caudate': 50, 'right_putamen': 51, 'right_pallidum': 52,
                            'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
 
-        super().__init__(dims, im_paths, save_paths, im_mask_seg_triples, structures_dict, sigma_v_init, u_v_init, cps=cps)
+        super().__init__(data_path, save_paths, im_pairs, im_filename, mask_filename, seg_filename,
+                         dims, mu_v_init=mu_v_init, sigma_v_init=sigma_v_init, u_v_init=u_v_init, cps=cps,
+                         structures_dict=structures_dict)
 
-        self.__set_im_spacing()
         self.__set_padding()
 
         # pre-load the fixed image, the segmentation, and the mask
-        fixed_triple = im_mask_seg_triples.pop(0)
+        self.fixed = self._get_fixed(0)
 
-        im_fixed_path = fixed_triple['im']
-        mask_fixed_path = fixed_triple['mask']
-        seg_fixed_path = fixed_triple['seg']
-
-        im_fixed, _ = self._get_im(im_fixed_path)
-        mask_fixed, _ = self._get_mask_or_seg(mask_fixed_path)
-        seg_fixed, _ = self._get_mask_or_seg(seg_fixed_path)
-
-        im_fixed = im_fixed.unsqueeze(0)
-        mask_fixed = mask_fixed.bool().unsqueeze(0)
-        seg_fixed = seg_fixed.short().unsqueeze(0)
-
-        self.fixed = {'im': im_fixed, 'mask': mask_fixed, 'seg': seg_fixed}
-
-    @staticmethod
-    def _get_filenames(p):
-        if listdir(p):
-            return sorted([path.join(p, f) for f in listdir(p) if path.isfile(path.join(p, f))])
-
-        return ['' for _ in range(2)]
+        for k, v in self.fixed.items():
+            v.unsqueeze_(0)
 
     def __preprocess(self, im_or_mask_or_seg):
         im_or_mask_or_seg = torch.flipud(im_or_mask_or_seg.reshape(-1)).reshape(im_or_mask_or_seg.shape)
@@ -75,35 +53,15 @@ class BiobankDataset(BaseImageRegistrationDataset):
 
         return mask_or_seg.squeeze(0)
 
-    def __set_im_spacing(self):
-        im_path = random.choice(self.im_mask_seg_triples)['im']
-        im, im_spacing = self._load_im_or_mask_or_seg_file(im_path)
-        self.im_spacing = torch.tensor(max(im.shape) / np.asarray(self.dims)).float()
-
     def __set_padding(self):
-        im_path = random.choice(self.im_mask_seg_triples)['im']
+        idx = self.im_pairs['fixed'].sample().iloc[0]
+        im_path = self._get_im_path_from_ID(idx)
         im, _ = self._load_im_or_mask_or_seg_file(im_path)
         padding = (max(im.shape) - np.asarray(im.shape)) // 2
         self.padding = (*(padding[4],) * 2, *(padding[3],) * 2, *(padding[2],) * 2)
 
     def __getitem__(self, idx):
-        # moving image
-        im_moving_path = self.im_mask_seg_triples[idx]['im']
-        mask_moving_path = self.im_mask_seg_triples[idx]['mask']
-        seg_moving_path = self.im_mask_seg_triples[idx]['seg']
-
-        im_moving, _ = self._get_im(im_moving_path)
-        mask_moving, _ = self._get_mask_or_seg(mask_moving_path)
-        seg_moving, _ = self._get_mask_or_seg(seg_moving_path)
-
-        mask_moving, seg_moving = mask_moving.bool(), seg_moving.short()
-
-        # transformation
-        mu_v = self._get_mu_v(idx)
-        log_var_v = self._get_log_var_v(idx)
-        u_v = self._get_u_v(idx)
-
-        moving = {'im': im_moving, 'mask': mask_moving, 'seg': seg_moving}
-        var_params_q_v = {'mu': mu_v, 'log_var': log_var_v, 'u': u_v}
+        moving = self._get_moving(idx)
+        var_params_q_v = self._get_var_params(idx)
 
         return idx, moving, var_params_q_v

@@ -12,7 +12,7 @@ class RegistrationModule(nn.Module):
 
         self.im_types = ['torch.FloatTensor', 'torch.cuda.FloatTensor']
         self.mask_types = ['torch.BoolTensor', 'torch.cuda.BoolTensor']
-        self.seg_types = ['torch.ShortTensor', 'torch.cuda.ShortTensor']
+        self.seg_types = ['torch.LongTensor', 'torch.cuda.LongTensor']
 
     def forward(self, im_or_seg_moving, transformation):
         grid = transformation.permute([0, 2, 3, 4, 1])
@@ -24,7 +24,7 @@ class RegistrationModule(nn.Module):
             if self.is_mask(im_or_seg_moving):
                 return im_or_seg_moving_warped.bool()
             elif self.is_seg(im_or_seg_moving):
-                return im_or_seg_moving_warped.short()
+                return im_or_seg_moving_warped.long()
 
         elif self.is_im(im_or_seg_moving):
             return F.grid_sample(im_or_seg_moving, grid, mode='bilinear', padding_mode='border', align_corners=True)

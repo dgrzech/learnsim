@@ -1,45 +1,22 @@
-import torch
-from torch.utils.data import Subset
-
 from base import BaseDataLoader
 from .biobank_dataset import BiobankDataset
 
 
-def get_train_test_split(dataset, test_split):
-    generator = torch.Generator().manual_seed(42)
-    train_len, test_len = (1 - test_split) * len(dataset), test_split * len(dataset)
-    train_data, test_data = torch.utils.data.random_split(dataset, [int(train_len), int(test_len)], generator=generator)
-
-    return train_data, test_data
-
-
 class LearnSimDataLoader(BaseDataLoader):
-    def __init__(self, data_dir, save_dirs, dims, sigma_v_init, u_v_init, cps=None,
-                 batch_size=1, no_GPUs=1, no_workers=0, rank=0, test=False, test_split=None):
-        dataset = BiobankDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, cps)
+    def __init__(self, save_dirs, im_pairs, dims, sigma_v_init, u_v_init, cps=None,
+                 batch_size=1, no_GPUs=1, no_workers=0, rank=0, test=False):
+        dataset = BiobankDataset(save_dirs, im_pairs, dims, sigma_v_init=sigma_v_init, u_v_init=u_v_init, cps=cps)
         shuffle = not test
-
-        if test_split is not None:
-            train_data, test_data = get_train_test_split(dataset, test_split)
-            dataset = test_data if test else train_data
-
-        super().__init__(dataset, batch_size, shuffle, no_GPUs, no_workers, rank)
+        super().__init__(dataset, batch_size, no_GPUs, no_workers, rank, shuffle)
 
     @property
     def fixed(self):
-        return self.dataset.dataset.fixed
+        return self.dataset.fixed
 
 
 class Learn2RegDataLoader(BaseDataLoader):
-    def __init__(self, data_dir, save_dirs, dims, sigma_v_init, u_v_init, cps=None,
+    def __init__(self, data_dir, save_dirs, im_pairs, dims, sigma_v_init, u_v_init, cps=None,
                  batch_size=1, no_GPUs=1, no_workers=0, rank=0, test=False):
-        dataset = OasisDataset(dims, data_dir, save_dirs, sigma_v_init, u_v_init, cps)
-
-        if test:
-            dataset = Subset(dataset, dataset.val_pairs_idxs)
-            shuffle = False
-        else:
-            dataset = Subset(dataset, dataset.train_pairs_idxs)
-            shuffle = True
-
-        super().__init__(dataset, batch_size, shuffle, no_GPUs, no_workers, rank)
+        dataset = OasisDataset(save_dirs, im_pairs, dims, sigma_v_init=sigma_v_init, u_v_init=u_v_init, cps=cps)
+        shuffle = not test
+        super().__init__(dataset, batch_size, no_GPUs, no_workers, rank, shuffle)

@@ -56,8 +56,8 @@ class BaseTrainer:
         self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
         self.no_batches = len(self.data_loader)
 
-        self.log_period = int(cfg_trainer['log_period'])
-        self.log_period_var_params = int(cfg_trainer['log_period_var_params']) if 'log_period_var_params' in cfg_trainer else None
+        self.log_period = int(cfg_trainer['log_period'])  # NOTE (DG): unused
+        self.log_period_var_params = int(cfg_trainer['log_period_var_params']) if 'log_period_var_params' in cfg_trainer else None  # NOTE (DG): unused
 
         if self.test_only:
             self.no_samples_test = cfg_trainer['no_samples_test']

@@ -28,11 +28,8 @@ class MetricsTestMethods(unittest.TestCase):
 
         cfg = ConfigParser(test_config_json, rank, timestamp=timestamp)
 
-        im_paths = cfg['data_dir']
-        save_paths = cfg.save_dirs
-        sigma_v_init, u_v_init = cfg['trainer']['sigma_v_init'], cfg['trainer']['u_v_init']
-
-        dataset = BiobankDataset(dims, im_paths, save_paths, sigma_v_init, u_v_init)
+        save_paths, im_pairs = cfg.save_dirs, cfg['im_pairs']
+        dataset = BiobankDataset(save_paths, im_pairs, dims)
         structures_dict = dataset.structures_dict
         spacing = dataset.im_spacing
 
