@@ -336,7 +336,7 @@ def separable_conv_3D(field, *args):
         field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
         field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=ndim)  # height
-        field_out = field_out.reshape(N, C, D, H, -1)
+        field_out = field_out.reshape(N, C, H, W, -1)
         field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
         field_out = field_out.permute((0, 1, 3, 4, 2))
@@ -344,7 +344,7 @@ def separable_conv_3D(field, *args):
         field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
         field_out = F.conv1d(field_out, kernel, padding=padding_sz, groups=ndim)  # width
-        field_out = field_out.reshape(N, C, D, H, -1)
+        field_out = field_out.reshape(N, C, W, D, -1)
         field_out = field_out[:, :, :, :, padding_sz:-padding_sz]
 
         field_out = field_out.permute((0, 1, 3, 4, 2))  # back to the orig. dimensions
