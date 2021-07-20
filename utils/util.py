@@ -1,18 +1,18 @@
 import json
+import operator
 from collections import OrderedDict
 from itertools import repeat
 from pathlib import Path
-from torch.utils.data import Dataset, DistributedSampler
 
 import SimpleITK as sitk
 import math
 import numpy as np
-import operator
 import pandas as pd
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch import nn
+from torch.utils.data import Dataset, DistributedSampler
 
 
 def ensure_dir(dirname):
