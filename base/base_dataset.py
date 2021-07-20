@@ -2,6 +2,7 @@ from abc import abstractmethod
 from os import path
 
 import SimpleITK as sitk
+import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -21,6 +22,7 @@ class BaseImageRegistrationDataset(Dataset):
         self.im_pairs = pd.read_csv(im_pairs, names=['fixed', 'moving']).applymap(str)
 
         self.__set_im_spacing()
+        self.__set_padding()
 
     def __len__(self):
         return len(self.im_pairs.index)
@@ -140,3 +142,10 @@ class BaseImageRegistrationDataset(Dataset):
         im_path = self._get_im_path_from_ID(idx)
         im, im_spacing = self._load_im_or_mask_or_seg_file(im_path)
         self.im_spacing = torch.tensor(im_spacing).float()
+
+    def __set_padding(self):
+        idx = self.im_pairs['fixed'].sample().iloc[0]
+        im_path = self._get_im_path_from_ID(idx)
+        im, _ = self._load_im_or_mask_or_seg_file(im_path)
+        padding = (max(im.shape) - np.asarray(im.shape)) // 2
+        self.padding = (*(padding[4],) * 2, *(padding[3],) * 2, *(padding[2],) * 2)

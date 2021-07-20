@@ -1,9 +1,9 @@
-import numpy as np
 import torch
 import torch.nn.functional as F
 
 from base import BaseImageRegistrationDataset
 from utils import rescale_im
+from .biobank_structures_dict import biobank_structures_dict
 
 
 class BiobankDataset(BaseImageRegistrationDataset):
@@ -14,18 +14,11 @@ class BiobankDataset(BaseImageRegistrationDataset):
         seg_filename = 'T1_first_all_fast_firstseg_affine_to_mni.nii.gz'
         mask_filename = 'T1_brain_mask_affine_to_mni.nii.gz'
 
-        # segmentation IDs
-        structures_dict = {'left_thalamus': 10, 'left_caudate': 11, 'left_putamen': 12,
-                           'left_pallidum': 13, 'brain_stem': 16, 'left_hippocampus': 17,
-                           'left_amygdala': 18, 'left_accumbens': 26, 'right_thalamus': 49,
-                           'right_caudate': 50, 'right_putamen': 51, 'right_pallidum': 52,
-                           'right_hippocampus': 53, 'right_amygdala': 54, 'right_accumbens': 58}
+        structures_dict = biobank_structures_dict  # segmentation IDs
 
-        super().__init__(data_path, save_paths, im_pairs, im_filename, mask_filename, seg_filename,
-                         dims, mu_v_init=mu_v_init, sigma_v_init=sigma_v_init, u_v_init=u_v_init, cps=cps,
-                         structures_dict=structures_dict)
-
-        self.__set_padding()
+        super().__init__(data_path, save_paths, im_pairs, im_filename, mask_filename, seg_filename, dims,
+                         mu_v_init=mu_v_init, sigma_v_init=sigma_v_init, u_v_init=u_v_init,
+                         cps=cps, structures_dict=structures_dict)
 
         # pre-load the fixed image, the segmentation, and the mask
         self.fixed = self._get_fixed(0)
@@ -50,13 +43,6 @@ class BiobankDataset(BaseImageRegistrationDataset):
         mask_or_seg = F.interpolate(mask_or_seg, size=self.dims, mode='nearest')
 
         return mask_or_seg.squeeze(0)
-
-    def __set_padding(self):
-        idx = self.im_pairs['fixed'].sample().iloc[0]
-        im_path = self._get_im_path_from_ID(idx)
-        im, _ = self._load_im_or_mask_or_seg_file(im_path)
-        padding = (max(im.shape) - np.asarray(im.shape)) // 2
-        self.padding = (*(padding[4],) * 2, *(padding[3],) * 2, *(padding[2],) * 2)
 
     def __getitem__(self, idx):
         moving = self._get_moving(idx)
