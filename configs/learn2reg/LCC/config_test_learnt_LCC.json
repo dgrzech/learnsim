@@ -63,7 +63,7 @@
 			"sigma_v_init": 0.01,
 			"u_v_init": 0.01,
 			"batch_size": 1,
-			"no_im_pairs_per_epoch": 100,
+			"no_im_pairs_per_epoch": 50,
 			"no_workers": 2,
 			"test": true
 		}
