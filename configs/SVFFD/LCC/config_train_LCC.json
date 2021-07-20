@@ -22,7 +22,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 2.0
+			"w_reg": 0.6
 		}
 	},
 	"entropy_loss": {
@@ -60,11 +60,11 @@
 		"args": {
 			"im_pairs": "",
 			"dims": [192, 224, 160],
-			"sigma_v_init": 0.5,
-			"u_v_init": 0.1,
+			"sigma_v_init": 0.01,
+			"u_v_init": 0.01,
 			"batch_size": 1,
 			"no_im_pairs_per_epoch": 100,
-			"no_workers": 1,
+			"no_workers": 2,
 			"test": false
 		}
 	},
@@ -79,9 +79,9 @@
 			"magnitude": 0.1
 		},
 		"no_epochs": 50,
-		"no_iters_q_v": 1024,
-		"no_samples_SGLD": 200,
-		"no_samples_SGLD_burn_in": 100,
+		"no_iters_q_v": 1280,
+		"no_samples_SGLD": 1000,
+		"no_samples_SGLD_burn_in": 500,
 		"no_samples_test": 5,
 		"log_period": 512,
 		"log_period_model_samples": 100,
