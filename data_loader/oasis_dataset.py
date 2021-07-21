@@ -74,5 +74,7 @@ class OasisDataset(BaseImageRegistrationDataset):
         moving = self._get_moving(idx)
         var_params_q_v = self._get_var_params(idx)
 
+        fixed['mask'] = fixed['im'] > 1e-3
+
         return idx, fixed, moving, var_params_q_v
 
