@@ -68,15 +68,18 @@ class Trainer(BaseTrainer):
         self.curr_state = fixed['im'].detach().clone()
         self.curr_state.requires_grad_(True)
         self.__init_optimizer_LD()
+
         mean = torch.zeros_like(self.curr_state)
+        sigma = torch.ones_like(self.curr_state)
+
+        no_samples_used = self.no_samples_SGLD - self.no_samples_SGLD_burn_in
 
         for sample_no in trange(1, self.no_samples_SGLD + 1, desc=f'sampling from EBM', colour='#808080', disable=self.tqdm_disable, dynamic_ncols=True, leave=False, unit='sample'):
-            self.curr_state = SGLD.apply(self.curr_state, torch.ones_like(self.curr_state), self.tau)
-
             if sample_no > self.no_samples_SGLD_burn_in:
-                mean += self.curr_state.detach() / (self.no_samples_SGLD - self.no_samples_SGLD_burn_in)
+                mean += self.curr_state.detach() / no_samples_used
 
-            z_curr_state = self.model(self.curr_state, im_moving_warped, fixed['mask'])
+            curr_state_noise = SGLD.apply(self.curr_state, sigma, self.tau)
+            z_curr_state = self.model(curr_state_noise, im_moving_warped, fixed['mask'])
             loss = self.data_loss(z_curr_state)
 
             self.optimizer_LD.zero_grad(set_to_none=True)
