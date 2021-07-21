@@ -87,7 +87,7 @@ class ConfigParser:
 
         if args.resume is not None:
             resume = Path(args.resume)
-            cfg_fname = resume.parent.parent / 'config.json'
+            cfg_fname = resume.parent.parent.parent / 'config.json'
         else:
             assert args.config is not None, "config file needs to be specified; add '-c config.json'"
             cfg_fname, resume = Path(args.config), None
