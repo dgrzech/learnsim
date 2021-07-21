@@ -87,7 +87,7 @@
 		},
 		"no_epochs": 1,
 		"no_iters_q_v": 1024,
-		"no_samples_test": 50,
+		"no_samples_test": 5,
 		"log_period": 512,
 		"save_dir": "saved/"
 	}
