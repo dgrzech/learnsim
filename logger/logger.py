@@ -214,14 +214,14 @@ variational parameters
 
 @torch.no_grad()
 def save_var_params(im_pair_idxs, save_dirs, var_params_q_v):
-    mu_v = var_params_q_v['mu'].cpu()
-    log_var_v = var_params_q_v['log_var'].cpu()
-    u_v = var_params_q_v['u'].cpu()
+    mu_v = var_params_q_v['mu']
+    log_var_v = var_params_q_v['log_var']
+    u_v = var_params_q_v['u']
 
     def save_state_dict(im_pair_idx, state_dict, name):
         state_dict_path = path.join(save_dirs['var_params'], f'{name}_{im_pair_idx}.pt')
         torch.save(state_dict, state_dict_path)
 
     for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-        im_pair_state_dict = {'mu': mu_v[loop_idx], 'log_var': log_var_v[loop_idx], 'u': u_v[loop_idx]}
+        im_pair_state_dict = {'mu': mu_v[loop_idx].cpu(), 'log_var': log_var_v[loop_idx].cpu(), 'u': u_v[loop_idx].cpu()}
         save_state_dict(im_pair_idx, im_pair_state_dict, 'var_params')
