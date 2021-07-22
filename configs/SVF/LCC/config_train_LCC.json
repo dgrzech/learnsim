@@ -67,7 +67,7 @@
 	"data_loader": {
 		"type": "LearnSimDataLoader",
 		"args": {
-			"im_pairs": "/vol/bitbucket/dig15/datasets/mine/biobank/train_biobank_1350.csv",
+			"im_pairs": "/vol/bitbucket/dig15/datasets/mine/biobank/train_biobank_1500.csv",
 			"dims": [128, 128, 128],
 			"sigma_v_init": 0.5,
 			"u_v_init": 0.1,
