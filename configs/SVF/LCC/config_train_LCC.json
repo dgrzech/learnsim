@@ -31,7 +31,7 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 2.4
+			"w_reg": 2.8
 		}
 	},
 	"entropy_loss": {
@@ -87,7 +87,7 @@
 			"magnitude": 0.1
 		},
 		"no_epochs": 50,
-		"no_iters_q_v": 1024,
+		"no_iters_q_v": 1344,
 		"no_samples_test": 5,
 		"log_period": 512,
 		"save_dir": "saved/"
