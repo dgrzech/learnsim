@@ -4,7 +4,14 @@
 	"model": {
 		"type": "CNN_SSD",
 		"args": {
-			"learnable": false
+			"learnable": true,
+			"no_features": [4, 8, 8],
+			"activation": {
+				"type": "LeakyReLU",
+				"args": {
+					"negative_slope": 0.2
+				}
+			}
 		}
 	},
 	"data_loss": {
@@ -29,6 +36,18 @@
 	"registration_module": {
 		"type": "RegistrationModule"
 	},
+	"optimizer_LD": {
+		"type": "SGD",
+		"args": {
+			"lr": 0.01
+		}
+	},
+	"optimizer_q_phi": {
+		"type": "Adam",
+		"args": {
+			"lr": 0.00001
+		}
+	},
 	"optimizer_q_v": {
 		"type": "Adam",
 		"args": {
@@ -38,14 +57,14 @@
 	"data_loader": {
 		"type": "Learn2RegDataLoader",
 		"args": {
-			"im_pairs": "/vol/biodata/data/learn2reg/2021/task03/pairs_val.csv",
+			"im_pairs": "",
 			"dims": [192, 224, 160],
 			"sigma_v_init": 0.1,
 			"u_v_init": 0.1,
 			"batch_size": 1,
-			"no_im_pairs_per_epoch": 200,
-			"no_workers": 2,
-			"test": true
+			"no_im_pairs_per_epoch": 4,
+			"no_workers": 4,
+			"test": false
 		}
 	},
 	"Sobolev_grad": {
@@ -58,13 +77,13 @@
 			"enabled": true,
 			"magnitude": 0.1
 		},
-		"no_epochs": 1,
-		"no_iters_q_v": 1024,
-		"no_samples_SGLD": 5000,
-		"no_samples_SGLD_burn_in": 4000,
+		"no_epochs": 5,
+		"no_iters_q_v": 8,
+		"no_samples_SGLD": 10,
+		"no_samples_SGLD_burn_in": 5,
 		"no_samples_test": 5,
-		"log_period": 512,
-		"log_period_model_samples": 100,
+		"log_period": 4,
+		"log_period_model_samples": 5,
 		"save_dir": "saved/"
 	}
 }
