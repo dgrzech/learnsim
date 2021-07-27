@@ -102,16 +102,13 @@ def model_samples_grid(samples_slices):
     return fig
 
 
-def log_model_samples(writer, im_pair_idxs, model_samples):
+def log_model_samples(writer, model_samples):
     if dist.get_rank() == 0:
-        model_samples = model_samples.cpu().numpy()
+        model_sample = model_samples.cpu().numpy()
         mid_idxs = get_im_or_field_mid_slices_idxs(model_samples)
+        sample_slices = get_slices(model_sample[0, 0], mid_idxs)
 
-        for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-            sample = model_samples[loop_idx, 0]
-            sample_slices = get_slices(sample, mid_idxs)
-
-            writer.add_figure(f'model_samples/{im_pair_idx}', model_samples_grid(sample_slices))
+        writer.add_figure('model_samples', model_samples_grid(sample_slices))
 
 
 """
@@ -124,10 +121,10 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
     plot of input and output images to log in tensorboard
     """
 
-    fig, axs = plt.subplots(nrows=3, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+    fig, axs = plt.subplots(nrows=5, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['sagittal', 'coronal', 'axial']
-    rows = ['im_fixed', 'im_moving', 'im_moving_warped']
+    rows = ['im_fixed', 'im_moving', 'im_moving_warped', 'diff_before', 'diff_after']
 
     for ax, col in zip(axs[0], cols):
         ax.set_title(col)
@@ -145,6 +142,8 @@ def im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices):
         axs[0, i].imshow(pad_to_square(im_fixed_slices[i]), cmap='gray')
         axs[1, i].imshow(pad_to_square(im_moving_slices[i]), cmap='gray')
         axs[2, i].imshow(pad_to_square(im_moving_warped_slices[i]), cmap='gray')
+        axs[3, i].imshow(np.abs(pad_to_square(im_fixed_slices[i] - im_moving_slices[i])), cmap='gray')
+        axs[4, i].imshow(np.abs(pad_to_square(im_fixed_slices[i] - im_moving_warped_slices[i])), cmap='gray')
 
     return fig
 
@@ -164,13 +163,16 @@ def get_slices(field, mid_idxs):
     return [field[:, :, mid_idxs[0]], field[:, mid_idxs[1], :], field[mid_idxs[2], :, :]]
 
 
-def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch):
+def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_warped_batch, atlas_mode=False):
     if dist.get_rank() == 0:
         im_fixed_batch = im_fixed_batch.cpu().numpy()
         im_moving_batch = im_moving_batch.cpu().numpy()
         im_moving_warped_batch = im_moving_warped_batch.cpu().numpy()
 
         mid_idxs = get_im_or_field_mid_slices_idxs(im_moving_batch)
+
+        if not atlas_mode:
+            im_pair_idxs = [im_pair_idxs[0], ]
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
             im_fixed = im_fixed_batch[loop_idx, 0]
@@ -181,9 +183,8 @@ def log_images(writer, im_pair_idxs, im_fixed_batch, im_moving_batch, im_moving_
             im_moving_slices = get_slices(im_moving, mid_idxs)
             im_moving_warped_slices = get_slices(im_moving_warped, mid_idxs)
 
-            writer.add_figure(f'im_pairs/{im_pair_idx}',
-                              im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
-
+            name = f'im_pairs/{im_pair_idx}' if atlas_mode else 'images'
+            writer.add_figure(name, im_grid(im_fixed_slices, im_moving_slices, im_moving_warped_slices))
 
 """
 vector fields
@@ -223,7 +224,7 @@ def fields_grid(mu_v_norm_slices, displacement_norm_slices, grid_im_slices, sigm
     return fig
 
 
-def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, grid_im_batch, log_det_J_batch):
+def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, grid_im_batch, log_det_J_batch, atlas_mode=False):
     if dist.get_rank() == 0:
         mu_v_norm_batch = calc_norm(var_params_batch['mu']).cpu().numpy()
         sigma_v_norm_batch = calc_norm(torch.exp(0.5 * var_params_batch['log_var'])).cpu().numpy()
@@ -234,6 +235,9 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, grid_
         log_det_J_batch = log_det_J_batch.cpu().numpy()
 
         mid_idxs = get_im_or_field_mid_slices_idxs(mu_v_norm_batch)
+
+        if not atlas_mode:
+            im_pair_idxs = [im_pair_idxs[0], ]
 
         for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
             mu_v_norm = mu_v_norm_batch[loop_idx, 0]
@@ -252,8 +256,8 @@ def log_fields(writer, im_pair_idxs, var_params_batch, displacement_batch, grid_
             grid_im_slices = get_slices(grid_im, mid_idxs)
             log_det_J_slices = get_slices(log_det_J, mid_idxs)
 
-            writer.add_figure(f'q_v/{im_pair_idx}',
-                              fields_grid(mu_v_norm_slices, displacement_norm_slices, grid_im_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
+            fig_name = f'q_v/{im_pair_idx}' if atlas_mode else 'q_v'
+            writer.add_figure(fig_name, fields_grid(mu_v_norm_slices, displacement_norm_slices, grid_im_slices, sigma_v_norm_slices, u_v_norm_slices, log_det_J_slices))
 
 
 """

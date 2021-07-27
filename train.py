@@ -16,9 +16,6 @@ def train(config):
     # data loader
     data_loader = config.init_data_loader()
 
-    # parameters used with other objects
-    no_samples = data_loader.no_samples
-
     # model
     similarity_metric = config.init_model()
 
@@ -29,7 +26,7 @@ def train(config):
     transformation_module, registration_module = config.init_transformation_and_registration_modules()
 
     # metrics
-    metrics = config.init_metrics(no_samples)
+    metrics = config.init_metrics()
 
     # training
     trainer = Trainer(config, data_loader, similarity_metric, losses, transformation_module, registration_module, metrics)

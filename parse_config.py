@@ -102,6 +102,9 @@ class ConfigParser:
         self['data_loader']['args']['cps'] = cfg_transformation_module['cps'] if 'cps' in cfg_transformation_module else None
 
         data_loader = self.init_obj('data_loader', module_data)
+
+        self.atlas_mode = data_loader.atlas_mode
+        self.no_samples = data_loader.no_samples
         self.structures_dict = data_loader.structures_dict
 
         return data_loader
@@ -116,27 +119,27 @@ class ConfigParser:
         return {'data': self.init_obj('data_loss', model_loss), 'regularisation': self.init_obj('reg_loss', model_loss),
                 'entropy': self.init_obj('entropy_loss', model_loss)}
 
-    def init_metrics(self, no_samples):
-        loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term', 'loss/q_v',
-                      'loss/neg_sample_energy', 'loss/q_phi']
+    def init_metrics(self):
+        loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term',
+                      'loss/q_v', 'loss/neg_sample_energy', 'loss/q_phi']
 
-        ASD = [f'ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)]
-        ASD.extend([f'ASD/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(no_samples)])
-        ASD.extend(['ASD/avg'])
-        ASD.extend([f'ASD/avg/{structure}' for structure in self.structures_dict])
+        ASD = ['ASD/avg'] + [f'ASD/avg/{structure}' for structure in self.structures_dict]
+        DSC = ['DSC/avg'] + [f'DSC/avg/{structure}' for structure in self.structures_dict]
+        no_non_diffeomorphic_voxels = ['no_non_diffeomorphic_voxels/avg']
 
-        DSC = [f'DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)]
-        DSC.extend([f'DSC/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(no_samples)])
-        DSC.extend(['DSC/avg'])
-        DSC.extend([f'DSC/avg/{structure}' for structure in self.structures_dict])
-        
-        no_non_diffeomorphic_voxels = [f'no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(no_samples)]
-        no_non_diffeomorphic_voxels.extend(['no_non_diffeomorphic_voxels/avg'])
+        if self.atlas_mode:
+            ASD.extend([f'ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
+            ASD.extend([f'ASD/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(self.no_samples)])
+
+            DSC.extend([f'DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
+            DSC.extend([f'DSC/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(self.no_samples)])
+
+            no_non_diffeomorphic_voxels = [f'no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(self.no_samples)]
 
         if self.test:
-            ASD.extend([f'test/ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)])
-            DSC.extend([f'test/DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(no_samples)])
-            no_non_diffeomorphic_voxels.extend([f'test/no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(no_samples)])
+            ASD.extend([f'test/ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
+            DSC.extend([f'test/DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
+            no_non_diffeomorphic_voxels.extend([f'test/no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(self.no_samples)])
 
         return loss_terms + ASD + DSC + no_non_diffeomorphic_voxels
 

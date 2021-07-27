@@ -75,6 +75,8 @@ class Trainer(BaseTrainer):
         no_samples_used = self.no_samples_SGLD - self.no_samples_SGLD_burn_in
 
         for sample_no in trange(1, self.no_samples_SGLD + 1, desc=f'sampling from EBM', colour='#808080', disable=self.tqdm_disable, dynamic_ncols=True, leave=False, unit='sample'):
+            self.step += 1
+
             if sample_no > self.no_samples_SGLD_burn_in:
                 mean += self.curr_state.detach() / no_samples_used
 
@@ -90,11 +92,11 @@ class Trainer(BaseTrainer):
 
             if self.rank == 0:
                 with torch.no_grad():
-                    self.writer.set_step(self.step + sample_no)
+                    self.writer.set_step(self.step)
                     self.metrics.update('loss/neg_sample_energy', loss.item(), n=total_no_samples)
 
                     if sample_no > self.no_samples_SGLD_burn_in and sample_no % self.log_period_model_samples == 0:
-                        log_model_samples(self.writer, im_pair_idxs, self.curr_state.detach())
+                        log_model_samples(self.writer, self.curr_state.detach())
 
         return v_sample.detach(), mean.detach()
 
@@ -152,9 +154,12 @@ class Trainer(BaseTrainer):
                 im_pair_idxs_list = torch.cat(im_pair_idxs_tensor_list, dim=0).view(-1).tolist()
                 no_non_diffeomorphic_voxels = torch.cat(no_non_diffeomorphic_voxels_list, dim=0).view(-1).tolist()
 
-                for loop_idx, im_pair_idx in enumerate(im_pair_idxs_list):
-                    no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx]
-                    self.metrics.update(f'no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}', no_non_diffeomorphic_voxels_im_pair)
+                if self.atlas_mode:
+                    for loop_idx, im_pair_idx in enumerate(im_pair_idxs_list):
+                        no_non_diffeomorphic_voxels_im_pair = no_non_diffeomorphic_voxels[loop_idx]
+                        self.metrics.update(f'no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}', no_non_diffeomorphic_voxels_im_pair)
+                else:
+                    self.metrics.update(f'no_non_diffeomorphic_voxels/avg', sum(no_non_diffeomorphic_voxels) / len(no_non_diffeomorphic_voxels))
 
         # tensorboard cont.
         with torch.no_grad():
@@ -170,13 +175,17 @@ class Trainer(BaseTrainer):
             dist.all_gather(ASD_list, ASD)
             dist.all_gather(DSC_list, DSC)
 
-            self.writer.set_step(epoch)
-            self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list)
+            if self.atlas_mode:
+                self.writer.set_step(epoch)
+            else:
+                self.writer.set_step(self.step)
+
+            self.metrics.update_ASD_and_DSC(im_pair_idxs_list, self.structures_dict, ASD_list, DSC_list, atlas_mode=self.atlas_mode)
 
             if not self.test_only:
                 var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
-                log_fields(self.writer, im_pair_idxs_local, var_params_q_v_smoothed, displacement1, grid_im1, log_det_J_transformation)
-                log_images(self.writer, im_pair_idxs_local, fixed['im'], moving['im'], im_moving_warped1)
+                log_fields(self.writer, im_pair_idxs_local, var_params_q_v_smoothed, displacement1, grid_im1, log_det_J_transformation, atlas_mode=self.atlas_mode)
+                log_images(self.writer, im_pair_idxs_local, fixed['im'], moving['im'], im_moving_warped1, atlas_mode=self.atlas_mode)
 
     def _step_q_phi(self, im_pair_idxs, fixed, moving, var_params_q_v):
         self.step += 1
@@ -244,7 +253,9 @@ class Trainer(BaseTrainer):
         if not self.test_only:
             self._save_checkpoint(epoch)
             self.writer.set_step(epoch)
-            self.metrics.update_avg_metrics(self.structures_dict)
+
+            if self.atlas_mode:
+                self.metrics.update_avg_metrics(self.structures_dict)
 
     @torch.no_grad()
     def _test(self, no_samples):
