@@ -60,11 +60,11 @@
 		},
 		"no_epochs": 1,
 		"no_iters_q_v": 1024,
-		"no_samples_SGLD": 5000,
-		"no_samples_SGLD_burn_in": 4000,
+		"no_samples_SGLD": 2500,
+		"no_samples_SGLD_burn_in": 2000,
 		"no_samples_test": 5,
 		"log_period": 512,
-		"log_period_model_samples": 100,
+		"log_period_model_samples": 500,
 		"save_dir": "saved/"
 	}
 }
