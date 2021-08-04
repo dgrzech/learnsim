@@ -1,0 +1,12 @@
+nibabel==3.2.1
+tqdm==4.61.1
+pytest==6.2.2
+numpy==1.20.1
+scipy==1.6.0
+pandas==1.2.2
+scikit_image==0.18.1
+torch==1.7.1
+matplotlib==3.3.4
+mayavi==4.7.2
+SimpleITK==2.1.0
+skimage==0.0
