@@ -78,16 +78,16 @@ energy-based model samples
 """
 
 
-def model_samples_grid(samples_slices):
-    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
+def model_samples_grid(pos_sample_slices, neg_sample_slices):
+    fig, axs = plt.subplots(nrows=2, ncols=3, sharex=True, sharey=True, figsize=(8, 8))
 
     cols = ['sagittal', 'coronal', 'axial']
-    rows = ['model_sample']
+    rows = ['pos_sample', 'neg_sample']
 
-    for ax, col in zip(axs, cols):
+    for ax, col in zip(axs[0], cols):
         ax.set_title(col)
 
-    for ax, row in zip(axs, rows):
+    for ax, row in zip(axs[:, 0], rows):
         ax.set_xticks([], minor=False)
         ax.set_xticks([], minor=True)
 
@@ -97,18 +97,19 @@ def model_samples_grid(samples_slices):
         ax.set_ylabel(row, rotation=90, size='large')
 
     for i in range(3):
-        axs[i].imshow(pad_to_square(samples_slices[i]), cmap='gray')
+        axs[0, i].imshow(pad_to_square(pos_sample_slices[i]), cmap='gray')
+        axs[1, i].imshow(pad_to_square(neg_sample_slices[i]), cmap='gray')
 
     return fig
 
 
-def log_model_samples(writer, model_samples):
+def log_model_samples(writer, samples_pos, samples_neg):
     if dist.get_rank() == 0:
-        model_sample = model_samples.cpu().numpy()
-        mid_idxs = get_im_or_field_mid_slices_idxs(model_samples)
-        sample_slices = get_slices(model_sample[0, 0], mid_idxs)
+        sample_pos, sample_neg = samples_pos.cpu().numpy(), samples_neg.cpu().numpy()
+        mid_idxs = get_im_or_field_mid_slices_idxs(sample_pos)
+        sample_pos_slices, sample_neg_slices = get_slices(sample_pos[0, 0], mid_idxs), get_slices(sample_neg[0, 0], mid_idxs)
 
-        writer.add_figure('model_samples', model_samples_grid(sample_slices))
+        writer.add_figure('model_samples', model_samples_grid(sample_pos_slices, sample_neg_slices))
 
 
 """

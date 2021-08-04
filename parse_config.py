@@ -121,7 +121,7 @@ class ConfigParser:
 
     def init_metrics(self):
         loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term',
-                      'loss/q_v', 'loss/neg_sample_energy', 'loss/q_phi']
+                      'loss/q_v', 'loss_pos_sample_energy', 'loss/neg_sample_energy', 'loss/q_phi']
 
         ASD = ['ASD/avg'] + [f'ASD/avg/{structure}' for structure in self.structures_dict]
         DSC = ['DSC/avg'] + [f'DSC/avg/{structure}' for structure in self.structures_dict]

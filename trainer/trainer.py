@@ -65,12 +65,13 @@ class Trainer(BaseTrainer):
             transformation = add_noise_uniform_field(transformation, self.alpha) if self.add_noise_uniform else transformation
             im_moving_warped = self.registration_module(moving['im'], transformation)
 
-        self.curr_state = fixed['im'].detach().clone()
-        self.curr_state.requires_grad_(True)
+        self.curr_state_pos, self.curr_state_neg = fixed['im'].detach().clone(), fixed['im'].detach().clone()
+        self.curr_state_pos.requires_grad_(True), self.curr_state_neg.requires_grad_(True)
+
         self.__init_optimizer_LD()
 
-        mean = torch.zeros_like(self.curr_state)
-        sigma = torch.ones_like(self.curr_state)
+        mean_pos, mean_neg = torch.zeros_like(self.curr_state_pos), torch.zeros_like(self.curr_state_neg)
+        sigma_pos = sigma_neg = torch.ones_like(self.curr_state_pos)
 
         no_samples_used = self.no_samples_SGLD - self.no_samples_SGLD_burn_in
 
@@ -78,27 +79,30 @@ class Trainer(BaseTrainer):
             self.step += 1
 
             if sample_no > self.no_samples_SGLD_burn_in:
-                mean += self.curr_state.detach() / no_samples_used
+                mean_pos += self.curr_state_pos.detach() / no_samples_used
+                mean_neg += self.curr_state_neg.detach() / no_samples_used
 
-            curr_state_noise = SGLD.apply(self.curr_state, sigma, self.tau)
-            z_curr_state = self.model(curr_state_noise, im_moving_warped, fixed['mask'])
-            loss = self.data_loss(z_curr_state)
+            curr_state_pos_noise, curr_state_neg_noise = SGLD.apply(self.curr_state_pos, sigma_pos, self.tau), SGLD.apply(self.curr_state_neg, sigma_neg, self.tau)
+            z_curr_state_pos, z_curr_state_neg = self.model(curr_state_pos_noise, im_moving_warped, fixed['mask']), self.model(curr_state_neg_noise, im_moving_warped, fixed['mask'])
+            loss_pos, loss_neg = self.data_loss(z_curr_state_pos), -1.0 * self.data_loss(z_curr_state_neg)
 
-            self.optimizer_LD.zero_grad(set_to_none=True)
-            loss.backward()
-            self.optimizer_LD.step()
+            self.optimizer_LD_pos.zero_grad(set_to_none=True), self.optimizer_LD_neg.zero_grad(set_to_none=True)
+            loss_pos.backward(), loss_neg.backward()
+            self.optimizer_LD_pos.step(), self.optimizer_LD_neg.step()
 
-            dist.reduce(loss, 0, op=dist.ReduceOp.SUM)
+            dist.reduce(loss_pos, 0, op=dist.ReduceOp.SUM)
+            dist.reduce(loss_neg, 0, op=dist.ReduceOp.SUM)
 
             if self.rank == 0:
                 with torch.no_grad():
                     self.writer.set_step(self.step)
-                    self.metrics.update('loss/neg_sample_energy', loss.item(), n=total_no_samples)
+                    self.metrics.update('loss/pos_sample_energy', loss_pos.item(), n=total_no_samples)
+                    self.metrics.update('loss/neg_sample_energy', loss_neg.item(), n=total_no_samples)
 
                     if sample_no > self.no_samples_SGLD_burn_in and sample_no % self.log_period_model_samples == 0:
-                        log_model_samples(self.writer, self.curr_state.detach())
+                        log_model_samples(self.writer, self.curr_state_pos.detach(), self.curr_state_neg.detach())
 
-        return v_sample.detach(), mean.detach()
+        return v_sample.detach(), mean_pos.detach(), mean_neg.detach()
 
     def _step_q_v(self, epoch, batch_idx, im_pair_idxs, fixed, moving, var_params_q_v):
         im_pair_idxs_local = im_pair_idxs
@@ -194,11 +198,11 @@ class Trainer(BaseTrainer):
         total_no_samples = self.world_size
 
         # implicit generation from the energy-based model
-        v_sample, im_fixed_sample = self.__generate_samples_from_model(im_pair_idxs, fixed, moving, var_params_q_v)
+        v_sample, pos_sample, neg_sample = self.__generate_samples_from_model(im_pair_idxs, fixed, moving, var_params_q_v)
 
         self._enable_gradients_model()
-        term1, _, _, _, _ = self.__calc_data_loss(fixed, moving, v_sample)
-        term2, _, _, _, _ = self.__calc_data_loss({'im': im_fixed_sample, 'mask': fixed['mask']}, moving, v_sample)
+        term1, _, _, _, _ = self.__calc_data_loss({'im': pos_sample, 'mask': fixed['mask']}, moving, v_sample)
+        term2, _, _, _, _ = self.__calc_data_loss({'im': neg_sample, 'mask': fixed['mask']}, moving, v_sample)
 
         loss_q_phi = term1.sum() - term2.sum()
         loss_q_phi /= n
@@ -367,5 +371,6 @@ class Trainer(BaseTrainer):
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
     
     def __init_optimizer_LD(self):
-        self.optimizer_LD = self.config.init_obj('optimizer_LD', torch.optim, [self.curr_state])
+        self.optimizer_LD_pos = self.config.init_obj('optimizer_LD', torch.optim, [self.curr_state_pos])
+        self.optimizer_LD_neg = self.config.init_obj('optimizer_LD', torch.optim, [self.curr_state_neg])
 
