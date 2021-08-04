@@ -21,16 +21,16 @@
 		"type": "RegLoss_L2",
 		"args": {
 			"diff_op": "GradientOperator",
-			"w_reg": 0.2
+			"w_reg": 2.8
 		}
 	},
 	"entropy_loss": {
 		"type": "EntropyMultivariateNormal"
 	},
 	"transformation_module": {
-		"type": "SVFFD_3D",
+		"type": "SVF_3D",
 		"args": {
-			"cps": [3, 3, 3]
+			"no_steps": 12
 		}
 	},
 	"registration_module": {
@@ -51,14 +51,14 @@
 	"optimizer_q_v": {
 		"type": "Adam",
 		"args": {
-			"lr": 0.02
+			"lr": 0.01
 		}
 	},
 	"data_loader": {
 		"type": "Learn2RegDataLoader",
 		"args": {
 			"im_pairs": "",
-			"dims": [192, 224, 160],
+			"dims": [96, 112, 60],
 			"sigma_v_init": 0.1,
 			"u_v_init": 0.1,
 			"batch_size": 1,
