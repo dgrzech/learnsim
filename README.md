@@ -1,8 +1,6 @@
 LearnSim
 ============
 
-A variational Bayesian method for similarity learning in atlas-based non-rigid image registration
-
 usage
 ------------
 to train the similarity metric:
