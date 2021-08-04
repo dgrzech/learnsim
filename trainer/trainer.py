@@ -84,7 +84,7 @@ class Trainer(BaseTrainer):
 
             curr_state_pos_noise, curr_state_neg_noise = SGLD.apply(self.curr_state_pos, sigma_pos, self.tau), SGLD.apply(self.curr_state_neg, sigma_neg, self.tau)
             z_curr_state_pos, z_curr_state_neg = self.model(curr_state_pos_noise, im_moving_warped, fixed['mask']), self.model(curr_state_neg_noise, im_moving_warped, fixed['mask'])
-            loss_pos, loss_neg = self.data_loss(z_curr_state_pos), -1.0 * self.data_loss(z_curr_state_neg)
+            loss_pos, loss_neg = self.data_loss(z_curr_state_pos) / total_no_samples, -1.0 * self.data_loss(z_curr_state_neg) / total_no_samples
 
             self.optimizer_LD_pos.zero_grad(set_to_none=True), self.optimizer_LD_neg.zero_grad(set_to_none=True)
             loss_pos.backward(), loss_neg.backward()
@@ -96,8 +96,8 @@ class Trainer(BaseTrainer):
             if self.rank == 0:
                 with torch.no_grad():
                     self.writer.set_step(self.step)
-                    self.metrics.update('loss/pos_sample_energy', loss_pos.item(), n=total_no_samples)
-                    self.metrics.update('loss/neg_sample_energy', loss_neg.item(), n=total_no_samples)
+                    self.metrics.update('loss/pos_sample_energy', loss_pos.item())
+                    self.metrics.update('loss/neg_sample_energy', loss_neg.item())
 
                     if sample_no > self.no_samples_SGLD_burn_in and sample_no % self.log_period_model_samples == 0:
                         log_model_samples(self.writer, self.curr_state_pos.detach(), self.curr_state_neg.detach())
