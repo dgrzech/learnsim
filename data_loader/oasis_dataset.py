@@ -3,6 +3,7 @@ from os import path
 
 import pandas as pd
 import torch
+import torch.nn.functional as F
 
 from base import BaseImageRegistrationDataset
 from utils import rescale_im
@@ -63,10 +64,14 @@ class OasisDataset(BaseImageRegistrationDataset):
 
     def _preprocess_im(self, im):
         im = self._preprocess(im)
+        im = F.interpolate(im, size=self.dims, mode='trilinear', align_corners=True)
+
         return rescale_im(im).squeeze(0)
 
     def _preprocess_mask_or_seg(self, mask_or_seg):
         mask_or_seg = self._preprocess(mask_or_seg)
+        mask_or_seg = F.interpolate(mask_or_seg, size=self.dims, mode='nearest')
+
         return mask_or_seg.squeeze(0)
 
     def __getitem__(self, idx):
