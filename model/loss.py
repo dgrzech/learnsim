@@ -122,7 +122,7 @@ class RegLoss_L2(RegLoss):
         self.w_reg = w_reg
 
     def _loss(self, y):
-        return 0.5 * self.w_reg * y
+        return 0.5 * self.w_reg * torch.sum(y, dim=0, keepdim=True)
 
 
 """
@@ -157,7 +157,8 @@ class EntropyMultivariateNormal(Entropy):
             u = kwargs['u']
 
             sigma = torch.exp(0.5 * log_var)
-            return 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2), dim=(1, 2, 3, 4))) + torch.sum(log_var, dim=(1, 2, 3, 4)))
+            val = 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2), dim=(1, 2, 3, 4))) + torch.sum(log_var, dim=(1, 2, 3, 4)))
+            return torch.sum(val, dim=0, keepdim=True)
         elif len(kwargs) == 4:
             sample = kwargs['sample']
 
@@ -172,4 +173,5 @@ class EntropyMultivariateNormal(Entropy):
 
             t1 = torch.sum(torch.pow(sample_n, 2), dim=(1, 2, 3, 4))
             t2 = torch.pow(torch.sum(sample_n * u_n, dim=(1, 2, 3, 4)), 2) / (1.0 + torch.sum(torch.pow(u_n, 2), dim=(1, 2, 3, 4)))
-            return 0.5 * (t1 - t2)
+            val = 0.5 * (t1 - t2)
+            return torch.sum(val, dim=0, keepdim=True)

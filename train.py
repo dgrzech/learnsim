@@ -35,7 +35,7 @@ def train(config):
 
 if __name__ == '__main__':
     # parse arguments
-    parser = argparse.ArgumentParser(description='LearnSim')
+    parser = argparse.ArgumentParser(description='learnsim')
 
     parser.add_argument('-c', '--config', default=None, type=str, help='config file path (default: None)')
     parser.add_argument('-l', '--local_rank', default=0, type=int)
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     config = ConfigParser.from_args(parser, timestamp=timestamp)
 
     # run training
-    world_size = config['no_GPUs']
+    world_size = torch.cuda.device_count()
     dist.init_process_group('nccl', init_method='env://', world_size=world_size, rank=rank)
 
     train(config)

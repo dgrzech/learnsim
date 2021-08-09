@@ -1,5 +1,5 @@
-from abc import abstractmethod, abstractproperty
-from os import path
+import os
+from abc import abstractmethod
 
 import SimpleITK as sitk
 import numpy as np
@@ -26,10 +26,6 @@ class BaseImageRegistrationDataset(Dataset):
 
     def __len__(self):
         return len(self.im_pairs.index)
-
-    @abstractproperty
-    def atlas_mode(self):
-        pass
 
     @property
     def dims_im(self):
@@ -66,13 +62,13 @@ class BaseImageRegistrationDataset(Dataset):
         return im_or_mask_or_seg.unsqueeze(0).unsqueeze(0), spacing
 
     def _get_im_path_from_ID(self, ID):
-        return path.join(path.join(self.data_path, ID), self.im_filename)
+        return os.path.join(os.path.join(self.data_path, ID), self.im_filename)
 
     def _get_mask_path_from_ID(self, ID):
-        return path.join(path.join(self.data_path, ID), self.mask_filename)
+        return os.path.join(os.path.join(self.data_path, ID), self.mask_filename)
 
     def _get_seg_path_from_ID(self, ID):
-        return path.join(path.join(self.data_path, ID), self.seg_filename)
+        return os.path.join(os.path.join(self.data_path, ID), self.seg_filename)
 
     def _get_im(self, ID):
         im_path = self._get_im_path_from_ID(ID)
@@ -133,9 +129,9 @@ class BaseImageRegistrationDataset(Dataset):
         return self.u_v_init + torch.zeros(self.dims_v)
 
     def _get_var_params(self, idx):
-        state_dict_path = path.join(self.save_paths['var_params'], f'var_params_{idx}.pt')
+        state_dict_path = os.path.join(self.save_paths['var_params_dir'], f'var_params_{idx}.pt')
 
-        if path.exists(state_dict_path):
+        if os.path.exists(state_dict_path):
             state_dict = torch.load(state_dict_path)
             return state_dict
 

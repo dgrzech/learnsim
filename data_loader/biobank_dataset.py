@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 from base import BaseImageRegistrationDataset
-from utils import rescale_im
+from utils import rescale_im_intensity
 from .biobank_structures_dict import biobank_structures_dict
 
 
@@ -26,10 +26,6 @@ class BiobankDataset(BaseImageRegistrationDataset):
         for k, v in self.fixed.items():
             v.unsqueeze_(0)
 
-    @property
-    def atlas_mode(self):
-        return True
-
     def _preprocess(self, im_or_mask_or_seg):
         im_or_mask_or_seg = torch.flipud(im_or_mask_or_seg.reshape(-1)).reshape(im_or_mask_or_seg.shape)
         im_or_mask_or_seg = F.pad(im_or_mask_or_seg, self.padding, mode='constant')
@@ -40,7 +36,7 @@ class BiobankDataset(BaseImageRegistrationDataset):
         im = self._preprocess(im)
         im = F.interpolate(im, size=self.dims, mode='trilinear', align_corners=True)
 
-        return rescale_im(im).squeeze(0)
+        return rescale_im_intensity(im).squeeze(0)
 
     def _preprocess_mask_or_seg(self, mask_or_seg):
         mask_or_seg = self._preprocess(mask_or_seg)

@@ -1,11 +1,12 @@
+import os
 from abc import abstractmethod
 
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from logger import TensorboardWriter
-from utils import MetricTracker, init_grid_im
+from logger import MetricTracker, TensorboardWriter
+from utils import init_grid_im
 
 
 class BaseTrainer:
@@ -13,27 +14,22 @@ class BaseTrainer:
     base class for all trainers
     """
 
-    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, test_only):
+    def __init__(self, config, data_loader, model, losses, transformation_module, registration_module, metrics, is_test=False):
         self.config = config
         self.logger = config.logger
-        self.test_only = test_only
+        self.is_test = is_test
+        self.save_dirs = data_loader.save_dirs
 
-        self.rank = dist.get_rank()
-        self.world_size = dist.get_world_size()
+        try:
+            self.rank, self.world_size = dist.get_rank(), dist.get_world_size()
+        except:
+            self.rank, self.world_size = 0, 1
+
         self.tqdm_disable = not self.rank == 0
 
         self.data_loader = data_loader
-        self.atlas_mode = data_loader.atlas_mode
-
-        if self.atlas_mode:
-            self.fixed = data_loader.fixed
-
-            for key in self.fixed:
-                self.fixed[key] = self.fixed[key].to(self.rank, memory_format=torch.channels_last_3d)
-
         self.im_spacing, self.structures_dict = self.data_loader.im_spacing, self.data_loader.structures_dict
         self.grid_im = init_grid_im(data_loader.dims).to(self.rank)
-        self.save_dirs = self.data_loader.save_dirs
 
         # model and losses
         self.model = model.to(self.rank, memory_format=torch.channels_last_3d)
@@ -55,16 +51,12 @@ class BaseTrainer:
         self.start_epoch, self.no_epochs = 1, int(cfg_trainer['no_epochs'])
         self.step, self.no_iters_q_v = 0, int(cfg_trainer['no_iters_q_v'])
         self.no_batches = len(self.data_loader)
-        self.no_samples_SGLD, self.no_samples_SGLD_burn_in = cfg_trainer['no_samples_SGLD'], cfg_trainer['no_samples_SGLD_burn_in']
-        self.tau = config['optimizer_LD']['args']['lr']
 
-        self.log_period = int(cfg_trainer['log_period'])  # NOTE (DG): unused
-        self.log_period_model_samples = int(cfg_trainer['log_period_model_samples'])
-        self.log_period_var_params = int(cfg_trainer['log_period_var_params']) if 'log_period_var_params' in cfg_trainer else None  # NOTE (DG): unused
-
-        if self.test_only:
+        if not self.is_test:
+            self.no_samples_SGLD, self.no_samples_SGLD_burn_in = cfg_trainer['no_samples_SGLD'], cfg_trainer['no_samples_SGLD_burn_in']
+            self.tau = config['optimizer_LD']['args']['lr']
+        else:
             self.no_samples_test = cfg_trainer['no_samples_test']
-            self.time_only = cfg_trainer['time_only'] if 'time_only' in cfg_trainer else False
 
         # resuming
         if config.resume is not None:
@@ -75,7 +67,7 @@ class BaseTrainer:
         self.metrics = MetricTracker(*metrics, writer=self.writer)
 
         self.writer.write_graph(self.model)
-        self.writer.write_hparams(config.config_str)
+        self.writer.write_hparams(config)
 
         self.logger.info(self.model)
 
@@ -103,24 +95,18 @@ class BaseTrainer:
         for epoch in range(self.start_epoch, self.no_epochs + 1):
             self._train_epoch(epoch)
 
-            if self.log_period_var_params is not None and epoch % self.log_period_var_params == 0:
-                if self.rank == 0:
-                    self.config.copy_var_params_to_backup_dirs(epoch)
-
-            dist.barrier()
+            try:
+                dist.barrier()
+            except:
+                pass
 
     def test(self):
         """
         full testing logic
         """
 
-        self.start_epoch = 1
-        self.no_epochs = 1
+        self.start_epoch, self.no_epochs = 1, 1
         self.train()
-
-        if self.time_only:
-            exit()
-
         self._test(no_samples=self.no_samples_test)
 
     @staticmethod
@@ -134,7 +120,7 @@ class BaseTrainer:
             var_params[param_key].requires_grad_(False)
 
     def _enable_gradients_model(self):
-        assert not self.test_only  # only to be used in training
+        assert not self.is_test  # only to be used in training
 
         self.model.enable_grads()
         self.model = DDP(self.model, device_ids=[self.rank], find_unused_parameters=True)
@@ -142,7 +128,7 @@ class BaseTrainer:
         dist.barrier()
 
     def _disable_gradients_model(self):
-        assert not self.test_only  # to be used only in training
+        assert not self.is_test  # to be used only in training
         
         self.model = self.model.module
         self.model.disable_grads()
@@ -151,9 +137,8 @@ class BaseTrainer:
     def _init_optimizers(self):
         self.optimizer_q_v = None
 
-        if not self.test_only:
-            self.optimizer_LD = None
-            self.optimizer_q_phi = None
+        if not self.is_test:
+            self.optimizer_LD_positive, self.optimizer_LD_negative, self.optimizer_q_phi = None, None, None
 
     def __init_optimizer_q_phi(self):
         trainable_params_q_phi = filter(lambda p: p.requires_grad, self.model.parameters())
@@ -166,7 +151,7 @@ class BaseTrainer:
 
     def _save_checkpoint(self, epoch):
         if self.rank == 0:
-            filename = str(self.config.save_dir / f'checkpoint_{epoch}.pt')
+            filename = os.path.join(self.config.checkpoints_dir, f'checkpoint_{epoch}.pt')
             self.logger.info(f'\nsaving checkpoint: {filename}..')
 
             state = {'epoch': epoch, 'step': self.step, 'config': self.config,
@@ -186,7 +171,7 @@ class BaseTrainer:
         resume_path = str(resume_path)
         checkpoint = torch.load(resume_path, map_location=map_location)
 
-        if self.test_only:
+        if self.is_test:
             self.model.load_state_dict(checkpoint['model'])
 
             if self.rank == 0:

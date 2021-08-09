@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from skimage.data import shepp_logan_phantom
 
 from logger import save_im_to_disk
-from utils import pixel_to_normalised_3D, rescale_im
+from utils import pixel_to_normalised_3D, rescale_im_intensity
 from .test_setup import *
 
 
@@ -116,7 +116,7 @@ class WarpingTestMethods(unittest.TestCase):
         im_moving_arr_padded = np.pad(im_moving_arr, padding, mode='minimum')
         im_moving_tensor = torch.from_numpy(im_moving_arr_padded).unsqueeze(0).unsqueeze(0).float()
         im_moving = F.interpolate(im_moving_tensor, size=dims, mode='trilinear', align_corners=True)
-        im_moving = rescale_im(im_moving).to(device)
+        im_moving = rescale_im_intensity(im_moving).to(device)
 
         im_moving_warped = registration_module(im_moving, transformation)
 

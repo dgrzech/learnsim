@@ -1,31 +1,11 @@
 from utils import Cubic_B_spline_FFD_3D, SVF_2D, SVF_3D, SVFFD_3D, \
-    calc_norm, pixel_to_normalised_2D, pixel_to_normalised_3D, plot_2D, plot_3D, separable_conv_3D
+    pixel_to_normalised_2D, pixel_to_normalised_3D, plot_2D, plot_3D, separable_conv_3D
 from .test_setup import *
 
 
 class UtilsTestMethods(unittest.TestCase):
     def setUp(self):
         print(self._testMethodName + '\n')
-
-    def test_norm(self):
-        v = torch.ones(dims_v, device=device)
-        v_norm = calc_norm(v)
-        val_true = math.sqrt(3) * torch.ones(size=(1, 1, *dims_v), device=device)
-
-        assert torch.allclose(v_norm, val_true, atol=atol)
-
-    def test_norm_batch(self):
-        v1 = torch.ones(dims_v, device=device)
-        v2 = 2.0 * torch.ones_like(v1)
-
-        v = torch.cat([v1, v2], dim=0)
-        v_norm = calc_norm(v)
-
-        v1_norm_true = math.sqrt(3) * torch.ones(1, 1, *dims_v, device=device)
-        v2_norm_true = math.sqrt(12) * torch.ones_like(v1_norm_true)
-
-        assert torch.allclose(v_norm[0], v1_norm_true, atol=atol)
-        assert torch.allclose(v_norm[1], v2_norm_true, atol=atol)
 
     # def test_scaling_and_squaring_2D_translation(self):
     #     transformation_module = SVF_2D(dims_2D)

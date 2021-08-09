@@ -1,13 +1,8 @@
-import json
 import logging
 import os
 import socket
 from functools import reduce
 from operator import getitem
-from pathlib import Path
-from shutil import copy, rmtree
-
-from torch import nn
 
 import data_loader.data_loaders as module_data
 import model.loss as model_loss
@@ -20,54 +15,41 @@ from utils import read_json, write_json
 
 class ConfigParser:
     def __init__(self, config, local_rank, modification=None, resume=None, test=False, timestamp=None):
-        self._config, self.config_str = _update_config(config, modification), ''
+        self._config = _update_config(config, modification)
+        self.resume, self.test = resume, test
         self.rank = local_rank
-        self.resume = resume
-        self.test = test
 
-        # set save_dir where the trained model and log will be saved
+        # set the directory where the trained model and log will be saved
         run_id = timestamp
 
         if self.test:
-            if resume is None:
-                run_id = f'test_baseline_{run_id}'
-            else:
-                run_id = f'test_learnt_{run_id}'
+            run_id = f'test_baseline_{run_id}' if resume is None else f'test_learnt_{run_id}'
 
         exper_name = self.config['name']
-        save_dir = Path(self.config['trainer']['save_dir'])
-        dir = save_dir / exper_name / run_id
+        save_dir = self.config['trainer']['save_dir']
 
-        self._dir = dir
-        self._log_dir = dir / 'log'
-        self._save_dir = dir / 'model' / 'checkpoints'
-        self._var_params_dir = dir / 'model' / 'var_params'
+        self._run_dir = os.path.join(save_dir, exper_name, run_id)
+        self._log_dir = os.path.join(self.run_dir, 'log')
+        self._checkpoints_dir = os.path.join(self.run_dir, 'model', 'checkpoints')
+        self._var_params_dir = os.path.join(self.run_dir, 'model', 'var_params')
 
-        self._im_dir = dir / 'images'
-        self._samples_dir = dir / 'samples'
+        self._im_dir = os.path.join(self.run_dir, 'images')
+        self._samples_dir = os.path.join(self.run_dir, 'samples')
 
         # make directories for saving checkpoints and logs
         if self.rank == 0:
-            exist_ok = run_id == ''
-
-            self.log_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.save_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.var_params_dir.mkdir(parents=True, exist_ok=exist_ok)
-
-            self.im_dir.mkdir(parents=True, exist_ok=exist_ok)
-            self.samples_dir.mkdir(parents=True, exist_ok=exist_ok)
+            for k, v in self.save_dirs.items():
+                os.makedirs(v)
 
         # logger
         logging.setLoggerClass(Logger)
+
         self._logger = logging.getLogger('default')
         self._logger.setLevel(logging.DEBUG)
 
         if self.rank == 0:
             setup_logging(self.log_dir)
-
-            # save updated config file to the checkpoint dir
-            self.config_str = json.dumps(self.config, indent=4, sort_keys=False).replace('\n', '')
-            write_json(self.config, dir / 'config.json')
+            write_json(self.config, os.path.join(self.run_dir, 'config.json'))  # save updated config file to the checkpoint run_dir
 
     @classmethod
     def from_args(cls, args, options='', timestamp=None, test=False):
@@ -77,14 +59,17 @@ class ConfigParser:
         if not isinstance(args, tuple):
             args = args.parse_args()
 
-        local_rank = args.local_rank
+        try:
+            local_rank = args.local_rank
+        except:
+            local_rank = 0
 
         if args.resume is not None:
-            resume = Path(args.resume)
+            resume = os.fspath(args.resume)
             cfg_fname = resume.parent.parent.parent / 'config.json'
         else:
             assert args.config is not None, "config file needs to be specified; add '-c config.json'"
-            cfg_fname, resume = Path(args.config), None
+            cfg_fname, resume = os.fspath(args.config), None
 
         config = read_json(cfg_fname)
         if args.config and resume:
@@ -94,25 +79,21 @@ class ConfigParser:
         return cls(config, local_rank, modification=modification, resume=resume, test=test, timestamp=timestamp)
 
     def init_data_loader(self):
-        cfg_transformation_module = self['transformation_module']['args']
+        cfg_data_loader = self['data_loader']['args']
+        cfg_data_loader['save_dirs'] = self.save_dirs
 
-        self['data_loader']['args']['save_dirs'] = self.save_dirs
-        self['data_loader']['args']['no_GPUs'] = self['no_GPUs']
-        self['data_loader']['args']['rank'] = self.rank
-        self['data_loader']['args']['cps'] = cfg_transformation_module['cps'] if 'cps' in cfg_transformation_module else None
+        try:
+            cfg_transformation_module = self['transformation_module']['args']
+            cfg_data_loader['cps'] = cfg_transformation_module['cps']
+        except:
+            pass
 
         data_loader = self.init_obj('data_loader', module_data)
-
-        self.atlas_mode = data_loader.atlas_mode
-        self.no_samples = data_loader.no_samples
-        self.structures_dict = data_loader.structures_dict
+        self.no_samples, self.structures_dict = data_loader.no_samples, data_loader.structures_dict
 
         return data_loader
 
     def init_model(self):
-        cfg_model = self['model']['args']
-        self['model']['args']['activation'] = getattr(nn, cfg_model['activation']['type'])(**dict(cfg_model['activation']['args'])) if 'activation' in cfg_model else nn.Identity
-
         return self.init_obj('model', model)
 
     def init_losses(self):
@@ -120,31 +101,25 @@ class ConfigParser:
                 'entropy': self.init_obj('entropy_loss', model_loss)}
 
     def init_metrics(self):
-        loss_terms = ['loss/data_term', 'loss/reg_term', 'loss/entropy_term',
-                      'loss/q_v', 'loss_pos_sample_energy', 'loss/neg_sample_energy', 'loss/q_phi']
+        loss_terms = ['loss/data_term', 'loss/regularisation_term', 'loss/negative_entropy_term',
+                      'loss/q_v', 'loss/positive_sample_energy', 'loss/negative_sample_energy', 'loss/q_phi']
 
         ASD = ['ASD/avg'] + [f'ASD/avg/{structure}' for structure in self.structures_dict]
         DSC = ['DSC/avg'] + [f'DSC/avg/{structure}' for structure in self.structures_dict]
-        no_non_diffeomorphic_voxels = ['no_non_diffeomorphic_voxels/avg']
-
-        if self.atlas_mode:
-            ASD.extend([f'ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
-            ASD.extend([f'ASD/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(self.no_samples)])
-
-            DSC.extend([f'DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
-            DSC.extend([f'DSC/im_pair_{im_pair_idx}/avg' for im_pair_idx in range(self.no_samples)])
-
-            no_non_diffeomorphic_voxels = [f'no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(self.no_samples)]
+        no_non_diffeomorphic_voxels = ['non_diffeomorphic_voxels/avg']
 
         if self.test:
             ASD.extend([f'test/ASD/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
             DSC.extend([f'test/DSC/im_pair_{im_pair_idx}/{structure}' for structure in self.structures_dict for im_pair_idx in range(self.no_samples)])
-            no_non_diffeomorphic_voxels.extend([f'test/no_non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(self.no_samples)])
+            no_non_diffeomorphic_voxels.extend([f'test/non_diffeomorphic_voxels/im_pair_{im_pair_idx}' for im_pair_idx in range(self.no_samples)])
 
         return loss_terms + ASD + DSC + no_non_diffeomorphic_voxels
 
     def init_transformation_and_registration_modules(self):
-        self['transformation_module']['args']['dims'] = self['data_loader']['args']['dims']
+        cfg_transformation = self['transformation_module']['args']
+        cfg_data_loader = self['data_loader']['args']
+
+        cfg_transformation['dims'] = cfg_data_loader['dims']
 
         return self.init_obj('transformation_module', transformation), self.init_obj('registration_module', registration)
 
@@ -165,50 +140,6 @@ class ConfigParser:
 
         return getattr(module, module_name)(*args, **module_args)
 
-    def copy_var_params_to_backup_dirs(self, epoch):
-        epoch_str = 'epoch_' + str(epoch).zfill(4)
-
-        var_params_backup_path = self.var_params_dir / epoch_str
-        var_params_backup_path.mkdir(parents=True, exist_ok=True)
-
-        for f in os.listdir(self.var_params_dir):
-            f_path = os.path.join(self.var_params_dir, f)
-
-            if os.path.isfile(f_path):
-                copy(f_path, var_params_backup_path)
-
-    def copy_var_params_from_backup_dirs(self, resume_epoch):
-        var_params_backup_dirs = [f for f in os.listdir(self.var_params_dir)
-                                  if not os.path.isfile(os.path.join(self.var_params_dir, f))]
-
-        def find_last_backup_epoch_dirs():
-            for epoch in reversed(range(1, resume_epoch + 1)):
-                resume_epoch_str = 'epoch_' + str(epoch).zfill(4)
-
-                if resume_epoch_str in var_params_backup_dirs:
-                    return resume_epoch_str
-
-            raise ValueError
-
-        last_backup_epoch = find_last_backup_epoch_dirs()
-
-        def copy_backup_to_current_dir():
-            var_params_backup_dir = os.path.join(self.var_params_dir, last_backup_epoch)
-
-            for f in os.listdir(var_params_backup_dir):
-                f_path = os.path.join(var_params_backup_dir, f)
-                copy(f_path, self.var_params_dir)
-
-        copy_backup_to_current_dir()
-
-    def remove_backup_dirs(self):
-        var_params_backup_dirs = [f for f in os.listdir(self.var_params_dir)
-                                  if not os.path.isfile(os.path.join(self.var_params_dir, f))]
-
-        for f in var_params_backup_dirs:
-            f_path = os.path.join(self.var_params_dir, f)
-            rmtree(f_path)
-
     def __getitem__(self, name):
         # access items like in a dict
         return self.config[name]
@@ -223,16 +154,16 @@ class ConfigParser:
         return self._config
 
     @property
-    def dir(self):
-        return self._dir
+    def run_dir(self):
+        return self._run_dir
 
     @property
     def log_dir(self):
         return self._log_dir
 
     @property
-    def save_dir(self):
-        return self._save_dir
+    def checkpoints_dir(self):
+        return self._checkpoints_dir
 
     @property
     def var_params_dir(self):
@@ -248,8 +179,9 @@ class ConfigParser:
 
     @property
     def save_dirs(self):
-        return {'dir': self.dir, 'var_params': self.var_params_dir,
-                'images': self.im_dir, 'samples': self.samples_dir}
+        return {'run_dir' : self.run_dir, 'log_dir': self.log_dir,
+                'checkpoints_dir': self.checkpoints_dir, 'var_params_dir': self.var_params_dir,
+                'images_dir': self.im_dir, 'samples_dir': self.samples_dir}
 
 
 def _update_config(config, modification):

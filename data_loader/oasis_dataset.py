@@ -1,12 +1,12 @@
 import itertools
-from os import path
+import os
 
 import pandas as pd
 import torch
 import torch.nn.functional as F
 
 from base import BaseImageRegistrationDataset
-from utils import rescale_im
+from utils import rescale_im_intensity
 from .oasis_structures_dicts import structures_dict_35
 
 
@@ -24,10 +24,6 @@ class OasisDataset(BaseImageRegistrationDataset):
         super().__init__(data_path, save_paths, im_pairs, im_filename, mask_filename, seg_filename,
                          dims, mu_v_init=mu_v_init, sigma_v_init=sigma_v_init, u_v_init=u_v_init,
                          cps=cps, structures_dict=structures_dict)
-
-    @property
-    def atlas_mode(self):
-        return False
 
     @staticmethod
     def _get_im_pairs(im_pairs, save_paths):
@@ -47,16 +43,16 @@ class OasisDataset(BaseImageRegistrationDataset):
                     train_pairs.append({'fixed': IDs[0], 'moving': IDs[1]})
 
             train_pairs = pd.DataFrame(train_pairs)
-            im_pairs = path.join(save_paths['dir'], 'train_pairs.csv')
+            im_pairs = os.path.join(save_paths['run_dir'], 'train_pairs.csv')
             train_pairs.to_csv(im_pairs, header=False, index=False)
 
         return im_pairs
 
     def _get_im_path_from_ID(self, subject_idx):
-        return path.join(path.join(self.data_path, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1'), self.im_filename)
+        return os.path.join(self.data_path, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1', self.im_filename)
 
     def _get_seg_path_from_ID(self, subject_idx):
-        return path.join(path.join(self.data_path, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1'), self.seg_filename)
+        return os.path.join(self.data_path, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1', self.seg_filename)
 
     def _preprocess(self, im_or_mask_or_seg):
         im_or_mask_or_seg = torch.rot90(im_or_mask_or_seg, dims=(3, 2))
@@ -66,7 +62,7 @@ class OasisDataset(BaseImageRegistrationDataset):
         im = self._preprocess(im)
         im = F.interpolate(im, size=self.dims, mode='trilinear', align_corners=True)
 
-        return rescale_im(im).squeeze(0)
+        return rescale_im_intensity(im).squeeze(0)
 
     def _preprocess_mask_or_seg(self, mask_or_seg):
         mask_or_seg = self._preprocess(mask_or_seg)
