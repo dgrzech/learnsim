@@ -1,24 +1,13 @@
 import json
-import operator
 from collections import OrderedDict
-from itertools import repeat
 from pathlib import Path
 
 import SimpleITK as sitk
 import math
 import numpy as np
-import pandas as pd
 import torch
-import torch.distributed as dist
 import torch.nn.functional as F
 from torch import nn
-from torch.utils.data import Dataset, DistributedSampler
-
-
-def ensure_dir(dirname):
-    dirname = Path(dirname)
-    if not dirname.is_dir():
-        dirname.mkdir(parents=True, exist_ok=False)
 
 
 def read_json(fname):
@@ -31,15 +20,6 @@ def write_json(content, fname):
     fname = Path(fname)
     with fname.open('wt') as handle:
         json.dump(content, handle, indent=4, sort_keys=False)
-
-
-def inf_loop(data_loader):
-    """
-    wrapper function for endless data loader
-    """
-
-    for loader in repeat(data_loader):
-        yield from loader
 
 
 def add_noise_uniform_field(field, alpha):
@@ -184,24 +164,11 @@ def calc_metrics(im_pair_idxs, seg_fixed, seg_moving, structures_dict, spacing, 
 def calc_no_non_diffeomorphic_voxels(transformation, diff_op):
     nabla = diff_op(transformation, transformation=True)
     log_det_J_transformation = torch.log(calc_det_J(nabla))
-    return torch.sum(torch.isnan(log_det_J_transformation), dim=(1, 2, 3)), log_det_J_transformation
-
-
-def calc_norm(field):
-    """
-    calculate the voxel-wise norm of vectors in a batch of 3D fields
-    """
-
-    norms = torch.empty(size=(field.shape[0], 1, field.shape[2], field.shape[3], field.shape[4]), device=field.device)
-
-    for batch_idx in range(field.shape[0]):
-        norms[batch_idx, ...] = torch.norm(field[batch_idx], p=2, dim=0)
-
-    return norms
+    return torch.sum(torch.isnan(log_det_J_transformation), dim=(1, 2, 3), dtype=torch.float), log_det_J_transformation
 
 
 def get_log_path_from_run_ID(save_path, run_ID):
-    return save_path + '/' + run_ID + '/log'
+    return f'{save_path}/{run_ID}/log'
 
 
 def get_module_attr(module, name):
@@ -212,7 +179,31 @@ def get_module_attr(module, name):
 
 
 def get_samples_path_from_run_ID(save_path, run_ID):
-    return save_path + '/' + run_ID + '/samples'
+    return f'{save_path}/{run_ID}/samples'
+
+
+def init_grid_im(size, spacing=2):
+    if len(size) == 2:
+        im = torch.zeros([1, 1, *size], dtype=torch.float)
+        im[:, :, ::spacing, :] = 1
+        im[:, :, :, ::spacing] = 1
+
+        return im
+    elif len(size) == 3:
+        im = torch.zeros([1, 3, *size], dtype=torch.float)  # NOTE (DG): stack in the channel dimension
+
+        im[:, 0, :, ::spacing, :] = 1
+        im[:, 0, :, :, ::spacing] = 1
+
+        im[:, 1, ::spacing, :, :] = 1
+        im[:, 1, :, :, ::spacing] = 1
+
+        im[:, 2, ::spacing, :, :] = 1
+        im[:, 2, :, ::spacing, :] = 1
+
+        return im
+
+    raise NotImplementedError
 
 
 def init_identity_grid_2D(dims):
@@ -244,30 +235,6 @@ def init_identity_grid_3D(dims):
     return torch.stack([grid_z, grid_y, grid_x]).unsqueeze(0).float()
 
 
-def init_grid_im(size, spacing=2):
-    if len(size) == 2:
-        im = torch.zeros([1, 1, *size], dtype=torch.float)
-        im[:, :, ::spacing, :] = 1
-        im[:, :, :, ::spacing] = 1
-
-        return im
-    elif len(size) == 3:
-        im = torch.zeros([1, 3, *size], dtype=torch.float)  # NOTE (DG): stack in the channel dimension
-
-        im[:, 0, :, ::spacing, :] = 1
-        im[:, 0, :, :, ::spacing] = 1
-
-        im[:, 1, ::spacing, :, :] = 1
-        im[:, 1, :, :, ::spacing] = 1
-
-        im[:, 2, ::spacing, :, :] = 1
-        im[:, 2, :, ::spacing, :] = 1
-
-        return im
-
-    raise NotImplementedError
-
-
 def max_field_update(field_old, field_new):
     """
     calculate the largest voxel-wise update to a vector field in terms of the L2 norm
@@ -278,21 +245,11 @@ def max_field_update(field_old, field_new):
     :return: voxel index and value of the largest update
     """
 
-    norm_old = calc_norm(field_old)
-    norm_new = calc_norm(field_new)
+    norm_old = torch.norm(field_old, dim=1, keepdim=True, p=2)
+    norm_new = torch.norm(field_new, dim=1, keepdim=True, p=2)
 
     diff = torch.abs(norm_new - norm_old)
     return torch.max(diff), torch.argmax(diff)
-
-
-def pad_to_square(im_arr):
-    sz = np.max(im_arr.shape)
-    H, W = im_arr.shape[0], im_arr.shape[1]
-
-    a, b = (sz - H) // 2, (sz - W) // 2
-    aa, bb = sz - a - H, sz - b - W
-
-    return np.pad(im_arr, pad_width=((a, aa), (b, bb)), mode='minimum')
 
 
 def pixel_to_normalised_2D(px_idx_x, px_idx_y, dim_x, dim_y):
@@ -318,7 +275,7 @@ def pixel_to_normalised_3D(px_idx_x, px_idx_y, px_idx_z, dim_x, dim_y, dim_z):
     return x, y, z
 
 
-def rescale_im(im, range_min=0.0, range_max=1.0):
+def rescale_im_intensity(im, range_min=0.0, range_max=1.0):
     """
     rescale the intensity of image pixels/voxels to a given range
     """
@@ -341,12 +298,10 @@ def separable_conv_3D(field, *args):
     ndim = field_out.shape[1]
 
     if len(args) == 2:
-        kernel = args[0]
-        padding_sz = args[1]
+        kernel, padding_sz = args[0], args[1]
+        padding_3D = (padding_sz, padding_sz, 0, 0, 0, 0)
 
         N, C, D, H, W = field_out.shape
-
-        padding_3D = (padding_sz, padding_sz, 0, 0, 0, 0)
 
         field_out = F.pad(field_out, padding_3D, mode='replicate')
         field_out = field_out.view(N, C, -1)
@@ -385,7 +340,7 @@ def separable_conv_3D(field, *args):
     return field_out
 
 
-def standardise_im(im):
+def standardise_im_intensity(im):
     """
     standardise image to zero mean and unit variance
     """
@@ -420,169 +375,3 @@ def transform_coordinates_inv(field):
         field_out[:, idx] = field_out[:, idx] * float(dims[idx] - 1) / 2.0
 
     return field_out
-
-
-class MetricTracker:
-    def __init__(self, *keys, writer=None):
-        self._data = pd.DataFrame(index=keys, columns=['value'])
-        self.rank = dist.get_rank()
-        self.writer = writer
-        self.reset()
-
-    def reset(self):
-        if self.rank == 0:
-            for col in self._data.columns:
-                self._data[col].values[:] = 0
-
-    def update(self, key, value, n=1):
-        if self.rank == 0:
-            if self.writer is not None:
-                self.writer.add_scalar(key, value / n)
-
-            self._data.value[key] = value
-
-    def update_ASD_and_DSC(self, im_pair_idxs, structures_dict, ASD_list, DSC_list, atlas_mode=False, test=False):
-        if self.rank == 0:
-            ASD = torch.cat(ASD_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
-            DSC = torch.cat(DSC_list, dim=0).view(len(im_pair_idxs), len(structures_dict)).cpu().numpy()
-
-            if atlas_mode:
-                for loop_idx, im_pair_idx in enumerate(im_pair_idxs):
-                    ASDs_im_pair = ASD[loop_idx]
-                    DSCs_im_pair = DSC[loop_idx]
-
-                    for structure_idx, structure in enumerate(structures_dict):
-                        name_ASD = f'ASD/im_pair_{im_pair_idx}/{structure}'
-                        name_DSC = f'DSC/im_pair_{im_pair_idx}/{structure}'
-
-                        if test:
-                            name_ASD = f'test/{name_ASD}'
-                            name_DSC = f'test/{name_DSC}'
-
-                        self.update(name_ASD, ASDs_im_pair[structure_idx])
-                        self.update(name_DSC, DSCs_im_pair[structure_idx])
-
-                    self.update(f'ASD/im_pair_{im_pair_idx}/avg', ASDs_im_pair.mean())
-                    self.update(f'DSC/im_pair_{im_pair_idx}/avg', DSCs_im_pair.mean())
-            else:
-                ASD_avg = np.mean(ASD, axis=0)
-                DSC_avg = np.mean(DSC, axis=0)
-
-                for structure_idx, structure in enumerate(structures_dict):
-                    ASD_structure = ASD_avg[structure_idx]
-                    DSC_structure = DSC_avg[structure_idx]
-
-                    name_ASD = f'ASD/avg/{structure}'
-                    name_DSC = f'DSC/avg/{structure}'
-
-                    self.update(name_ASD, ASD_structure)
-                    self.update(name_DSC, DSC_structure)
-
-                self.update('ASD/avg', ASD_avg.mean())
-                self.update('DSC/avg', DSC_avg.mean())
-
-    def update_avg_metrics(self, structures_dict):
-        if self.rank == 0:
-            idxs_no_non_diffeomorphic_voxels = [idx for idx in self._data.index if 'no_non_diffeomorphic_voxels' in idx and 'avg' not in idx]
-            avg_value_no_non_diffeomorphic_voxels = self._data.value[idxs_no_non_diffeomorphic_voxels].mean()
-            self.update('no_non_diffeomorphic_voxels/avg', avg_value_no_non_diffeomorphic_voxels)
-
-            for structure_idx, structure in enumerate(structures_dict):
-                idxs_ASD = [idx for idx in self._data.index if 'ASD' in idx and 'avg' not in idx and structure in idx]
-                idxs_DSC = [idx for idx in self._data.index if 'DSC' in idx and 'avg' not in idx and structure in idx]
-                
-                avg_value_ASD_structure = self._data.value[idxs_ASD].mean()
-                avg_value_DSC_structure = self._data.value[idxs_DSC].mean()
-                
-                self.update(f'ASD/avg/{structure}', avg_value_ASD_structure)
-                self.update(f'DSC/avg/{structure}', avg_value_DSC_structure)
-
-            idxs_ASD = [idx for idx in self._data.index if 'im_pair' in idx and 'ASD' in idx and 'avg' in idx]
-            idxs_DSC = [idx for idx in self._data.index if 'im_pair' in idx and 'DSC' in idx and 'avg' in idx]
-            
-            avg_value_ASD = self._data.value[idxs_ASD].mean()
-            avg_value_DSC = self._data.value[idxs_DSC].mean()
-
-            self.update('ASD/avg', avg_value_ASD)
-            self.update('DSC/avg', avg_value_DSC)
-
-
-class DatasetFromSampler(Dataset):
-    """Dataset to create indexes from `Sampler`.
-
-    Args:
-        sampler: PyTorch sampler
-
-    https://github.com/catalyst-team/catalyst/blob/ea3fadbaa6034dabeefbbb53ab8c310186f6e5d0/catalyst/data/dataset/torch.py#L13
-    """
-
-    def __init__(self, sampler):
-        """Initialisation for DatasetFromSampler."""
-
-        self.sampler = sampler
-        self.sampler_list = None
-
-    def __getitem__(self, index: int):
-        """Gets element of the dataset.
-
-        Args:
-            index: index of the element in the dataset
-        Returns:
-            Single element by index
-        """
-
-        if self.sampler_list is None:
-            self.sampler_list = list(self.sampler)
-        return self.sampler_list[index]
-
-    def __len__(self):
-        """
-        Returns:
-            int: length of the dataset
-        """
-
-        return len(self.sampler)
-
-
-class DistributedSamplerWrapper(DistributedSampler):
-    """
-    Wrapper over `Sampler` for distributed training.
-    Allows you to use any sampler in distributed mode.
-    It is especially useful in conjunction with
-    `torch.nn.parallel.DistributedDataParallel`. In such case, each
-    process can pass a DistributedSamplerWrapper instance as a DataLoader
-    sampler, and load a subset of subsampled data of the original dataset
-    that is exclusive to it.
-    
-    .. note::
-            Sampler is assumed to be of constant size.
-
-    https://github.com/catalyst-team/catalyst/blob/ea3fadbaa6034dabeefbbb53ab8c310186f6e5d0/catalyst/data/sampler.py#L522
-    """
-
-    def __init__(self, sampler, num_replicas=None, rank=None, shuffle=True):
-        """
-        Args:
-            sampler: Sampler used for subsampling
-
-            num_replicas (int, optional): Number of processes participating in
-              distributed training
-
-            rank (int, optional): Rank of the current process
-              within ``num_replicas``
-
-            shuffle (bool, optional): If true (default),
-              sampler will shuffle the indices
-        """
-
-        super(DistributedSamplerWrapper, self).__init__(DatasetFromSampler(sampler), num_replicas=num_replicas, rank=rank, shuffle=shuffle)
-        self.sampler = sampler
-
-    def __iter__(self):
-        self.dataset = DatasetFromSampler(self.sampler)
-
-        indexes_of_indexes = super().__iter__()
-        subsampler_indexes = self.dataset
-
-        return iter(operator.itemgetter(*indexes_of_indexes)(subsampler_indexes))
-
