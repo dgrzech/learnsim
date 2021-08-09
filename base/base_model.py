@@ -7,11 +7,11 @@ import torch.nn.functional as F
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, s=1, activation=nn.Identity()):
+    def __init__(self, in_channels, out_channels, s=1, activation_fn=nn.Identity()):
         super().__init__()
 
         self.main = nn.Conv3d(in_channels, out_channels, kernel_size=2*s+1, stride=1, padding=s, padding_mode='replicate')
-        self.activation = activation
+        self.activation_fn = activation_fn
 
         with torch.no_grad():
             self.main.weight.multiply_(1e-7)
@@ -22,18 +22,18 @@ class ConvBlock(nn.Module):
 
     def forward(self, x):
         out = self.main(x)
-        return self.activation(out)
+        return self.activation_fn(out)
 
 
 class UNetEncoder(nn.Module):
-    def __init__(self, no_features, s=1, activation=nn.Identity()):
+    def __init__(self, no_features, s=1, activation_fn=nn.Identity()):
         super(UNetEncoder, self).__init__()
         self.enc = nn.ModuleList()
         self.no_features = no_features
         prev_no_features = 1
 
         for no_features in self.no_features:
-            self.enc.append(ConvBlock(prev_no_features, no_features, s=s, activation=activation))
+            self.enc.append(ConvBlock(prev_no_features, no_features, s=s, activation_fn=activation_fn))
             prev_no_features = no_features
 
     def forward(self, im):
@@ -50,12 +50,19 @@ class BaseModel(nn.Module):
     base class for all models
     """
 
-    def __init__(self, learnable, no_features=None, activation=nn.Identity()):
+    def __init__(self, learnable=True, no_features=None, activation_fn=nn.Identity()):
         super(BaseModel, self).__init__()
         self.learnable = learnable
 
         if self.learnable:
-            self.enc = UNetEncoder(no_features, activation=activation)
+            self.no_features = no_features
+
+            try:
+                activation_fn = getattr(nn, activation_fn['type'])(**activation_fn['args'])
+            except:
+                pass
+
+            self.enc = UNetEncoder(no_features, activation_fn=activation_fn)
             self.agg = nn.Conv1d(no_features[-1], 1, kernel_size=1, stride=1, bias=False)
 
             with torch.no_grad():

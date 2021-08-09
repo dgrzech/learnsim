@@ -1,6 +1,5 @@
 {
 	"name": "learn2reg",
-	"no_GPUs": 1,
 	"model": {
 		"type": "CNN_SSD",
 		"args": {
@@ -63,8 +62,6 @@
 		"no_samples_SGLD": 2500,
 		"no_samples_SGLD_burn_in": 2000,
 		"no_samples_test": 5,
-		"log_period": 512,
-		"log_period_model_samples": 500,
 		"save_dir": "saved/"
 	}
 }

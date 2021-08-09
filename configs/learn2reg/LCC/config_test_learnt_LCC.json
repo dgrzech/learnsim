@@ -1,13 +1,12 @@
 {
 	"name": "learn2reg",
-	"no_GPUs": 1,
 	"model": {
 		"type": "CNN_LCC",
 		"args": {
 			"learnable": true,
 			"s": 1,
 			"no_features": [4, 8, 8],
-			"activation": {
+			"activation_fn": {
 				"type": "LeakyReLU",
 				"args": {
 					"negative_slope": 0.2
@@ -83,8 +82,6 @@
 		"no_samples_SGLD": 2000,
 		"no_samples_SGLD_burn_in": 1000,
 		"no_samples_test": 5,
-		"log_period": 512,
-		"log_period_model_samples": 100,
 		"save_dir": "saved/"
 	}
 }
