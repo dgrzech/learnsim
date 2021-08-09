@@ -12,5 +12,5 @@ CUDA_VISIBLE_DEVICES=<device_ids> python -m torch.distributed.launch --nproc_per
 
 to test:
 ```
-CUDA_VISIBLE_DEVICES=<device_id> python -m torch.distributed.launch --nproc_per_node=1 test.py -c path/to/config.json -r path/to/checkpoint.pt
+CUDA_VISIBLE_DEVICES=<device_id> python test.py -c path/to/config.json -r path/to/checkpoint.pt
 ```
