@@ -16,5 +16,7 @@ def sample_q_v(var_params_q_v, no_samples=1):
 
     if no_samples == 1:
         return mu_v + eps * sigma_v + x * u_v
+    elif no_samples == 2:
+        return mu_v + (eps * sigma_v + x * u_v), mu_v - (eps * sigma_v + x * u_v)
 
-    return mu_v + (eps * sigma_v + x * u_v), mu_v - (eps * sigma_v + x * u_v)
+    raise NotImplementedError
