@@ -147,13 +147,10 @@ class Trainer(BaseTrainer):
             if not self.is_test:
                 batch_size = moving['im'].shape[0]
                 grid_im = self.grid_im.clone().repeat(batch_size, 1, 1, 1, 1)
-                grid_im = self.registration_module(grid_im1, output_dict['sample_transformation'])
-
+                grid_im = self.registration_module(grid_im, output_dict['sample_transformation'])
                 var_params_q_v_smoothed = self.__get_var_params_smoothed(var_params_q_v)
-                output_dict = {'fixed': fixed['im'], 'moving': moving['im'], **var_params_q_v_smoothed,
-                               **output_dict, 'grid': grid_im}
-                del output_dict['sample_transformation']
 
+                output_dict = {**output_dict, **var_params_q_v_smoothed, 'fixed': fixed['im'], 'moving': moving['im'], 'sample_transformation': grid_im}
                 log_images(self.writer, output_dict)
 
     def _step_q_phi(self, im_pair_idxs, fixed, moving, var_params_q_v):

@@ -23,7 +23,7 @@ def get_im_or_field_mid_slices(im_or_field):
         return [im_or_field[:, :, mid_idxs[0]],
                 im_or_field[:, mid_idxs[1], :],
                 im_or_field[mid_idxs[2], :, :]]
-    elif len(im_or_field.shape) == 3:
+    elif len(im_or_field.shape) == 4:
         return [im_or_field[:, :, :, mid_idxs[0]],
                 im_or_field[:, :, mid_idxs[1], :],
                 im_or_field[:, mid_idxs[2], :, :]]
@@ -58,11 +58,14 @@ def log_images(writer, output_dict):
         body_axes = ['sagittal', 'coronal', 'axial']
 
         for im_name, im in output_dict.items():
-            if im.size(1) == 3:
+            if im.size(1) == 3 and 'sample_transformation' not in im_name:
                 output_dict[im_name] = torch.norm(im, p=2, dim=1, keepdim=True)
 
-        output_dict_slices = {im_name: get_im_or_field_mid_slices(im) for im_name, im in output_dict.items()}
+        output_dict = {im_name: get_im_or_field_mid_slices(im) for im_name, im in output_dict.items()}
+        output_dict['sample_transformation'] = [output_dict['sample_transformation'][0][:, 2:3, ...],
+                                                output_dict['sample_transformation'][1][:, 1:2, ...],
+                                                output_dict['sample_transformation'][2][:, 0:1, ...]]
 
-        for slice_idx, body_axis_name in enumerate(body_axes):
-            for im_name in output_dict_slices:
-                writer.add_images(f'{im_name}/{body_axis_name}', rescale_im_intensity(output_dict_slices[im_name][slice_idx]))
+        for im_name in output_dict:
+            for slice_idx, body_axis_name in enumerate(body_axes):
+                writer.add_images(f'{im_name}/{body_axis_name}', rescale_im_intensity(output_dict[im_name][slice_idx]))
