@@ -241,18 +241,28 @@ def init_identity_grid_3D(dims):
     return torch.stack([grid_z, grid_y, grid_x]).unsqueeze(0).float()
 
 
-def make_grid_im(size, spacing=4):
-    im = torch.zeros([1, 1, *size], dtype=torch.float)
-
+def init_grid_im(size, spacing=2):
     if len(size) == 2:
+        im = torch.zeros([1, 1, *size], dtype=torch.float)
         im[:, :, ::spacing, :] = 1
         im[:, :, :, ::spacing] = 1
+
+        return im
     elif len(size) == 3:
-        # im[:, :, ::spacing, :, :] = 1
-        im[:, :, :, ::spacing, :] = 1
-        im[:, :, :, :, ::spacing] = 1
-    
-    return im
+        im = torch.zeros([1, 3, *size], dtype=torch.float)  # NOTE (DG): stack in the channel dimension
+
+        im[:, 0, :, ::spacing, :] = 1
+        im[:, 0, :, :, ::spacing] = 1
+
+        im[:, 1, ::spacing, :, :] = 1
+        im[:, 1, :, :, ::spacing] = 1
+
+        im[:, 2, ::spacing, :, :] = 1
+        im[:, 2, :, ::spacing, :] = 1
+
+        return im
+
+    raise NotImplementedError
 
 
 def max_field_update(field_old, field_new):
