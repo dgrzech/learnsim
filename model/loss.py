@@ -5,6 +5,7 @@ from torch import nn
 
 from utils import DifferentialOperator
 
+
 """
 data loss
 """
@@ -32,7 +33,7 @@ class LCC(DataLoss):
         super(LCC, self).__init__()
 
     def forward(self, z):
-        return -1.0 * torch.sum(z, dim=0, keepdim=True)
+        return -1.0 * z.sum(dim=0, keepdim=True)
 
 
 class SSD(DataLoss):
@@ -44,7 +45,7 @@ class SSD(DataLoss):
         super(SSD, self).__init__()
 
     def forward(self, z):
-        return 0.5 * torch.sum(z, dim=0, keepdim=True)
+        return 0.5 * z.sum(dim=0, keepdim=True)
 
 
 """
@@ -85,7 +86,8 @@ class RegLoss(nn.Module, ABC):
         """
 
         D_input = self.diff_op(input)
-        y = torch.sum(D_input ** 2, dim=(1, 2, 3, 4, 5))  # "chi-square" variable / energy
+        y = D_input ** 2
+        y = y.mean(dim=(1, 2, 3, 4, 5))  # "chi-square" variable / energy
 
         return self._loss(y)
 
@@ -122,7 +124,7 @@ class RegLoss_L2(RegLoss):
         self.w_reg = w_reg
 
     def _loss(self, y):
-        return 0.5 * self.w_reg * torch.sum(y, dim=0, keepdim=True)
+        return 0.5 * self.w_reg * y.sum(dim=0, keepdim=True)
 
 
 """
@@ -153,25 +155,27 @@ class EntropyMultivariateNormal(Entropy):
 
     def forward(self, **kwargs):
         if len(kwargs) == 2:
-            log_var = kwargs['log_var']
-            u = kwargs['u']
-
+            log_var, u = kwargs['log_var'], kwargs['u']
             sigma = torch.exp(0.5 * log_var)
+            no_voxels = torch.numel(sigma[1:])
+
             val = 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2), dim=(1, 2, 3, 4))) + torch.sum(log_var, dim=(1, 2, 3, 4)))
-            return torch.sum(val, dim=0, keepdim=True)
+            val_mean = val / no_voxels
+
+            return val_mean.sum(dim=0, keepdim=True)
         elif len(kwargs) == 4:
-            sample = kwargs['sample']
-
-            mu = kwargs['mu']
-            log_var = kwargs['log_var']
-            u = kwargs['u']
-
+            sample, mu, log_var, u = kwargs['sample'], kwargs['mu'], kwargs['log_var'], kwargs['u']
             sigma = torch.exp(0.5 * log_var)
+            no_voxels = torch.numel(sigma[1:])
 
-            sample_n = (sample - mu) / sigma
-            u_n = u / sigma
+            sample_n, u_n = (sample - mu) / sigma, u / sigma
 
             t1 = torch.sum(torch.pow(sample_n, 2), dim=(1, 2, 3, 4))
             t2 = torch.pow(torch.sum(sample_n * u_n, dim=(1, 2, 3, 4)), 2) / (1.0 + torch.sum(torch.pow(u_n, 2), dim=(1, 2, 3, 4)))
+
             val = 0.5 * (t1 - t2)
-            return torch.sum(val, dim=0, keepdim=True)
+            val_mean = val / no_voxels
+
+            return val_mean.sum(dim=0, keepdim=True)
+
+        raise NotImplementedError

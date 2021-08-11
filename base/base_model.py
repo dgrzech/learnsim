@@ -107,11 +107,11 @@ class BaseModel(nn.Module):
 
         :return: Model output
         """
-        
+
         z_fixed, z_moving = self.feature_extraction(im_fixed, im_moving)
         z = self.encode(z_fixed, z_moving)
 
-        return z[mask]
+        return z.sum(dim=(1, 2, 3, 4)) / mask.sum(dim=(1, 2, 3, 4))
 
     def __str__(self):
         """
