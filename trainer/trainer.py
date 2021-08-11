@@ -117,9 +117,11 @@ class Trainer(BaseTrainer):
 
         # tensorboard cont.
         with torch.no_grad():
-            grid_im1 = self.registration_module(self.grid_im.expand_as(moving['im']), transformation1)
-            segs_moving_warped = self.registration_module(moving['seg'], transformation1)
+            batch_size = moving['im'].shape[0]
+            grid_im1 = self.grid_im.clone().repeat(batch_size, 1, 1, 1, 1)
+            grid_im1 = self.registration_module(grid_im1, transformation1)
 
+            segs_moving_warped = self.registration_module(moving['seg'], transformation1)
             ASD, DSC = calc_metrics(im_pair_idxs_local, self.fixed['seg'], segs_moving_warped, self.structures_dict, self.im_spacing)
 
             ASD_list = [torch.zeros_like(ASD) for _ in range(self.world_size)]
