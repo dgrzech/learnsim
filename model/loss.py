@@ -157,7 +157,7 @@ class EntropyMultivariateNormal(Entropy):
         if len(kwargs) == 2:
             log_var, u = kwargs['log_var'], kwargs['u']
             sigma = torch.exp(0.5 * log_var)
-            no_voxels = torch.numel(sigma[1:])
+            no_voxels = torch.numel(sigma[0])
 
             val = 0.5 * (torch.log1p(torch.sum(torch.pow(u / sigma, 2), dim=(1, 2, 3, 4))) + torch.sum(log_var, dim=(1, 2, 3, 4)))
             val_mean = val / no_voxels
@@ -166,7 +166,7 @@ class EntropyMultivariateNormal(Entropy):
         elif len(kwargs) == 4:
             sample, mu, log_var, u = kwargs['sample'], kwargs['mu'], kwargs['log_var'], kwargs['u']
             sigma = torch.exp(0.5 * log_var)
-            no_voxels = torch.numel(sigma[1:])
+            no_voxels = torch.numel(sigma[0])
 
             sample_n, u_n = (sample - mu) / sigma, u / sigma
 

@@ -19,6 +19,7 @@ class LossTestMethods(unittest.TestCase):
 
     def test_entropy(self):
         entropy = EntropyMultivariateNormal().to(device)
+        numel = np.prod(dims_small)
 
         # initialise variance to 1 and the first mode of variation to zero
         log_var_v = torch.log(torch.ones((1, 1, *dims_small), device=device))
@@ -36,14 +37,15 @@ class LossTestMethods(unittest.TestCase):
         # calculate the entropy
         val = entropy(log_var=log_var_v, u=u_v).item()
         val_true = 0.5 * math.log(np.linalg.det(np.diag(var_v.cpu().numpy().flatten())))
-        assert pytest.approx(val, atol) == val_true
+        assert pytest.approx(val, atol) == val_true / numel
 
     def test_LCC(self):
         # initialise perfectly correlated images
         im_fixed = torch.rand((1, 1, *dims), device=device)
         im_moving1 = 4.0 * im_fixed
         mask = torch.ones_like(im_fixed).bool()
-        loss_true1 = -1.0 * dim_x * dim_y * dim_z * torch.ones(1, device=device)
+
+        loss_true1 = -1.0 * torch.ones(1, device=device)
 
         # initialise correlated images
         im_moving2 = im_fixed + torch.rand_like(im_fixed) * 0.1
@@ -74,8 +76,8 @@ class LossTestMethods(unittest.TestCase):
 
         # get the residual
         res_sq = (im_fixed - im_moving) ** 2
-        res_sq_masked = res_sq[mask]
-        loss_true = loss_SSD(res_sq_masked)
+        loss_true = loss_SSD(res_sq.mean(dim=(1, 2, 3, 4)))
+        mse = 0.5 * res_sq.mean(dim=(1, 2, 3, 4))
 
         for no_features in self.no_features_SSD:
             for activation_fn in self.activation_fns:
@@ -83,7 +85,7 @@ class LossTestMethods(unittest.TestCase):
 
                 # calculate the residual
                 z = encoder_SSD(im_fixed, im_moving, mask)
-                assert torch.allclose(z, res_sq_masked, atol=1e-1)
+                assert torch.allclose(z, mse, atol=1e-1)
 
                 # calculate the loss value
                 loss = loss_SSD(z)
