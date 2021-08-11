@@ -13,10 +13,7 @@ from .oasis_structures_dicts import structures_dict_35
 class OasisDataset(BaseImageRegistrationDataset):
     def __init__(self, save_paths, im_pairs, dims, mu_v_init=0.0, sigma_v_init=1e-5, u_v_init=0.0, cps=None):
         data_path = '/vol/biodata/data/learn2reg/2021/task03'
-
-        im_filename = 'aligned_norm.nii.gz'
-        seg_filename = 'aligned_seg35.nii.gz'
-        mask_filename = ''
+        im_filename, seg_filename, mask_filename = 'aligned_norm.nii.gz', 'aligned_seg35.nii.gz', ''
 
         structures_dict = structures_dict_35  # segmentation IDs
         im_pairs = self._get_im_pairs(im_pairs, save_paths)
@@ -35,18 +32,17 @@ class OasisDataset(BaseImageRegistrationDataset):
                            412, 414, 427, 436]
             existing_IDs = [idx for idx in range(1, 458) if idx not in missing_IDs]
 
-            train_pairs = []
-            val_pairs = [(idx, idx + 1) for idx in range(438, 457)]
+            train_pairs, val_pairs = [], [(idx, idx + 1) for idx in range(438, 457)]
 
             for IDs in itertools.combinations(existing_IDs, 2):
                 if IDs not in val_pairs and reversed(IDs) not in val_pairs:
                     train_pairs.append({'fixed': IDs[0], 'moving': IDs[1]})
 
             train_pairs = pd.DataFrame(train_pairs)
-            im_pairs = os.path.join(save_paths['run_dir'], 'train_pairs.csv')
-            train_pairs.to_csv(im_pairs, header=False, index=False)
+            im_pairs_path = os.path.join(save_paths['run_dir'], 'train_pairs.csv')
+            train_pairs.to_csv(im_pairs_path, header=False, index=False)
 
-        return im_pairs
+        return im_pairs_path
 
     def _get_im_path_from_ID(self, subject_idx):
         return os.path.join(self.data_path, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1', self.im_filename)
