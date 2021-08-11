@@ -38,7 +38,7 @@
 	"optimizer_LD": {
 		"type": "SGD",
 		"args": {
-			"lr": 0.01
+			"lr": 0.1
 		}
 	},
 	"optimizer_q_phi": {
@@ -58,8 +58,8 @@
 		"args": {
 			"im_pairs": "/vol/biodata/data/learn2reg/2021/task03/pairs_val.csv",
 			"dims": [96, 112, 60],
-			"sigma_v_init": 0.1,
-			"u_v_init": 0.1,
+			"sigma_v_init": 0.05,
+			"u_v_init": 0.05,
 			"batch_size": 10,
 			"no_im_pairs_per_epoch": 500,
 			"no_workers": 10,
@@ -77,7 +77,7 @@
 			"magnitude": 0.1
 		},
 		"no_epochs": 1,
-		"no_iters_q_v": 1536,
+		"no_iters_q_v": 1024,
 		"no_samples_SGLD": 2500,
 		"no_samples_SGLD_burn_in": 2000,
 		"no_samples_test": 5,

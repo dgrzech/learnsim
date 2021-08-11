@@ -89,6 +89,10 @@ class Trainer(BaseTrainer):
             z_positive, z_negative = self.model(curr_state_positive, im_moving_warped, fixed['mask']), self.model(curr_state_negative, im_moving_warped, fixed['mask'])
             loss_positive, loss_negative = self.data_loss(z_positive), -1.0 * self.data_loss(z_negative)
 
+            # FIXME (DG): ugly hack
+            loss_positive *= fixed['mask'].sum()
+            loss_negative *= fixed['mask'].sum()
+
             self.optimizer_LD_positive.zero_grad(set_to_none=True), self.optimizer_LD_negative.zero_grad(set_to_none=True)
             loss_positive.backward(), loss_negative.backward()
             self.optimizer_LD_positive.step(), self.optimizer_LD_negative.step()
@@ -287,4 +291,7 @@ class Trainer(BaseTrainer):
     
     def init_optimizers_LD(self):
         self.optimizer_LD_positive = self.config.init_obj('optimizer_LD', torch.optim, [self.curr_state_positive])
-        self.optimizer_LD_negative = self.config.init_obj('optimizer_LD', torch.optim, [self.curr_state_negative])
+
+        # FIXME (DG): ugly hack
+        cfg_optimizer_LD = self.config['optimizer_LD']['args']
+        self.optimizer_LD_negative = torch.optim.Adam([self.curr_state_negative], lr=cfg_optimizer_LD['lr'] * 0.01)
