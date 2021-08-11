@@ -23,8 +23,8 @@ class OasisDataset(BaseImageRegistrationDataset):
                          cps=cps, structures_dict=structures_dict)
 
     @staticmethod
-    def _get_im_pairs(im_pairs, save_paths):
-        if im_pairs == '':
+    def _get_im_pairs(im_pairs_path, save_paths):
+        if im_pairs_path == '':
             missing_IDs = [8, 24, 36, 48, 89, 93,
                            100, 118, 128, 149, 154, 171, 172, 175, 187, 194, 196,
                            215, 219, 225, 242, 245, 248, 251, 252, 253, 257, 276, 297,
