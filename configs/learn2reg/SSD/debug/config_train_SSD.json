@@ -57,7 +57,7 @@
 		"type": "Learn2RegDataLoader",
 		"args": {
 			"im_pairs": "",
-			"dims": [96, 112, 60],
+			"dims": [80, 96, 112],
 			"sigma_v_init": 0.05,
 			"u_v_init": 0.05,
 			"batch_size": 1,
