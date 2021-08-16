@@ -37,7 +37,7 @@ def get_im_or_field_mid_slices(im_or_field):
 
 def log_model_samples(writer, output_dict):
     if dist.get_rank() == 0:
-        body_axes = ['sagittal', 'coronal', 'axial']
+        body_axes = ['coronal', 'axial', 'sagittal']
 
         positive_samples_slices = get_im_or_field_mid_slices(output_dict['positive_samples_mean'])
         negative_samples_slices = get_im_or_field_mid_slices(output_dict['negative_samples_mean'])
@@ -55,7 +55,7 @@ def log_model_weights(writer,  model):
 
 def log_images(writer, output_dict):
     if dist.get_rank() == 0:
-        body_axes = ['sagittal', 'coronal', 'axial']
+        body_axes = ['coronal', 'axial', 'sagittal']
 
         for im_name, im in output_dict.items():
             if im.size(1) == 3 and 'sample_transformation' not in im_name:

@@ -2,7 +2,6 @@ import itertools
 import os
 
 import pandas as pd
-import torch
 import torch.nn.functional as F
 
 from base import BaseImageRegistrationDataset
@@ -51,7 +50,7 @@ class OasisDataset(BaseImageRegistrationDataset):
         return os.path.join(self.data_path, f'OASIS_OAS1_{str(subject_idx).zfill(4)}_MR1', self.seg_filename)
 
     def _preprocess(self, im_or_mask_or_seg):
-        return im_or_mask_or_seg
+        return im_or_mask_or_seg.permute([0, 1, 4, 3, 2])
 
     def _preprocess_im(self, im):
         im = self._preprocess(im)
