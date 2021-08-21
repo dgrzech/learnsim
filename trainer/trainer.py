@@ -294,4 +294,4 @@ class Trainer(BaseTrainer):
 
         # FIXME (DG): ugly hack
         cfg_optimizer_LD = self.config['optimizer_LD']['args']
-        self.optimizer_LD_negative = torch.optim.Adam([self.curr_state_negative], lr=cfg_optimizer_LD['lr'] * 0.01)
+        self.optimizer_LD_negative = torch.optim.SGD([self.curr_state_negative], lr=cfg_optimizer_LD['lr'] * 0.01)
