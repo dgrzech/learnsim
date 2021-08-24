@@ -39,7 +39,7 @@
 	"optimizer_LD": {
 		"type": "SGD",
 		"args": {
-			"lr": 0.0001
+			"lr": 0.1
 		}
 	},
 	"optimizer_q_phi": {
@@ -79,8 +79,8 @@
 		},
 		"no_epochs": 1,
 		"no_iters_q_v": 1280,
-		"no_samples_SGLD": 2000,
-		"no_samples_SGLD_burn_in": 1000,
+		"no_samples_SGLD": 2500,
+		"no_samples_SGLD_burn_in": 2000,
 		"no_samples_test": 5,
 		"save_dir": "saved/"
 	}

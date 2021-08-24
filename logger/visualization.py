@@ -39,12 +39,12 @@ def log_model_samples(writer, output_dict):
     if dist.get_rank() == 0:
         body_axes = ['coronal', 'axial', 'sagittal']
 
-        positive_samples_slices = get_im_or_field_mid_slices(output_dict['positive_samples_mean'])
-        negative_samples_slices = get_im_or_field_mid_slices(output_dict['negative_samples_mean'])
+        positive_samples_slices = get_im_or_field_mid_slices(output_dict['samples_plus_mean'])
+        negative_samples_slices = get_im_or_field_mid_slices(output_dict['samples_minus_mean'])
 
         for slice_idx, body_axis_name in enumerate(body_axes):
-            writer.add_images(f'positive_samples_mean/{body_axis_name}', rescale_im_intensity(positive_samples_slices[slice_idx]))
-            writer.add_images(f'negative_samples_mean/{body_axis_name}', rescale_im_intensity(negative_samples_slices[slice_idx]))
+            writer.add_images(f'samples_plus_mean/{body_axis_name}', rescale_im_intensity(positive_samples_slices[slice_idx]))
+            writer.add_images(f'samples_minus_mean/{body_axis_name}', rescale_im_intensity(negative_samples_slices[slice_idx]))
 
 
 def log_model_weights(writer,  model):

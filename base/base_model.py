@@ -121,4 +121,3 @@ class BaseModel(nn.Module):
         model_parameters = list(self.parameters())
         no_trainable_params = sum([np.prod(p.size()) for p in model_parameters]) if self.learnable else 0
         return super().__str__() + '\ntrainable parameters: {}\n'.format(no_trainable_params)
-

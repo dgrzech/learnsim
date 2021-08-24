@@ -31,24 +31,28 @@ class Trainer(BaseTrainer):
         if self.add_noise_uniform:
             self.alpha = cfg_trainer['uniform_noise']['magnitude']
 
-    def __calc_data_loss(self, fixed, moving, sample_v):
-        sample_v_smoothed = SobolevGrad.apply(sample_v, self.S, self.padding)
-        transformation, displacement = self.transformation_module(sample_v_smoothed)
-        transformation = add_noise_uniform_field(transformation, self.alpha) if self.add_noise_uniform else transformation
+    def __calc_data_loss(self, fixed, moving, sample_v=None):
+        output_dict = dict()
 
-        im_moving_warped = self.registration_module(moving['im'], transformation)
+        if sample_v is not None:
+            sample_v_smoothed = SobolevGrad.apply(sample_v, self.S, self.padding)
+            transformation, displacement = self.transformation_module(sample_v_smoothed)
+            transformation = add_noise_uniform_field(transformation, self.alpha) if self.add_noise_uniform else transformation
+
+            im_moving_warped = self.registration_module(moving['im'], transformation)
+            output_dict = {'sample_displacement': displacement, 'sample_transformation': transformation, 'sample_v': sample_v_smoothed}
+        else:
+            im_moving_warped = moving['im']
+
+        output_dict = {**output_dict, 'sample_moving_warped': im_moving_warped}
+
         z = self.model(fixed['im'], im_moving_warped, fixed['mask'])
         data_term = self.data_loss(z)
-
-        output_dict = {'sample_displacement': displacement,
-                       'sample_moving_warped': im_moving_warped,
-                       'sample_transformation': transformation,
-                       'sample_v': sample_v_smoothed}
 
         return data_term, output_dict
 
     def __calc_loss(self, fixed, moving, sample_v_unsmoothed, var_params_q_v):
-        data_term, output_dict = self.__calc_data_loss(fixed, moving, sample_v_unsmoothed)
+        data_term, output_dict = self.__calc_data_loss(fixed, moving, sample_v=sample_v_unsmoothed)
         regularisation_term = self.reg_loss(output_dict['sample_v'])
         entropy_term = self.entropy_loss(sample=sample_v_unsmoothed, mu=var_params_q_v['mu'], log_var=var_params_q_v['log_var'], u=var_params_q_v['u'])
         entropy_term += self.entropy_loss(log_var=var_params_q_v['log_var'], u=var_params_q_v['u'])
@@ -64,48 +68,47 @@ class Trainer(BaseTrainer):
 
         with torch.no_grad():
             sample_v = sample_q_v(var_params_q_v, no_samples=1)
-            sample_v = SobolevGrad.apply(sample_v, self.S, self.padding)
-            transformation, displacement = self.transformation_module(sample_v)
+            sample_v_smoothed = SobolevGrad.apply(sample_v, self.S, self.padding)
+            transformation, displacement = self.transformation_module(sample_v_smoothed)
             transformation = add_noise_uniform_field(transformation, self.alpha) if self.add_noise_uniform else transformation
-
             im_moving_warped = self.registration_module(moving['im'], transformation)
 
-        self.curr_state_positive, self.curr_state_negative = fixed['im'].detach().clone(), fixed['im'].detach().clone()
-        self.curr_state_positive.requires_grad_(True), self.curr_state_negative.requires_grad_(True)
-        self.init_optimizers_LD()
+        self.x_plus, self.x_minus = fixed['im'].detach().clone(), fixed['im'].detach().clone()
+        self.x_plus.requires_grad_(True), self.x_minus.requires_grad_(True)
+        self.init_optimizer_LD()
 
         no_EBM_samples_used = self.no_samples_SGLD - self.no_samples_SGLD_burn_in
-        mean_positive, mean_negative = torch.zeros_like(self.curr_state_positive), torch.zeros_like(self.curr_state_negative)
-        sigma_positive = sigma_negative = torch.ones_like(self.curr_state_positive)
+        x_plus_mean, x_minus_mean = torch.zeros_like(self.x_plus), torch.zeros_like(self.x_minus)
+        sigma = torch.ones_like(self.x_plus)
 
         for sample_no in trange(1, self.no_samples_SGLD + 1, desc=f'sampling from EBM', colour='#808080', disable=self.tqdm_disable, dynamic_ncols=True, leave=False, unit='sample'):
             self.step += 1
 
             if sample_no > self.no_samples_SGLD_burn_in:
-                mean_positive += self.curr_state_positive.detach() / no_EBM_samples_used
-                mean_negative += self.curr_state_negative.detach() / no_EBM_samples_used
+                x_plus_mean += self.x_plus.detach() / no_EBM_samples_used
+                x_minus_mean += self.x_minus.detach() / no_EBM_samples_used
 
-            curr_state_positive, curr_state_negative = SGLD.apply(self.curr_state_positive, sigma_positive, self.tau), SGLD.apply(self.curr_state_negative, sigma_negative, self.tau)
-            z_positive, z_negative = self.model(curr_state_positive, im_moving_warped, fixed['mask']), self.model(curr_state_negative, im_moving_warped, fixed['mask'])
-            loss_positive, loss_negative = self.data_loss(z_positive), -1.0 * self.data_loss(z_negative)
+            x_plus, x_minus = SGLD.apply(self.x_plus, sigma, self.tau), SGLD.apply(self.x_minus, sigma, self.tau)
+            z_plus, z_minus = self.model(self.x_plus, im_moving_warped, fixed['mask']), self.model(x_minus, im_moving_warped, fixed['mask'])
+            loss_plus, loss_minus = self.data_loss(z_plus), -1.0 * self.data_loss(z_minus)
 
             # FIXME (DG): ugly hack
-            loss_positive *= fixed['mask'].sum()
-            loss_negative *= fixed['mask'].sum()
+            loss_plus *= fixed['mask'].sum()
+            loss_minus *= fixed['mask'].sum()
 
-            self.optimizer_LD_positive.zero_grad(set_to_none=True), self.optimizer_LD_negative.zero_grad(set_to_none=True)
-            loss_positive.backward(), loss_negative.backward()
-            self.optimizer_LD_positive.step(), self.optimizer_LD_negative.step()
+            self.optimizer_LD.zero_grad(set_to_none=True)
+            loss_plus.backward(), loss_minus.backward()
+            self.optimizer_LD.step()
 
             if self.rank == 0:
                 with torch.no_grad():
                     self.writer.set_step(self.step)
-                    self.metrics.update('loss/positive_sample_energy', loss_positive.item(), n=n)
-                    self.metrics.update('loss/negative_sample_energy', loss_negative.item(), n=n)
+                    self.metrics.update('loss/positive_sample_energy', loss_plus.item(), n=n)
+                    self.metrics.update('loss/negative_sample_energy', loss_minus.item(), n=n)
 
         output_dict = {'sample_v': sample_v.detach(),
-                       'positive_samples_mean': mean_positive.detach(),
-                       'negative_samples_mean': mean_negative.detach()}
+                       'im_moving_warped': im_moving_warped.detach(),
+                       'samples_plus_mean': x_plus_mean.detach(), 'samples_minus_mean': x_minus_mean.detach()}
 
         return output_dict
 
@@ -162,12 +165,18 @@ class Trainer(BaseTrainer):
 
         # implicit generation from the energy-based model
         output_dict = self.__generate_samples_from_model(im_pair_idxs, fixed, moving, var_params_q_v)
+
         self._enable_gradients_model()
 
-        loss_term1, _ = self.__calc_data_loss({'im': output_dict['positive_samples_mean'], 'mask': fixed['mask']}, moving, output_dict['sample_v'])
-        loss_term2, _ = self.__calc_data_loss({'im': output_dict['negative_samples_mean'], 'mask': fixed['mask']}, moving, output_dict['sample_v'])
+        fixed_plus = {'im': output_dict['samples_plus_mean'], 'mask': fixed['mask']}
+        fixed_minus = {'im': output_dict['samples_minus_mean'], 'mask': fixed['mask']}
+        moving = {'im': output_dict['im_moving_warped']}
 
-        loss_q_phi = loss_term1 - loss_term2
+        loss_term1, _ = self.__calc_data_loss(fixed_plus, moving)
+        loss_term2, _ = self.__calc_data_loss(fixed_minus, moving)
+
+        alpha = 0.00001  # L2 regularisation weight
+        loss_q_phi = loss_term1 - loss_term2 + alpha * (loss_term1 ** 2 + loss_term2 ** 2)
         loss_q_phi /= n
         
         self.optimizer_q_phi.zero_grad(set_to_none=True)
@@ -289,9 +298,7 @@ class Trainer(BaseTrainer):
         trainable_params_q_v = filter(lambda p: p.requires_grad, var_params_q_v.values())
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
     
-    def init_optimizers_LD(self):
-        self.optimizer_LD_positive = self.config.init_obj('optimizer_LD', torch.optim, [self.curr_state_positive])
-
-        # FIXME (DG): ugly hack
+    def init_optimizer_LD(self):
         cfg_optimizer_LD = self.config['optimizer_LD']['args']
-        self.optimizer_LD_negative = torch.optim.SGD([self.curr_state_negative], lr=cfg_optimizer_LD['lr'] * 0.01)
+        self.optimizer_LD = torch.optim.SGD([{'params': [self.x_minus], 'lr': 0.01 * cfg_optimizer_LD['lr']},
+                                             {'params': [self.x_plus]}], lr=cfg_optimizer_LD['lr'])
