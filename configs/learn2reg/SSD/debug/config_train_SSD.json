@@ -38,7 +38,7 @@
 	"optimizer_LD": {
 		"type": "SGD",
 		"args": {
-			"lr": 0.1
+			"lr": 0.002
 		}
 	},
 	"optimizer_q_phi": {
@@ -76,7 +76,7 @@
 			"enabled": true,
 			"magnitude": 0.1
 		},
-		"w_reg_energy": 0.001,
+		"w_reg_energy": 0.0001,
 		"no_epochs": 5,
 		"no_iters_q_v": 8,
 		"no_samples_SGLD": 10,
