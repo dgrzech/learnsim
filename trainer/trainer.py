@@ -175,8 +175,7 @@ class Trainer(BaseTrainer):
         loss_term1, _ = self.__calc_data_loss(fixed_plus, moving)
         loss_term2, _ = self.__calc_data_loss(fixed_minus, moving)
 
-        alpha = 0.01  # L2 regularisation weight for the energies
-        loss_q_phi = loss_term1 - loss_term2 + alpha * (loss_term1 ** 2 + loss_term2 ** 2)
+        loss_q_phi = loss_term1 - loss_term2 + self.w_reg_energy * (loss_term1 ** 2 + loss_term2 ** 2)
         loss_q_phi /= n
         
         self.optimizer_q_phi.zero_grad(set_to_none=True)

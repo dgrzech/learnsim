@@ -58,6 +58,8 @@ class BaseTrainer:
         else:
             self.no_samples_test = cfg_trainer['no_samples_test']
 
+        self.w_reg_energy = cfg_trainer['w_reg_energy']
+
         # resuming
         if config.resume is not None:
             self._resume_checkpoint(config.resume)
