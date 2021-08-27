@@ -73,42 +73,39 @@ class Trainer(BaseTrainer):
             transformation = add_noise_uniform_field(transformation, self.alpha) if self.add_noise_uniform else transformation
             im_moving_warped = self.registration_module(moving['im'], transformation)
 
-        self.x_plus, self.x_minus = fixed['im'].detach().clone(), fixed['im'].detach().clone()
-        self.x_plus.requires_grad_(True), self.x_minus.requires_grad_(True)
+        self.x_minus = fixed['im'].detach().clone()
+        self.x_minus.requires_grad_(True)
         self.init_optimizer_LD()
 
         no_EBM_samples_used = self.no_samples_SGLD - self.no_samples_SGLD_burn_in
-        x_plus_mean, x_minus_mean = torch.zeros_like(self.x_plus), torch.zeros_like(self.x_minus)
-        sigma = torch.ones_like(self.x_plus)
+        x_minus_mean = torch.zeros_like(self.x_minus)
+        sigma = torch.ones_like(self.x_minus)
 
         for sample_no in trange(1, self.no_samples_SGLD + 1, desc=f'sampling from EBM', colour='#808080', disable=self.tqdm_disable, dynamic_ncols=True, leave=False, unit='sample'):
             self.step += 1
 
             if sample_no > self.no_samples_SGLD_burn_in:
-                x_plus_mean += self.x_plus.detach() / no_EBM_samples_used
                 x_minus_mean += self.x_minus.detach() / no_EBM_samples_used
 
-            x_plus, x_minus = SGLD.apply(self.x_plus, sigma, self.tau), SGLD.apply(self.x_minus, sigma, self.tau)
-            z_plus, z_minus = self.model(self.x_plus, im_moving_warped, fixed['mask']), self.model(x_minus, im_moving_warped, fixed['mask'])
-            loss_plus, loss_minus = self.data_loss(z_plus), -1.0 * self.data_loss(z_minus)
+            x_minus = SGLD.apply(self.x_minus, sigma, self.tau)
+            z_minus = self.model(x_minus, im_moving_warped, fixed['mask'])
+            loss_minus = self.data_loss(z_minus)
 
             # FIXME (DG): ugly hack
-            loss_plus *= fixed['mask'].sum()
             loss_minus *= fixed['mask'].sum()
 
             self.optimizer_LD.zero_grad(set_to_none=True)
-            loss_plus.backward(), loss_minus.backward()
+            loss_minus.backward()
             self.optimizer_LD.step()
 
             if self.rank == 0:
                 with torch.no_grad():
                     self.writer.set_step(self.step)
-                    self.metrics.update('loss/positive_sample_energy', loss_plus.item(), n=n)
                     self.metrics.update('loss/negative_sample_energy', loss_minus.item(), n=n)
 
         output_dict = {'sample_v': sample_v.detach(),
                        'im_moving_warped': im_moving_warped.detach(),
-                       'samples_plus_mean': x_plus_mean.detach(), 'samples_minus_mean': x_minus_mean.detach()}
+                       'samples_minus_mean': x_minus_mean.detach()}
 
         return output_dict
 
@@ -168,11 +165,10 @@ class Trainer(BaseTrainer):
 
         self._enable_gradients_model()
 
-        fixed_plus = {'im': output_dict['samples_plus_mean'], 'mask': fixed['mask']}
         fixed_minus = {'im': output_dict['samples_minus_mean'], 'mask': fixed['mask']}
         moving = {'im': output_dict['im_moving_warped']}
 
-        loss_term1, _ = self.__calc_data_loss(fixed_plus, moving)
+        loss_term1, _ = self.__calc_data_loss(fixed, moving)
         loss_term2, _ = self.__calc_data_loss(fixed_minus, moving)
 
         loss_q_phi = loss_term1 - loss_term2 + self.w_reg_energy * (loss_term1 ** 2 + loss_term2 ** 2)
@@ -298,6 +294,4 @@ class Trainer(BaseTrainer):
         self.optimizer_q_v = self.config.init_obj('optimizer_q_v', torch.optim, trainable_params_q_v)
     
     def init_optimizer_LD(self):
-        cfg_optimizer_LD = self.config['optimizer_LD']['args']
-        self.optimizer_LD = torch.optim.SGD([{'params': [self.x_minus], 'lr': 0.01 * cfg_optimizer_LD['lr']},
-                                             {'params': [self.x_plus]}], lr=cfg_optimizer_LD['lr'])
+        self.optimizer_LD = self.config.init_obj('optimizer_LD', torch.optim, [self.x_minus])
