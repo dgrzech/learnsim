@@ -97,7 +97,7 @@ class Trainer(BaseTrainer):
 
         output_dict = {'sample_v': sample_v.detach(),
                        'im_moving_warped': im_moving_warped.detach(),
-                       'sample_minus': x_minus.detach()}
+                       'sample_minus': torch.clamp(x_minus, min=0.0, max=1.0).detach()}
 
         return output_dict
 
