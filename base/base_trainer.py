@@ -53,7 +53,7 @@ class BaseTrainer:
         self.no_batches = len(self.data_loader)
 
         if not self.is_test:
-            self.no_samples_SGLD, self.no_samples_SGLD_burn_in = cfg_trainer['no_samples_SGLD'], cfg_trainer['no_samples_SGLD_burn_in']
+            self.no_samples_SGLD = cfg_trainer['no_samples_SGLD']
             self.tau = config['optimizer_LD']['args']['lr']
         else:
             self.no_samples_test = cfg_trainer['no_samples_test']

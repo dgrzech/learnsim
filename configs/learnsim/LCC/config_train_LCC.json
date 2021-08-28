@@ -80,7 +80,6 @@
 		"no_epochs": 50,
 		"no_iters_q_v": 1344,
 		"no_samples_SGLD": 2000,
-		"no_samples_SGLD_burn_in": 1000,
 		"no_samples_test": 5,
 		"save_dir": "saved/"
 	}
