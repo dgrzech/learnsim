@@ -12,7 +12,7 @@ from utils import get_control_grid_size
 
 class BaseImageRegistrationDataset(Dataset):
     def __init__(self, data_path, save_paths, im_pairs, im_filename, mask_filename, seg_filename,
-                 dims, mu_v_init=0.0, sigma_v_init=1e-5, u_v_init=0.0, cps=None, structures_dict=None):
+                 dims, mu_v_init=0.0, sigma_v_init=1e-5, u_v_init=0.0, cps=None, structures_dict=None, skiprows=[]):
         self.data_path, self.save_paths = data_path, save_paths
         self.dims = dims
         self.mu_v_init, self.sigma_v_init, self.u_v_init, self.cps = mu_v_init, sigma_v_init, u_v_init, cps
