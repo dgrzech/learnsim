@@ -5,7 +5,7 @@ We provide the source code and the trained models used in the research presented
 
 ## Model
 
-![diagram_SSD](images/model.png)
+![model](images/model.png)
 
 **Neural network parametrising the similarity metric initialised to SSD.** The model consists of a 3D U-Net encoder, which is initialised to the Dirac delta function and followed by a 1D convolutional layer. Feature maps output by the 3D U-Net are used to calculate a weighted sum returned by the aggregation layer. Before training, the output of the neural network approximates the value of SSD. We would like to thank [Rhea Jiang](https://www.linkedin.com/in/rhea-jiang/) from the Harvard Graduate School of Design for the figure. 
 
@@ -55,12 +55,12 @@ Citation
 
 If you use this code, please cite our paper.
 
-Daniel Grzech, Mohammad Farid Azampour, Ben Glocker, Julia Schnabel, Nassir Navab, Bernhard Kainz, and Loïc Le Folgoc. **A variational Bayesian method for similarity learning in medical image registration.** CVPR 2022.
+Daniel Grzech, Mohammad Farid Azampour, Ben Glocker, Julia Schnabel, Nassir Navab, Bernhard Kainz, and Loïc Le Folgoc. **A variational Bayesian method for similarity learning in non-rigid image registration.** CVPR 2022.
 
 ```
 @inproceedings{Grzech2022,
     author = {Grzech, Daniel and Azampour, Mohammad Farid and Glocker, Ben and Schnabel, Julia and Navab, Nassir and Kainz, Bernhard and {Le Folgoc}, Lo{\"{i}}c},
-    title = {{A variational Bayesian method for similarity learning in medical image registration}},
+    title = {{A variational Bayesian method for similarity learning in non-rigid image registration}},
     booktitle = {CVPR},
     year = {2022}
 }
