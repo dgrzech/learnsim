@@ -14,7 +14,7 @@ We propose a novel variational Bayesian formulation for diffeomorphic non-rigid 
 
 <img src="figures/result.png" width="75%" height="75%">
 
-The output on two sample images in the test split when using the baseline and the learnt similarity metrics. In case of SSD, the average improvement in Dice scores over the baseline on the image above is approximately 27.2 percentage points and in case of LCC, it is approximately 6.$ percentage points. The uncertainty estimates are visualised as the standard deviation of the displacement field, based on 50 samples. Use of the learnt similarity metric which was initialised to SSD also results in better calibration of uncertainty estimates than in case of the baseline.
+The output on two sample images in the test split when using the baseline and the learnt similarity metrics. In case of SSD, the average improvement in Dice scores over the baseline on the image above is approximately 27.2 percentage points and in case of LCC, it is approximately 6.5 percentage points. The uncertainty estimates are visualised as the standard deviation of the displacement field, based on 50 samples. Use of the learnt similarity metric which was initialised to SSD also results in better calibration of uncertainty estimates than in case of the baseline.
 
 <img src="figures/result_VXM.png" width="90%" height="90%">
 
