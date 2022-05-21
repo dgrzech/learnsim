@@ -8,7 +8,7 @@
 
 ### Abstract
 
-We propose a novel variational Bayesian formulation for diffeomorphic non-rigid registration of medical images, which learns in an unsupervised way a data-specific similarity metric. The proposed framework is general and may be used together with many existing image registration models. We evaluate it on brain MRI scans from the UK Biobank and show that use of the learnt similarity metric, which is parametrised as a neural network, leads to more accurate results than use of traditional functions to which we initialise the model, e.g. SSD and LCC, without a negative impact on image registration speed or transformation smoothness. In addition, the method estimates the uncertainty associated with the transformation.
+We present a novel variational Bayesian formulation for diffeomorphic non-rigid registration of medical images, which learns in an unsupervised way a data-specific similarity metric. The proposed framework is general and may be used together with many existing image registration models. We evaluate it on brain MRI scans from the UK Biobank and show that use of the learnt similarity metric, which is parametrised as a neural network, leads to more accurate results than use of traditional functions to which we initialise the model, e.g. SSD and LCC, without a negative impact on image registration speed or transformation smoothness. In addition, the method estimates the uncertainty associated with the transformation.
 
 ### Results
 
